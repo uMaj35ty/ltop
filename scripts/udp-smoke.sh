@@ -54,8 +54,8 @@ print(f"测试进程 pid={os.getpid()}  期望 sent≈{10*240} B  recv≈{10*120
 PY
 
 sleep 1.5
-echo "--- 快照 /run/lanmon/udp.json:"
-python3 -m json.tool /run/lanmon/udp.json 2>/dev/null || cat /run/lanmon/udp.json
+echo "--- 快照 /run/ltop/udp.json:"
+python3 -m json.tool /run/ltop/udp.json 2>/dev/null || cat /run/ltop/udp.json
 echo
 echo "解读: pids 里找上面的 pid —— recv/sent 累计值应包含上述数字;"
 echo "其他 pid(systemd-resolved 的 DNS 等)出现属正常,内核全局探针看到的都是真实流量。"
