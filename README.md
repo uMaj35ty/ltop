@@ -70,7 +70,7 @@ reference desktop environment.
 | Ubuntu 24.04 LTS | 6.8 | ✓ full | glibc 2.39 |
 | Ubuntu 22.04 LTS | 5.15 | ✓ full | works **without BTF**; glibc 2.35 is the binary baseline |
 | Debian 13 | 6.12 | ✓ full | glibc 2.41 |
-| Fedora 44 (Workstation live) | — | under test | SELinux enforcing environment |
+| Fedora 44 (Workstation live) | 6.19 | ✓ full | SELinux enforcing: zero denials |
 
 Older kernels trim kprobes/BTF in specialty flavours (e.g. Ubuntu's `-kvm`
 cloud kernel): use the `generic` kernel there — not an ltop limitation.

@@ -65,7 +65,7 @@ systemd 单元、无助手静默降级)。ltop 日常开发于 Omarchy(Arch),它
 | Ubuntu 24.04 LTS | 6.8 | ✓ 完整 | glibc 2.39 |
 | Ubuntu 22.04 LTS | 5.15 | ✓ 完整 | **无 BTF 也可用**;glibc 2.35 为二进制基线 |
 | Debian 13 | 6.12 | ✓ 完整 | glibc 2.41 |
-| Fedora 44(Workstation live) | — | 测试中 | SELinux enforcing 环境 |
+| Fedora 44(Workstation live) | 6.19 | ✓ 完整 | SELinux enforcing:零拒绝 |
 
 更老的内核在特化变体里裁剪 kprobe/BTF(如 Ubuntu 的 `-kvm` 云内核):那种
 环境请用 `generic` 内核——不是 ltop 的限制。
