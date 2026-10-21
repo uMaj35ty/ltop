@@ -10,6 +10,11 @@
 //! Raw externs against the IOKit/CoreFoundation frameworks — no bindings
 //! crate. Offsets/kinds: kCFNumberSInt64Type = 4, kCFStringEncodingUTF8 =
 //! 0x08000100, default mach port = 0, kCFAllocatorDefault = NULL.
+//!
+//! 统计的真实位置:字节/操作计数挂在物理盘的 IOBlockStorageDriver 上,
+//! IOMedia(disk0sX)自己没有 Statistics 字典(实测系统盘叶子恒缺席,
+//! ioreg 同证)——所以 driver 层枚举才是速率的数据面;IOMedia 叶子层的
+//! 统计(部分盘有,恒 0/小值)仍一并收集作兜底。
 
 #![allow(dead_code)]
 
@@ -57,7 +62,74 @@ pub fn disk_counters() -> (HashMap<String, [u64; 4]>, Vec<String>) {
         }
         IOObjectRelease(it);
     }
+    // driver 层:物理盘统计(disk0 整盘真值)
+    unsafe {
+        // SAFETY: 同上,标准 IOKit 迭代;driver 无 BSD Name,盘名取其
+        // 非 leaf 子 media(whole media)的 BSD Name
+        let matching = IOServiceMatching(c"IOBlockStorageDriver".as_ptr());
+        if matching.is_null() {
+            return (out, names);
+        }
+        let mut it: IoObject = 0;
+        if IOServiceGetMatchingServices(0, matching, &mut it) != 0 {
+            return (out, names);
+        }
+        loop {
+            let drv: IoObject = IOIteratorNext(it);
+            if drv == 0 {
+                break;
+            }
+            if let Some(stats) = dict_prop(drv, "Statistics\0") {
+                let br = number_in_dict(stats, "Bytes (Read)\0");
+                let bw = number_in_dict(stats, "Bytes (Write)\0");
+                let or_ = number_in_dict(stats, "Operations (Read)\0");
+                let ow = number_in_dict(stats, "Operations (Write)\0");
+                CFRelease(stats);
+                if let Some(disk) = whole_child_name(drv, &mut names) {
+                    out.insert(disk, [br, bw, or_, ow]);
+                }
+            }
+            IOObjectRelease(drv);
+        }
+        IOObjectRelease(it);
+    }
     (out, names)
+}
+
+/// driver 下非 leaf(whole)子 media 的 BSD Name,即盘名(disk0)
+unsafe fn whole_child_name(drv: IoObject, names: &mut Vec<String>) -> Option<String> {
+    let mut it: IoObject = 0;
+    // SAFETY: iterator 由内核分配,用完即释
+    if IORegistryEntryGetChildIterator(drv, c"IOService".as_ptr(), &mut it) != 0 {
+        return None;
+    }
+    let mut found = None;
+    loop {
+        let child: IoObject = IOIteratorNext(it);
+        if child == 0 {
+            break;
+        }
+        let name = string_prop(child, "BSD Name\0");
+        if found.is_none() {
+            match &name {
+                Some(n) if !is_slice(n) => found = name.clone(),
+                _ => {}
+            }
+        }
+        if let Some(name) = name {
+            // whole media 也进名字列表,供树构建
+            if !names_contains(names, &name) {
+                names.push(name);
+            }
+        }
+        IOObjectRelease(child);
+    }
+    IOObjectRelease(it);
+    found
+}
+
+fn names_contains(names: &[String], name: &str) -> bool {
+    names.iter().any(|n| n == name)
 }
 
 /// whole-disk medias (no `s<N>` suffix) — tree roots
@@ -199,6 +271,11 @@ extern "C" {
         allocator: *mut c_void,
         options: u32,
     ) -> *mut c_void;
+    fn IORegistryEntryGetChildIterator(
+        entry: IoObject,
+        plane: *const c_char,
+        iterator: *mut IoObject,
+    ) -> c_int;
 }
 
 #[link(name = "CoreFoundation", kind = "framework")]

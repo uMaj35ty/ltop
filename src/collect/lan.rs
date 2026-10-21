@@ -69,6 +69,9 @@ pub struct LanCollector {
     pub sweeping: bool,
     pub last_sweep: Option<Instant>,
     pub resolve_failures: HashSet<Ipv4Addr>,
+    /// mac:arp 表枚举被系统隐私机制静默拦截(输出 0 行)——UI 提示用户
+    /// 给终端授权「本地网络」;Linux 恒 false
+    pub arp_blocked: bool,
     resolving: HashSet<Ipv4Addr>,
     hostname_tx: Sender<(Ipv4Addr, Option<String>)>,
     hostname_rx: Receiver<(Ipv4Addr, Option<String>)>,
@@ -93,6 +96,7 @@ impl LanCollector {
             sweeping: false,
             last_sweep: None,
             resolve_failures: HashSet::new(),
+            arp_blocked: false,
             resolving: HashSet::new(),
             hostname_tx: tx,
             hostname_rx: rx,
@@ -194,7 +198,12 @@ impl LanCollector {
             entries
         };
         #[cfg(target_os = "macos")]
-        let entries: Vec<(Ipv4Addr, Option<String>, String)> = parse_arp_an(&arp_an_output());
+        let entries: Vec<(Ipv4Addr, Option<String>, String)> = {
+            let raw = arp_an_output();
+            // 正常输出至少含 incomplete 条目;0 行 = 被隐私机制静默拦截
+            self.arp_blocked = raw.lines().next().is_none();
+            parse_arp_an(&raw)
+        };
         for (ip, mac, iface) in entries {
             let complete = mac.is_some();
             if iface == "lo" {

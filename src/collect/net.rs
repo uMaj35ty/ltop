@@ -213,21 +213,28 @@ fn sample_entries() -> std::io::Result<(Vec<DevCounters>, BTreeMap<String, Iface
                 mac: String::new(),
                 addrs: Vec::new(),
             });
-            // 每个网卡的第一条 ifa_data 记录 = if_data64 计数器
-            if !ifa.ifa_data.is_null() && !counted.contains(&name) {
-                counted.push(name.clone());
-                let d = &*(ifa.ifa_data as *const libc::if_data64);
-                counters.push((name.clone(), d.ifi_ibytes, d.ifi_obytes, d.ifi_iqdrops as u64, 0));
-                entry.operstate = if ifa.ifa_flags & (libc::IFF_UP as u32) != 0 {
-                    "up".into()
-                } else {
-                    "down".into()
-                };
-                entry.mtu = Some(d.ifi_mtu as u64);
-            }
-            // AF_LINK 记录 = MAC 地址
+            // 计数器/状态/MTU/MAC 全部只认 AF_LINK 记录:if_data64 挂在
+            // AF_LINK 上,其它族记录的 ifa_data 不是接口级真值(实测 en0
+            // 多记录下首条启发式会取到不动的计数,速率恒 0)
             if let Some(dl) = ifa.ifa_addr.cast::<libc::sockaddr_dl>().as_ref() {
-                if dl.sdl_family as i32 == libc::AF_LINK && entry.mac.is_empty() {
+                if dl.sdl_family as i32 != libc::AF_LINK {
+                    p = ifa.ifa_next;
+                    continue;
+                }
+                if !counted.contains(&name) {
+                    counted.push(name.clone());
+                    if !ifa.ifa_data.is_null() {
+                        let d = &*(ifa.ifa_data as *const libc::if_data64);
+                        counters.push((name.clone(), d.ifi_ibytes, d.ifi_obytes, d.ifi_iqdrops as u64, 0));
+                        entry.operstate = if ifa.ifa_flags & (libc::IFF_UP as u32) != 0 {
+                            "up".into()
+                        } else {
+                            "down".into()
+                        };
+                        entry.mtu = Some(d.ifi_mtu as u64);
+                    }
+                }
+                if entry.mac.is_empty() {
                     let nlen = dl.sdl_nlen as usize;
                     let alen = dl.sdl_alen as usize;
                     let start = nlen.min(dl.sdl_data.len());
