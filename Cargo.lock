@@ -302,19 +302,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d26c52dbd32dccf2d10cac7725f8eae5296885fb5703b261f7d0a0739ec807ab"
 
 [[package]]
-name = "localist-top"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "aya",
- "aya-obj",
- "crossterm",
- "if-addrs",
- "libc",
- "ratatui",
-]
-
-[[package]]
 name = "lock_api"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -336,6 +323,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "234cf4f4a04dc1f57e24b96cc0cd600cf2af460d4161ac5ecdd0af8e1f3b2a38"
 dependencies = [
  "hashbrown 0.15.5",
+]
+
+[[package]]
+name = "ltop"
+version = "0.1.2"
+dependencies = [
+ "anyhow",
+ "aya",
+ "aya-obj",
+ "crossterm",
+ "if-addrs",
+ "libc",
+ "ratatui",
 ]
 
 [[package]]

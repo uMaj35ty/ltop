@@ -104,7 +104,7 @@ impl MonLog {
     pub fn finalize(&mut self) {
         if let Some((path, mut f)) = self.file.take() {
             let _ = f.flush();
-            eprintln!("localist-top: 监控日志已保存到 {}", path.display());
+            eprintln!("ltop: 监控日志已保存到 {}", path.display());
         }
         self.enabled = false;
     }

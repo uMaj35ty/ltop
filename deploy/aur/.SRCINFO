@@ -1,4 +1,4 @@
-pkgbase = localist-top-bin
+pkgbase = ltop-bin
 	pkgdesc = btop-styled TUI monitoring for local network, LAN neighbours and disk I/O
 	pkgver = 0.1.2
 	pkgrel = 1
@@ -13,9 +13,9 @@ pkgbase = localist-top-bin
 	provides = ltop-bpf
 	provides = loli
 	conflicts = localist-top
-	source = localist-top-0.1.2-x86_64-linux.tar.gz::https://github.com/uMaj35ty/ltop/releases/download/v0.1.2/ltop-0.1.2-x86_64-linux.tar.gz
+	conflicts = localist-top-bin
+	source = ltop-0.1.2-x86_64-linux.tar.gz::https://github.com/uMaj35ty/ltop/releases/download/v0.1.2/ltop-0.1.2-x86_64-linux.tar.gz
 	source = ltop-bpf.service::https://github.com/uMaj35ty/ltop/raw/v0.1.2/deploy/ltop-bpf.service
 	sha256sums = 2399b2082f25be21bb099ce88f30f395a05528735e73d265529652f1e531d634
 	sha256sums = 18efb8ff4e17a353b55e2c9b73bea488956baf5f95867a1f250aa09c805febbc
-
-pkgname = localist-top-bin
+pkgname = ltop-bin

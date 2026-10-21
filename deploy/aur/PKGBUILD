@@ -1,5 +1,5 @@
 # Maintainer: uMaj35ty <arcadelogic@foxmail.com>
-pkgname=localist-top-bin
+pkgname=ltop-bin
 pkgver=0.1.2
 pkgrel=1
 pkgdesc="btop-styled TUI monitoring for local network, LAN neighbours and disk I/O"
@@ -10,8 +10,8 @@ depends=('glibc' 'gcc-libs')
 optdepends=('clang: rebuild from source with eBPF accounting'
             'sudo: deploy the ltop-bpf helper service')
 provides=('ltop' 'ltop-bpf' 'loli')
-conflicts=('localist-top')
-source=("localist-top-$pkgver-x86_64-linux.tar.gz::$url/releases/download/v$pkgver/ltop-$pkgver-x86_64-linux.tar.gz"
+conflicts=('localist-top' 'localist-top-bin')
+source=("ltop-$pkgver-x86_64-linux.tar.gz::$url/releases/download/v$pkgver/ltop-$pkgver-x86_64-linux.tar.gz"
         "ltop-bpf.service::$url/raw/v$pkgver/deploy/ltop-bpf.service")
 sha256sums=('2399b2082f25be21bb099ce88f30f395a05528735e73d265529652f1e531d634'
             '18efb8ff4e17a353b55e2c9b73bea488956baf5f95867a1f250aa09c805febbc')
