@@ -1,20 +1,26 @@
 use std::collections::{HashMap, VecDeque};
 use std::ffi::CString;
+#[cfg(target_os = "linux")]
 use std::fs;
 use std::time::Instant;
 
 const HIST_CAP: usize = 900;
+/// Linux:计数器单位是扇区;mac(IOKit)已是字节
+#[cfg(target_os = "linux")]
 const SECTOR: f64 = 512.0;
+#[cfg(target_os = "macos")]
+const SECTOR: f64 = 1.0;
 
 /// Filesystems that are virtual, read-only images, or may block statvfs on stalls
 const FS_BLACKLIST: &[&str] = &[
     "proc", "sysfs", "devtmpfs", "devpts", "securityfs", "cgroup", "cgroup2", "pstore", "bpf",
     "autofs", "mqueue", "hugetlbfs", "debugfs", "tracefs", "configfs", "fusectl", "efivarfs",
     "ramfs", "nsfs", "rpc_pipefs", "overlay", "squashfs", "iso9660", "tmpfs", "nfs", "nfs4",
-    "cifs", "smbfs", "9p", "afs",
+    "cifs", "smbfs", "9p", "afs", "devfs",
 ];
 
 /// Virtual/ephemeral block devices kept out of the device tree
+#[cfg(target_os = "linux")]
 const SKIP_BLOCK_PREFIXES: &[&str] = &["loop", "ram", "zram", "sr", "fd", "nbd", "md"];
 
 #[derive(Clone, Default)]
@@ -72,7 +78,10 @@ impl DiskCollector {
     pub fn sample(&mut self) {
         let now = Instant::now();
         let stats = parse_diskstats();
+        #[cfg(target_os = "linux")]
         let dm = dm_name_map();
+        #[cfg(target_os = "macos")]
+        let dm: HashMap<String, String> = HashMap::new();
         let mounts = parse_mountinfo();
 
         // group mounts by resolved backing device
@@ -182,6 +191,7 @@ fn push_hist(dq: &mut VecDeque<f64>, v: f64) {
 }
 
 /// (total_bytes, used_bytes)
+#[cfg(target_os = "linux")]
 fn fs_usage(path: &str) -> Option<(u64, u64)> {
     let c = CString::new(path).ok()?;
     let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
@@ -195,6 +205,22 @@ fn fs_usage(path: &str) -> Option<(u64, u64)> {
     Some((total, used))
 }
 
+/// mac:statfs(APFS 卷报的是容器级容量,与 diskutil 一致)
+#[cfg(target_os = "macos")]
+fn fs_usage(path: &str) -> Option<(u64, u64)> {
+    let c = CString::new(path).ok()?;
+    let mut st: libc::statfs = unsafe { std::mem::zeroed() };
+    // SAFETY: st is a valid, fully-owned allocation for the duration of the call
+    if unsafe { libc::statfs(c.as_ptr(), &mut st) } != 0 {
+        return None;
+    }
+    let fr = st.f_bsize as u64;
+    let total = st.f_blocks as u64 * fr;
+    let used = total.saturating_sub(st.f_bfree as u64 * fr);
+    Some((total, used))
+}
+
+#[cfg(target_os = "linux")]
 fn read_size(sysdir: &std::path::Path) -> Option<u64> {
     fs::read_to_string(sysdir.join("size"))
         .ok()?
@@ -204,8 +230,42 @@ fn read_size(sysdir: &std::path::Path) -> Option<u64> {
         .map(|s| s * 512)
 }
 
+/// mac:BSD 名前缀分组(disk3s1s1 → disk3);无容量(sysctl 盘大小另查,暂缺)
+#[cfg(target_os = "macos")]
+fn build_block_tree() -> Vec<TreeNode> {
+    let (_, names) = crate::collect::iokit::disk_counters();
+    let mut roots: Vec<(String, Vec<TreeNode>)> = Vec::new();
+    for n in &names {
+        let node = TreeNode {
+            name: n.clone(),
+            pretty: None,
+            size: None,
+            children: Vec::new(),
+        };
+        if let Some(parent) = crate::collect::iokit::slice_parent(n) {
+            match roots.iter_mut().find(|(r, _)| *r == parent) {
+                Some((_, ch)) => ch.push(node),
+                None => roots.push((parent, vec![node])),
+            }
+        } else if !roots.iter().any(|(r, _)| r == n) {
+            roots.push((n.clone(), Vec::new()));
+        }
+    }
+    roots.sort_by(|a, b| a.0.cmp(&b.0));
+    roots
+        .into_iter()
+        .map(|(name, children)| TreeNode {
+            name,
+            pretty: None,
+            size: None,
+            children,
+        })
+        .collect()
+}
+
 /// Build the physical hierarchy: disk -> partition -> dm (LUKS/LVM).
 /// dm devices spanning several disks become roots (RAID/VG level).
+#[cfg(target_os = "linux")]
 fn build_block_tree() -> Vec<TreeNode> {
     let Ok(rd) = fs::read_dir("/sys/block") else {
         return Vec::new();
@@ -300,6 +360,25 @@ fn build_block_tree() -> Vec<TreeNode> {
     roots
 }
 
+/// mac:IOKit 叶子 IOMedia 的字节/操作计数(整盘聚合对象已跳过)
+#[cfg(target_os = "macos")]
+fn parse_diskstats() -> HashMap<String, DiskRaw> {
+    let (map, _) = crate::collect::iokit::disk_counters();
+    map.into_iter()
+        .map(|(k, v)| {
+            (
+                k,
+                DiskRaw {
+                    sectors_r: v[0],
+                    sectors_w: v[1],
+                    ios: v[2] + v[3],
+                },
+            )
+        })
+        .collect()
+}
+
+#[cfg(target_os = "linux")]
 fn parse_diskstats() -> HashMap<String, DiskRaw> {
     let mut out = HashMap::new();
     let Ok(content) = fs::read_to_string("/proc/diskstats") else {
@@ -329,6 +408,7 @@ fn parse_diskstats() -> HashMap<String, DiskRaw> {
 }
 
 /// /dev/mapper friendly names -> kernel dm names, e.g. "root" -> "dm-0"
+#[cfg(target_os = "linux")]
 fn dm_name_map() -> HashMap<String, String> {
     let mut out = HashMap::new();
     let Ok(entries) = fs::read_dir("/sys/block") else {
@@ -360,6 +440,62 @@ struct DiskRaw {
 
 type Mount = (String, String, String, String); // (major:minor, mountpoint, source, fstype)
 
+/// mac:getfsstat 挂载表(major:minor 不可得,留空;source 的 basename
+/// 恰是 IOKit 计数器的键,如 /dev/disk3s1s1 → disk3s1s1)
+#[cfg(target_os = "macos")]
+fn parse_mountinfo() -> Vec<Mount> {
+    let n = unsafe { libc::getfsstat(std::ptr::null_mut(), 0, libc::MNT_NOWAIT) };
+    if n <= 0 {
+        return Vec::new();
+    }
+    // SAFETY: buffer sized by the getfsstat size probe above
+    let mut buf: Vec<libc::statfs> =
+        vec![unsafe { std::mem::zeroed() }; n as usize];
+    let got = unsafe {
+        libc::getfsstat(
+            buf.as_mut_ptr(),
+            (buf.len() * std::mem::size_of::<libc::statfs>()) as libc::c_int,
+            libc::MNT_NOWAIT,
+        )
+    };
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for e in buf.iter().take(got.max(0) as usize) {
+        let fstype = cstr_field(&e.f_fstypename);
+        let mount = cstr_field(&e.f_mntonname);
+        let source = cstr_field(&e.f_mntfromname);
+        if FS_BLACKLIST.iter().any(|b| fstype == *b) {
+            continue;
+        }
+        // APFS 系统卷只留 Data(Preboot/VM/Update 等是噪声);/Volumes 是
+        // 外置与网络卷的自然挂载点
+        let keep = mount == "/"
+            || mount.starts_with("/System/Volumes/Data")
+            || mount.starts_with("/Volumes/")
+            || mount.starts_with("/mnt")
+            || mount.starts_with("/media");
+        if !keep {
+            continue;
+        }
+        if !seen.insert((source.clone(), mount.clone())) {
+            continue;
+        }
+        out.push((String::new(), mount, source, fstype));
+    }
+    out
+}
+
+#[cfg_attr(target_os = "linux", allow(dead_code))]
+fn cstr_field(b: &[libc::c_char]) -> String {
+    let bytes: Vec<u8> = b
+        .iter()
+        .take_while(|&&c| c != 0)
+        .map(|&c| c as u8)
+        .collect();
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
+#[cfg(target_os = "linux")]
 fn parse_mountinfo() -> Vec<Mount> {
     let mut out = Vec::new();
     let Ok(content) = fs::read_to_string("/proc/self/mountinfo") else {
@@ -401,6 +537,7 @@ fn parse_mountinfo() -> Vec<Mount> {
     out
 }
 
+#[cfg(target_os = "linux")]
 fn unescape_octal(s: &str) -> String {
     let bytes = s.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());

@@ -12,6 +12,7 @@ use std::fs;
 use std::net::{IpAddr, Ipv4Addr};
 use std::time::{Duration, Instant};
 
+#[cfg(target_os = "linux")]
 use libc::{AF_INET, AF_INET6};
 #[cfg(target_os = "linux")]
 use libc::AF_NETLINK;
@@ -164,6 +165,7 @@ impl Conn {
 
 pub struct ConnCollector {
     prev: HashMap<u64, (u64, u64, Instant)>,
+    #[cfg(target_os = "linux")]
     pid_map: HashMap<u64, (u32, String)>,
     /// UDP session totals per socket inode, fed by the eBPF per-socket
     /// deltas (the kernel keeps no UDP byte counters of its own)
@@ -184,6 +186,9 @@ pub struct ConnCollector {
     /// session totals per remote IPv4: (recv bytes, sent bytes)
     remote_totals: HashMap<Ipv4Addr, (u64, u64)>,
     ticks: u64,
+    /// mac:本轮 nettop 流行,App 在 sample 前经 ingest 存入
+    #[cfg(target_os = "macos")]
+    inbox: Vec<Conn>,
 }
 
 impl Default for ConnCollector {
@@ -196,6 +201,7 @@ impl ConnCollector {
     pub fn new() -> Self {
         Self {
             prev: HashMap::new(),
+            #[cfg(target_os = "linux")]
             pid_map: HashMap::new(),
             udp_totals: HashMap::new(),
             born: HashMap::new(),
@@ -209,20 +215,38 @@ impl ConnCollector {
             peer_filter: None,
             remote_totals: HashMap::new(),
             ticks: 0,
+            #[cfg(target_os = "macos")]
+            inbox: Vec::new(),
         }
+    }
+
+    /// mac:接收本轮 nettop 流行(nettop.rs 解析产物;Linux 无此路径)
+    #[cfg(target_os = "macos")]
+    pub fn ingest(&mut self, flows: Vec<Conn>) {
+        self.inbox = flows;
     }
 
     pub fn sample(&mut self) {
         let now = Instant::now();
-        let mut conns = Vec::new();
-        for &(family, proto) in &[
-            (AF_INET, IPPROTO_TCP),
-            (AF_INET6, IPPROTO_TCP),
-            (AF_INET, IPPROTO_UDP),
-            (AF_INET6, IPPROTO_UDP),
-        ] {
-            dump_family(family, proto, &mut conns);
-        }
+        let mut conns = {
+            #[cfg(target_os = "linux")]
+            {
+                let mut c = Vec::new();
+                for &(family, proto) in &[
+                    (AF_INET, IPPROTO_TCP),
+                    (AF_INET6, IPPROTO_TCP),
+                    (AF_INET, IPPROTO_UDP),
+                    (AF_INET6, IPPROTO_UDP),
+                ] {
+                    dump_family(family, proto, &mut c);
+                }
+                c
+            }
+            #[cfg(target_os = "macos")]
+            {
+                std::mem::take(&mut self.inbox)
+            }
+        };
         conns.retain(|c| {
             if c.is_tcp() {
                 c.state == TCP_ESTABLISHED || c.state == TCP_LISTEN
@@ -258,11 +282,28 @@ impl ConnCollector {
             self.remote_totals.clear();
         }
 
-        self.pid_map = scan_pids();
-        for c in &mut conns {
-            if let Some((pid, name)) = self.pid_map.get(&c.inode) {
-                c.pid = Some(*pid);
-                c.proc = Some(name.clone());
+        #[cfg(target_os = "linux")]
+        {
+            self.pid_map = scan_pids();
+            for c in &mut conns {
+                if let Some((pid, name)) = self.pid_map.get(&c.inode) {
+                    c.pid = Some(*pid);
+                    c.proc = Some(name.clone());
+                }
+            }
+        }
+        // mac:libproc 枚举本 uid 的 socket,按 flow 键归属(与 Linux 只能
+        // 读自己 uid 的 /proc/<pid>/fd 同语义);他人进程的行无 uid 信息
+        #[cfg(target_os = "macos")]
+        {
+            let map = crate::collect::macproc::socket_map();
+            let own = unsafe { libc::getuid() };
+            for c in &mut conns {
+                if let Some(&(pid, ref name)) = map.get(&c.inode) {
+                    c.pid = Some(pid);
+                    c.proc = Some(name.clone());
+                    c.uid = own;
+                }
             }
         }
 
@@ -333,6 +374,11 @@ impl ConnCollector {
     }
 
     pub fn user_name(&self, uid: u32) -> String {
+        // mac 他人进程的连接没有 uid 信息(nettop 不提供),显示 n/a
+        #[cfg(target_os = "macos")]
+        if uid == crate::collect::nettop::NO_UID {
+            return "n/a".to_string();
+        }
         match self.users.get(&uid) {
             Some(n) => n.clone(),
             None => format!("uid:{uid}"),
@@ -416,16 +462,12 @@ impl ConnCollector {
     }
 }
 
-/// mac:NETLINK_SOCK_DIAG 不存在;v0.2.1 的 mac 连接数据源走 nettop(另行实现),
-/// 本桩使骨架可编译
-#[cfg(not(target_os = "linux"))]
-fn dump_family(_family: libc::c_int, _proto: u8, _out: &mut Vec<Conn>) {}
-
 /// ip:port display helper shared with the UI
 pub fn sock_str(s: &(IpAddr, u16)) -> String {
     format!("{}:{}", s.0, s.1)
 }
 
+#[cfg(target_os = "linux")]
 #[cfg(target_os = "linux")]
 fn dump_family(family: libc::c_int, proto: u8, out: &mut Vec<Conn>) {
     // SAFETY: raw netlink socket, all buffers sized by the protocol's fixed
@@ -583,6 +625,7 @@ fn normalize(ip: IpAddr) -> IpAddr {
 }
 
 /// inode -> (pid, comm); only sockets of processes we may read (own uid)
+#[cfg(target_os = "linux")]
 fn scan_pids() -> HashMap<u64, (u32, String)> {
     let mut out = HashMap::new();
     let Ok(pids) = fs::read_dir("/proc") else {
@@ -867,6 +910,7 @@ mod tests {
     /// full junction: real netlink rows + synthetic snapshot diff through
     /// UdpCollector + apply_udp — Σ AND rate must both land on the row
     #[test]
+    #[cfg(target_os = "linux")]
     fn netlink_rows_receive_udp_rates_end_to_end() {
         use crate::collect::udp::UdpCollector;
         let mut c = ConnCollector::new();

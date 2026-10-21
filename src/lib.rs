@@ -656,7 +656,12 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
                     // the TUI must not freeze while waiting for it
                     std::thread::spawn(move || {
                         for _ in 0..40 {
-                            if !std::path::Path::new(&format!("/proc/{pid}")).exists() {
+                            // kill(0) 探活(EPERM = 活着但没权限发信号)——
+                            // 跨平台,Linux /proc 探测的同义替换
+                            let alive = unsafe { libc::kill(pid as libc::pid_t, 0) } == 0
+                                || std::io::Error::last_os_error().raw_os_error()
+                                    == Some(libc::EPERM);
+                            if !alive {
                                 break;
                             }
                             std::thread::sleep(std::time::Duration::from_millis(50));
@@ -1140,19 +1145,58 @@ mod tests {
         );
     }
 
+    /// 当前系统全部 pid(Linux 走 /proc,mac 走 sysctl KERN_PROC_ALL)
+    fn all_pids() -> Vec<u32> {
+        #[cfg(target_os = "linux")]
+        {
+            std::fs::read_dir("/proc")
+                .expect("read /proc")
+                .flatten()
+                .filter_map(|e| e.file_name().to_string_lossy().parse::<u32>().ok())
+                .collect()
+        }
+        #[cfg(target_os = "macos")]
+        {
+            crate::collect::macproc::list_pids()
+                .into_iter()
+                .map(|m| m.pid)
+                .collect()
+        }
+    }
+
+    /// pid 是否存活且 comm 为 name(comm 在 Linux/mac 都是 15 字符截断名)
+    fn pid_runs(pid: u32, name: &str) -> bool {
+        #[cfg(target_os = "linux")]
+        {
+            std::fs::read_to_string(format!("/proc/{pid}/comm"))
+                .map(|c| c.trim() == name)
+                .unwrap_or(false)
+        }
+        #[cfg(target_os = "macos")]
+        {
+            crate::collect::macproc::list_pids()
+                .iter()
+                .any(|m| m.pid == pid && m.comm == name)
+        }
+    }
+
+    /// 找一个 comm == name 且非 exclude 的存活 pid
+    fn find_running(name: &str, exclude: u32) -> Option<u32> {
+        all_pids()
+            .into_iter()
+            .find(|&p| p != exclude && pid_runs(p, name))
+    }
+
     #[test]
     fn start_cmd_launches_detached() {
-        let before = std::fs::read_dir("/proc")
-            .expect("read /proc")
-            .flatten()
-            .filter_map(|e| e.file_name().to_string_lossy().parse::<u32>().ok())
-            .collect::<Vec<_>>();
+        let before = all_pids();
         let new_pid = start_cmd(&["sleep".to_string(), "30".to_string()])
             .expect("spawn detached sleep");
         std::thread::sleep(std::time::Duration::from_millis(150));
-        let argv = std::fs::read_to_string(format!("/proc/{new_pid}/cmdline"))
-            .expect("detached child must be alive");
-        assert!(argv.contains("sleep"), "argv: {argv}");
+        assert!(
+            pid_runs(new_pid, "sleep"),
+            "detached child must be alive and running sleep"
+        );
         kill_pid(new_pid);
         std::thread::sleep(std::time::Duration::from_millis(300));
         // detached child is reaped by init; its pid must not have existed before
@@ -1434,8 +1478,8 @@ mod tests {
         handle_key(&mut app, KeyCode::Char('s'), KeyModifiers::empty());
         handle_key(&mut app, KeyCode::Char('y'), KeyModifiers::empty());
         assert!(app.menu == MenuState::None);
-        // reap the old instance promptly (the worker waits for /proc/<pid>
-        // to vanish; a zombie lingers until the parent reaps it)
+        // reap the old instance promptly (the worker waits for the pid to
+        // vanish via kill(0); a zombie lingers until the parent reaps it)
         let _ = child.wait();
         // give the worker time to notice and spawn the new one
         std::thread::sleep(std::time::Duration::from_millis(500));
@@ -1443,16 +1487,7 @@ mod tests {
             child.try_wait().expect("poll").is_some(),
             "old instance terminated"
         );
-        let new_pid = std::fs::read_dir("/proc")
-            .expect("read /proc")
-            .flatten()
-            .find(|e| {
-                std::fs::read_to_string(e.path().join("cmdline"))
-                    .map(|c| c == "sleep\x0031\x00")
-                    .unwrap_or(false)
-            })
-            .map(|e| e.file_name().to_string_lossy().parse::<u32>().unwrap());
-        let new_pid = new_pid.expect("relaunched sleep 31 must be running");
+        let new_pid = find_running("sleep", pid).expect("relaunched sleep must be running");
         kill_pid(new_pid);
     }
 }

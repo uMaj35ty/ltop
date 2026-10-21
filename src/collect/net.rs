@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashMap, VecDeque};
+#[cfg(target_os = "linux")]
 use std::fs;
 use std::time::Instant;
 
@@ -248,6 +249,7 @@ fn sample_entries() -> std::io::Result<(Vec<DevCounters>, BTreeMap<String, Iface
     }
 }
 
+#[cfg(target_os = "linux")]
 fn read_iface_info(name: &str) -> IfaceInfo {
     let sys = |attr: &str| {
         fs::read_to_string(format!("/sys/class/net/{name}/{attr}"))
@@ -267,6 +269,7 @@ fn read_iface_info(name: &str) -> IfaceInfo {
 /// (name, rx_bytes, tx_bytes, rx_drop, tx_drop)
 type DevCounters = (String, u64, u64, u64, u64);
 
+#[cfg(target_os = "linux")]
 fn parse_proc_net_dev() -> std::io::Result<Vec<DevCounters>> {
     let content = fs::read_to_string("/proc/net/dev")?;
     let mut out = Vec::new();

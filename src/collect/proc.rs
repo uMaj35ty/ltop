@@ -6,6 +6,7 @@
 //! the monitoring session, so abnormal processes stand out.
 
 use std::collections::HashMap;
+#[cfg(target_os = "linux")]
 use std::fs;
 use std::time::Instant;
 
@@ -122,11 +123,29 @@ impl ProcState {
     }
 
     /// first entry into the ledger: snapshot identity while it is still alive
+    #[cfg(target_os = "linux")]
     fn first_sight(pid: u32) -> Self {
         let mut s = Self::zero();
         s.start_ticks = read_pid_start(pid);
         s.cmdline = read_pid_cmdline(pid);
         s.uptime_s = read_pid_uptime_s(pid);
+        s
+    }
+
+    /// mac:身份键/uptime 来自本轮 sysctl 进程表(start_epoch),cmdline 走
+    /// proc_pidpath(仅本 uid);进程已退出时 start 未知,回退按 pid 存在判活
+    #[cfg(target_os = "macos")]
+    fn first_sight_mac(pid: u32, start_epoch: Option<i64>) -> Self {
+        let mut s = Self::zero();
+        s.start_ticks = start_epoch.map(|e| e.max(0) as u64);
+        s.cmdline = crate::collect::macproc::cmdline(pid);
+        s.uptime_s = start_epoch.and_then(|e| {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .ok()?
+                .as_secs() as i64;
+            Some((now - e).max(0) as u64)
+        });
         s
     }
 }
@@ -137,6 +156,12 @@ pub struct ProcCollector {
     /// last readable /proc/<pid>/comm per pid, so UDP deltas of a process
     /// that just exited still land under its name
     udp_names: HashMap<u32, String>,
+    /// mac: 本轮 sysctl 进程表的 pid→comm(供 udp_name/净额折叠取名)
+    #[cfg(target_os = "macos")]
+    mac_comms: HashMap<u32, String>,
+    /// mac: 本轮 sysctl 进程表的 pid→start_epoch(first_sight 身份键)
+    #[cfg(target_os = "macos")]
+    mac_starts: HashMap<u32, i64>,
     last_t: Instant,
     pub procs: Vec<ProcRow>,
     pub sort: ProcSort,
@@ -156,6 +181,10 @@ impl ProcCollector {
             acc: HashMap::new(),
             io_prev: HashMap::new(),
             udp_names: HashMap::new(),
+            #[cfg(target_os = "macos")]
+            mac_comms: HashMap::new(),
+            #[cfg(target_os = "macos")]
+            mac_starts: HashMap::new(),
             last_t: Instant::now(),
             procs: Vec::new(),
             sort: ProcSort::NetSum,
@@ -169,15 +198,35 @@ impl ProcCollector {
         let now = Instant::now();
         let dt = now.duration_since(self.last_t).as_secs_f64().max(1e-6);
         self.last_t = now;
+        // mac:先取系统进程表(comm 名字解析 + 存活判定 + pid 复用键)
+        #[cfg(target_os = "macos")]
+        let mac_pids = {
+            let rows = crate::collect::macproc::list_pids();
+            self.mac_comms = rows
+                .iter()
+                .map(|m| (m.pid, m.comm.clone()))
+                .collect();
+            self.mac_starts = rows
+                .iter()
+                .map(|m| (m.pid, m.start_epoch))
+                .collect();
+            rows
+        };
 
         // --- network: fold per-pid eBPF deltas into per-process totals ---
         let mut net_rates: HashMap<(u32, String), (f64, f64)> = HashMap::new();
         for d in net {
             let key = (d.pid, self.udp_name(d.pid));
+            #[cfg(target_os = "linux")]
             let st = self
                 .acc
                 .entry(key.clone())
                 .or_insert_with(|| ProcState::first_sight(d.pid));
+            #[cfg(target_os = "macos")]
+            let st = self.acc.entry(key.clone()).or_insert_with(|| {
+                let start = self.mac_starts.get(&d.pid).copied();
+                ProcState::first_sight_mac(d.pid, start)
+            });
             st.net_recv += d.recv;
             st.net_sent += d.sent;
             let r = net_rates.entry(key).or_insert((0.0, 0.0));
@@ -189,29 +238,59 @@ impl ProcCollector {
         // pass records which pids are alive right now and their start times ---
         let mut io_rates: HashMap<u32, (f64, f64)> = HashMap::new();
         let mut pids_now: HashMap<u32, u64> = HashMap::new();
-        if let Ok(pids) = fs::read_dir("/proc") {
-            for p in pids.flatten() {
-                let Ok(pid) = p.file_name().to_string_lossy().parse::<u32>() else {
-                    continue;
-                };
-                if let Some(start) = read_pid_start(pid) {
-                    pids_now.insert(pid, start);
+        #[cfg(target_os = "linux")]
+        {
+            if let Ok(pids) = fs::read_dir("/proc") {
+                for p in pids.flatten() {
+                    let Ok(pid) = p.file_name().to_string_lossy().parse::<u32>() else {
+                        continue;
+                    };
+                    if let Some(start) = read_pid_start(pid) {
+                        pids_now.insert(pid, start);
+                    }
+                    let (Some(rb), Some(wb), Some(comm)) = read_pid_io(&p.path()) else {
+                        continue;
+                    };
+                    let (dr, dw) = match self.io_prev.get(&pid) {
+                        Some(&(pr, pw)) => (rb.saturating_sub(pr), wb.saturating_sub(pw)),
+                        None => (0, 0),
+                    };
+                    self.io_prev.insert(pid, (rb, wb));
+                    io_rates.insert(pid, (dr as f64 / dt, dw as f64 / dt));
+                    if dr > 0 || dw > 0 {
+                        let key = (pid, comm);
+                        let st = self
+                            .acc
+                            .entry(key)
+                            .or_insert_with(|| ProcState::first_sight(pid));
+                        st.disk_r += dr;
+                        st.disk_w += dw;
+                    }
                 }
-                let (Some(rb), Some(wb), Some(comm)) = read_pid_io(&p.path()) else {
+            }
+        }
+        // mac:rusage diskio 累计值差分(仅本 uid 可读,同 Linux /proc io
+        // 权限);start_epoch 作 pid 复用键
+        #[cfg(target_os = "macos")]
+        {
+            for m in &mac_pids {
+                pids_now.insert(m.pid, m.start_epoch.max(0) as u64);
+                let Some((rb, wb)) = crate::collect::macproc::disk_io(m.pid) else {
                     continue;
                 };
-                let (dr, dw) = match self.io_prev.get(&pid) {
+                let (dr, dw) = match self.io_prev.get(&m.pid) {
                     Some(&(pr, pw)) => (rb.saturating_sub(pr), wb.saturating_sub(pw)),
                     None => (0, 0),
                 };
-                self.io_prev.insert(pid, (rb, wb));
-                io_rates.insert(pid, (dr as f64 / dt, dw as f64 / dt));
+                self.io_prev.insert(m.pid, (rb, wb));
+                io_rates.insert(m.pid, (dr as f64 / dt, dw as f64 / dt));
                 if dr > 0 || dw > 0 {
-                    let key = (pid, comm);
+                    let key = (m.pid, m.comm.clone());
+                    let start = Some(m.start_epoch);
                     let st = self
                         .acc
                         .entry(key)
-                        .or_insert_with(|| ProcState::first_sight(pid));
+                        .or_insert_with(|| ProcState::first_sight_mac(m.pid, start));
                     st.disk_r += dr;
                     st.disk_w += dw;
                 }
@@ -225,10 +304,16 @@ impl ProcCollector {
             for d in udp {
                 let name = self.udp_name(d.pid);
                 let key = (d.pid, name);
+                #[cfg(target_os = "linux")]
                 let st = self
                     .acc
                     .entry(key.clone())
                     .or_insert_with(|| ProcState::first_sight(d.pid));
+                #[cfg(target_os = "macos")]
+                let st = self.acc.entry(key.clone()).or_insert_with(|| {
+                    let start = self.mac_starts.get(&d.pid).copied();
+                    ProcState::first_sight_mac(d.pid, start)
+                });
                 st.udp_recv += d.recv;
                 st.udp_sent += d.sent;
                 let r = udp_rates.entry(d.pid).or_insert((0.0, 0.0));
@@ -297,6 +382,7 @@ impl ProcCollector {
 
     /// name for a UDP-only delta: current comm if readable, else the last one
     /// seen (so a short-lived sender still gets attributed), else "(gone)"
+    #[cfg(target_os = "linux")]
     fn udp_name(&mut self, pid: u32) -> String {
         if let Ok(comm) = fs::read_to_string(format!("/proc/{pid}/comm")) {
             let comm = comm.trim().to_string();
@@ -314,6 +400,24 @@ impl ProcCollector {
             .unwrap_or_else(|| "(gone)".to_string())
     }
 
+    /// mac:名字来自本轮 sysctl 进程表;退出的进程沿用最后见过的名字
+    #[cfg(target_os = "macos")]
+    fn udp_name(&mut self, pid: u32) -> String {
+        if let Some(name) = self.mac_comms.get(&pid).cloned() {
+            if !name.is_empty() {
+                if self.udp_names.len() > 8192 {
+                    self.udp_names.clear();
+                }
+                self.udp_names.insert(pid, name.clone());
+                return name;
+            }
+        }
+        self.udp_names
+            .get(&pid)
+            .cloned()
+            .unwrap_or_else(|| "(gone)".to_string())
+    }
+
     pub fn reset_disk(&mut self) {
         for st in self.acc.values_mut() {
             st.disk_r = 0;
@@ -323,6 +427,7 @@ impl ProcCollector {
 }
 
 /// (read_bytes, write_bytes, comm) if the process lets us read its io stats
+#[cfg(target_os = "linux")]
 fn read_pid_io(path: &std::path::Path) -> (Option<u64>, Option<u64>, Option<String>) {
     let mut r = None;
     let mut w = None;
@@ -345,6 +450,7 @@ fn read_pid_io(path: &std::path::Path) -> (Option<u64>, Option<u64>, Option<Stri
 /// after the `(comm)` parenthesis (which may contain spaces) it is the 20th
 /// token, so index 19 — this is how a reused pid is told apart.
 /// 进程已运行秒数:/proc/uptime − starttime/CLK_TCK
+#[cfg(target_os = "linux")]
 fn read_pid_uptime_s(pid: u32) -> Option<u64> {
     let start_ticks = read_pid_start(pid)?;
     let uptime = fs::read_to_string("/proc/uptime").ok()?;
@@ -354,6 +460,7 @@ fn read_pid_uptime_s(pid: u32) -> Option<u64> {
     Some(age.max(0.0) as u64)
 }
 
+#[cfg(target_os = "linux")]
 fn read_pid_start(pid: u32) -> Option<u64> {
     let stat = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
     let after = stat.rsplit_once(')')?.1;
@@ -361,6 +468,7 @@ fn read_pid_start(pid: u32) -> Option<u64> {
 }
 
 /// argv as it was invoked; None for kernel threads and zombies (empty cmdline)
+#[cfg(target_os = "linux")]
 fn read_pid_cmdline(pid: u32) -> Option<Vec<String>> {
     let raw = fs::read_to_string(format!("/proc/{pid}/cmdline")).ok()?;
     let parts: Vec<String> = raw
@@ -388,6 +496,8 @@ fn row_alive(start: Option<u64>, now: Option<u64>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "macos")]
+    use std::fs;
 
     #[test]
     fn udp_deltas_land_in_the_ledger_under_the_pid_name() {
@@ -446,6 +556,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn pid_start_and_cmdline_read_from_proc() {
         let pid = std::process::id();
         let start = read_pid_start(pid).expect("stat start ticks");
