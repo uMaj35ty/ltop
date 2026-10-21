@@ -216,6 +216,9 @@ pub struct Config {
     pub tombstone_ttl_ms: u64,
     /// "omarchy" = 跟随 omarchy 当前主题;其余为内嵌 btop 主题名
     pub theme: String,
+    /// 运行中实时跟随 omarchy 主题文件重写(omarchy-theme-set);默认关:
+    /// 非 omarchy 系统无意义,省一次每 tick 的 stat。CLI --follow-theme 可临时开
+    pub theme_live_follow: bool,
     /// proc 分组默认展开(true)或折叠(false)
     pub proc_expand_default: bool,
     pub conn_sort: ConnSort,
@@ -241,6 +244,7 @@ impl Default for Config {
             conn_filter: ConnFilter::All,
             tombstone_ttl_ms: 5000,
             theme: "omarchy".to_string(),
+            theme_live_follow: false,
             proc_expand_default: false,
             conn_sort: ConnSort::Proc,
             proc_sort: ProcSort::NetSum,
@@ -388,6 +392,7 @@ impl Config {
                         cfg.theme = v.to_string();
                     }
                 }
+                "theme_live_follow" => cfg.theme_live_follow = v == "true",
                 "conn_filter" => {
                     cfg.conn_filter = match v {
                         "all" => ConnFilter::All,
@@ -424,7 +429,7 @@ impl Config {
     pub fn content(&self) -> String {
         let boxes: String = self.boxes.iter().map(|&b| if b { '1' } else { '0' }).collect();
         format!(
-            "lang = {}\nlayout = {}\ntick_ms = {}\ngraph_net = {}\ngraph_disk = {}\nboxes = {}\nlog_interval_ms = {}\nlog_retention_days = {}\nsweep_interval_s = {}\nsweep = {}\nlog_tracked_only = {}\nallow_global_kill = {}\nlan_sort = {}\nconn_filter = {}\nconn_sort = {}\nproc_sort = {}\ntombstone_ttl_ms = {}\ntheme = {}\nproc_expand_default = {}\n",
+            "lang = {}\nlayout = {}\ntick_ms = {}\ngraph_net = {}\ngraph_disk = {}\nboxes = {}\nlog_interval_ms = {}\nlog_retention_days = {}\nsweep_interval_s = {}\nsweep = {}\nlog_tracked_only = {}\nallow_global_kill = {}\nlan_sort = {}\nconn_filter = {}\nconn_sort = {}\nproc_sort = {}\ntombstone_ttl_ms = {}\ntheme = {}\ntheme_live_follow = {}\nproc_expand_default = {}\n",
             self.lang.label(),
             match self.layout {
                 LayoutMode::Classic => "classic",
@@ -447,6 +452,7 @@ impl Config {
             self.proc_sort.label(),
             self.tombstone_ttl_ms,
             self.theme,
+            self.theme_live_follow,
             self.proc_expand_default,
         )
     }

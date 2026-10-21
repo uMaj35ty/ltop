@@ -60,6 +60,7 @@ USAGE:
     --dump                  one-shot diagnostic dump to stdout, then exit
     --log                   start the TUI with the monitoring log enabled
     --log-interval <MS>     monitoring log interval in ms (with --log; default from settings)
+    --follow-theme          live-follow Omarchy theme changes while running (default off)
     --replay [FILE]         replay/analyse the latest session log (or a given JSONL file)
     --top <N>               replay: report the top N processes (default 15)
     --csv <OUT>             replay: also export per-process deltas as CSV
@@ -89,6 +90,11 @@ pub fn arch_guard() -> Result<()> {
 
 /// entry point used by the `ltop` binary (and any symlink alias to it)
 pub fn cli_main() -> Result<()> {
+    // `ltop --dump | head` 这类管道截断:恢复 SIGPIPE 默认行为,静默退出
+    // 而非 println! 在 EPIPE 上 panic
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
     let args: Vec<String> = std::env::args().collect();
     // help/version 最先短路:不依赖 tty,也不受 arch 限制(arm64 上也要能看帮助)
     if let Some(res) = early_exit(&args) {
@@ -109,6 +115,9 @@ pub fn cli_main() -> Result<()> {
         return dump(&theme_src);
     }
     let auto_log = args.iter().any(|a| a == "--log");
+    // 实时跟随:CLI 旗标或配置开启;默认关(非 omarchy 系统无意义,省每 tick 一次 stat)
+    let follow_theme =
+        args.iter().any(|a| a == "--follow-theme") || boot_cfg.theme_live_follow;
     let log_interval: Option<Duration> = args
         .iter()
         .position(|a| a == "--log-interval")
@@ -122,7 +131,7 @@ pub fn cli_main() -> Result<()> {
         let _ = restore();
         default_hook(info);
     }));
-    let res = run(&mut terminal, log_interval, auto_log);
+    let res = run(&mut terminal, log_interval, auto_log, follow_theme);
     restore()?;
     res
 }
@@ -139,8 +148,15 @@ fn restore() -> Result<()> {
     Ok(())
 }
 
-fn run(terminal: &mut Tui, log_interval: Option<Duration>, auto_log: bool) -> Result<()> {
+fn run(
+    terminal: &mut Tui,
+    log_interval: Option<Duration>,
+    auto_log: bool,
+    follow_theme: bool,
+) -> Result<()> {
     let mut app = App::new(log_interval);
+    // CLI --follow-theme 在配置之上再开一档(配置默认关)
+    app.theme_live_follow = app.theme_live_follow || follow_theme;
     if auto_log {
         app.monlog.toggle();
     }
@@ -165,9 +181,11 @@ fn run(terminal: &mut Tui, log_interval: Option<Duration>, auto_log: bool) -> Re
         }
 
         if last_tick.elapsed() >= app.tick {
-            // omarchy 跟随模式:主题文件被重写(omarchy-theme-set)即热重载,
-            // 下一帧 draw 自然拿到新调色板
-            theme::poll_omarchy_follow();
+            // omarchy 跟随模式(--follow-theme / theme_live_follow):主题文件
+            // 被重写(omarchy-theme-set)即热重载,下一帧 draw 拿到新调色板
+            if app.theme_live_follow {
+                theme::poll_omarchy_follow();
+            }
             app.update();
             last_tick = Instant::now();
         }
@@ -1304,6 +1322,7 @@ mod tests {
             "--dump",
             "--log",
             "--log-interval",
+            "--follow-theme",
             "--replay",
             "--top",
             "--csv",

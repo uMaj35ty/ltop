@@ -13,9 +13,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
-- Live Omarchy theme following: while in the `omarchy` follow mode, re-writing
-  the desktop theme (e.g. `omarchy-theme-set`) hot-reloads ltop's palette
-  within one tick — verified on the real desktop across three theme switches.
+- Live Omarchy theme following, opt-in: `--follow-theme` (or
+  `theme_live_follow = true` in the config; off by default). While in the
+  `omarchy` follow mode, re-writing the desktop theme (e.g.
+  `omarchy-theme-set`) hot-reloads ltop's palette within one tick — verified
+  on the real desktop across three theme switches.
 
 ## [0.1.1] - 2026-10-21
 

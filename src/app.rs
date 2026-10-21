@@ -159,6 +159,9 @@ pub struct App {
     pub expanded: std::collections::HashSet<String>,
     /// proc 分组的默认态:false = 折叠(聚合行)、true = 展开
     pub proc_expand_default: bool,
+    /// 运行中实时跟随 omarchy 主题重写(--follow-theme / theme_live_follow);
+    /// 默认关,save_config 时原样保留
+    pub theme_live_follow: bool,
     /// 搜索输入缓冲(菜单 Search 模式中)
     pub search_buf: String,
     pub menu: MenuState,
@@ -213,6 +216,7 @@ impl App {
             search_box: BOX_CONNS,
             expanded: std::collections::HashSet::new(),
             proc_expand_default: false,
+            theme_live_follow: false,
             search_buf: String::new(),
             menu: MenuState::None,
             sel: [None; BOX_COUNT],
@@ -243,6 +247,7 @@ impl App {
         let old_default = app.proc_expand_default;
         app.conn.tombstone_ttl = std::time::Duration::from_millis(cfg.tombstone_ttl_ms);
         app.proc_expand_default = cfg.proc_expand_default;
+        app.theme_live_follow = cfg.theme_live_follow;
         if app.proc_expand_default != old_default {
             app.expanded.clear(); // 换默认态时清空反转集合
         }
@@ -274,6 +279,7 @@ impl App {
             } else {
                 crate::theme::theme_name()
             },
+            theme_live_follow: self.theme_live_follow,
             proc_expand_default: self.proc_expand_default,
         }
         .save();

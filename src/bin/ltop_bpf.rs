@@ -49,6 +49,10 @@ const PROBES: [(&str, &str, bool); 10] = [
 ];
 
 fn main() {
+    // 同 ltop:管道截断(--once | head)时静默退出而非 panic
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
     if let Err(e) = run() {
         eprintln!("ltop-bpf: {e:#}");
         exit(1);
