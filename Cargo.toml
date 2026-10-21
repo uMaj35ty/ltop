@@ -29,7 +29,7 @@ ratatui = "0.29"
 aya = "0.14.0"
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
-aya-obj = "0.3"
+aya-obj = "0.5"
 
 [profile.release]
 lto = true
