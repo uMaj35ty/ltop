@@ -20,7 +20,7 @@ path = "src/bin/ltop_bpf.rs"
 [dependencies]
 anyhow = "1"
 crossterm = "0.28"
-if-addrs = "0.13"
+if-addrs = "0.15"
 libc = "0.2"
 ratatui = "0.29"
 
