@@ -22,7 +22,7 @@ anyhow = "1"
 crossterm = "0.28"
 if-addrs = "0.13"
 libc = "0.2"
-ratatui = "0.29"
+ratatui = "0.30"
 
 # aya/eBPF 加载器仅 Linux(ltop-bpf 二进制);mac 构建不引入
 [target.'cfg(target_os = "linux")'.dependencies]
