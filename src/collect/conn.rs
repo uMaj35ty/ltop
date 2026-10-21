@@ -12,20 +12,33 @@ use std::fs;
 use std::net::{IpAddr, Ipv4Addr};
 use std::time::{Duration, Instant};
 
-use libc::{AF_INET, AF_INET6, AF_NETLINK};
+use libc::{AF_INET, AF_INET6};
+#[cfg(target_os = "linux")]
+use libc::AF_NETLINK;
 
+#[cfg(target_os = "linux")]
 const NETLINK_SOCK_DIAG: libc::c_int = 4;
+#[cfg(target_os = "linux")]
 const SOCK_DIAG_BY_FAMILY: u16 = 20;
+#[cfg(target_os = "linux")]
 const NLMSG_ERROR: u16 = 2;
+#[cfg(target_os = "linux")]
 const NLMSG_DONE: u16 = 3;
+#[cfg(target_os = "linux")]
 const NLM_F_REQUEST: u16 = 0x01;
+#[cfg(target_os = "linux")]
 const NLM_F_DUMP: u16 = 0x300;
+#[cfg(target_os = "linux")]
 const INET_DIAG_INFO: u16 = 2;
+#[cfg(target_os = "linux")]
 const INET_DIAG_NOCOOKIE: u32 = 0xffff_ffff;
 
 /// struct tcp_info offsets (UAPI, append-only) of the u64 byte counters
+#[cfg(target_os = "linux")]
 const TI_BYTES_ACKED: usize = 120;
+#[cfg(target_os = "linux")]
 const TI_BYTES_RECEIVED: usize = 128;
+#[cfg(target_os = "linux")]
 const TI_MIN_LEN: usize = 136;
 
 pub const IPPROTO_TCP: u8 = 6;
@@ -403,11 +416,17 @@ impl ConnCollector {
     }
 }
 
+/// mac:NETLINK_SOCK_DIAG 不存在;v0.2.1 的 mac 连接数据源走 nettop(另行实现),
+/// 本桩使骨架可编译
+#[cfg(not(target_os = "linux"))]
+fn dump_family(_family: libc::c_int, _proto: u8, _out: &mut Vec<Conn>) {}
+
 /// ip:port display helper shared with the UI
 pub fn sock_str(s: &(IpAddr, u16)) -> String {
     format!("{}:{}", s.0, s.1)
 }
 
+#[cfg(target_os = "linux")]
 fn dump_family(family: libc::c_int, proto: u8, out: &mut Vec<Conn>) {
     // SAFETY: raw netlink socket, all buffers sized by the protocol's fixed
     // message layout; fd is closed on every return path below.
@@ -470,6 +489,7 @@ fn dump_family(family: libc::c_int, proto: u8, out: &mut Vec<Conn>) {
 }
 
 /// nlmsghdr + inet_diag_req_v2 (fixed 72-byte message)
+#[cfg(target_os = "linux")]
 fn build_req(family: u8, proto: u8) -> Vec<u8> {
     const TOTAL: usize = 16 + 56;
     let mut b = vec![0u8; TOTAL];
@@ -490,6 +510,7 @@ fn build_req(family: u8, proto: u8) -> Vec<u8> {
 
 /// inet_diag_msg fixed part = 4 status bytes + sockid(48) + 5 u32 (expires,
 /// rqueue, wqueue, uid, inode) = 72, followed by rtattr stream.
+#[cfg(target_os = "linux")]
 fn parse_diag(p: &[u8], proto: u8) -> Option<Conn> {
     if p.len() < 72 {
         return None;
@@ -541,6 +562,7 @@ fn parse_diag(p: &[u8], proto: u8) -> Option<Conn> {
     })
 }
 
+#[cfg(target_os = "linux")]
 fn ip_from(b: &[u8], family: u8) -> IpAddr {
     if family as libc::c_int == AF_INET {
         IpAddr::V4(Ipv4Addr::new(b[0], b[1], b[2], b[3]))
@@ -552,6 +574,7 @@ fn ip_from(b: &[u8], family: u8) -> IpAddr {
 }
 
 /// ::ffff:a.b.c.d dual-stack sockets count as IPv4 for LAN matching
+#[cfg(target_os = "linux")]
 fn normalize(ip: IpAddr) -> IpAddr {
     match ip {
         IpAddr::V6(v6) => v6.to_ipv4_mapped().map(IpAddr::V4).unwrap_or(IpAddr::V6(v6)),
@@ -611,14 +634,17 @@ fn load_users() -> HashMap<u32, String> {
     out
 }
 
+#[cfg(target_os = "linux")]
 fn u16from(b: &[u8]) -> u16 {
     u16::from_ne_bytes([b[0], b[1]])
 }
 
+#[cfg(target_os = "linux")]
 fn u32from(b: &[u8]) -> u32 {
     u32::from_ne_bytes([b[0], b[1], b[2], b[3]])
 }
 
+#[cfg(target_os = "linux")]
 fn u64from(b: &[u8]) -> u64 {
     u64::from_ne_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]])
 }
@@ -829,6 +855,7 @@ mod tests {
     /// the real inet_diag dump must carry UDP sockets with their inodes,
     /// otherwise per-socket UDP deltas have nothing to land on
     #[test]
+    #[cfg(target_os = "linux")]
     fn netlink_dump_contains_udp_sockets() {
         let mut c = ConnCollector::new();
         c.sample();
