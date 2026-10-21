@@ -75,12 +75,13 @@ Data scopes differ by design (PROCS = payload, NET box = NIC bytes) — see in-a
 }
 
 /// 本发行版仅支持 x86_64:eBPF 探针的 PT_REGS 寄存器映射与各数据源都按
-/// x86_64 编写,其他架构启动即明确报错,而不是静默产出错账
+/// 探针寄存器映射覆盖 x86_64 与 aarch64;其他架构启动即明确报错,
+/// 而不是静默产出错账
 pub fn arch_guard() -> Result<()> {
-    if std::env::consts::ARCH != "x86_64" {
+    if !matches!(std::env::consts::ARCH, "x86_64" | "aarch64") {
         anyhow::bail!(
-            "localist-top v{} supports x86_64 Linux only (running on {}); \
-             arm64 is a separate milestone — see README",
+            "ltop v{} supports x86_64/aarch64 Linux only (running on {}); \
+             other architectures are not supported — see README",
             env!("CARGO_PKG_VERSION"),
             std::env::consts::ARCH
         );

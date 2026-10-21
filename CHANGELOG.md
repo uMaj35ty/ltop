@@ -3,6 +3,18 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-10-21
+
+### Added
+
+- **aarch64 (arm64) Linux support** — the eBPF probes gained an arm64 pt_regs
+  branch (syscall args in x0-x7, retval in x0, libbpf-style `__TARGET_ARCH_*`
+  defines passed by build.rs), release tarballs ship for both
+  `x86_64-linux` and `aarch64-linux`, CI runs the full suite natively on an
+  arm runner, and the architecture guard now accepts aarch64.
+- Verified end-to-end under QEMU aarch64 emulation (Ubuntu 24.04 arm64,
+  kernel 6.8): all ten probes attach and per-pid/per-inode accounting matches.
+
 ## [0.1.3] - 2026-10-21
 
 ### Changed

@@ -16,6 +16,21 @@ fn main() {
     let obj = out.join("ltop_udp_bpf.o");
     let clang = std::env::var("CLANG").unwrap_or_else(|_| "clang".into());
 
+    // 探针 C 按 BPF 目标编译(字节码本身无架构),但 pt_regs 的字段布局
+    // 取自主机架构——net_bpf.c 按 libbpf 惯例依赖该宏做 #if 分支
+    let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+    let arch_define = match target_arch.as_str() {
+        "x86_64" => "-D__TARGET_ARCH_x86",
+        "aarch64" => "-D__TARGET_ARCH_aarch64",
+        other => {
+            println!(
+                "cargo:warning=不支持的架构 {other}:嵌入空 eBPF 对象,UDP 计费将不可用"
+            );
+            std::fs::write(&inc, "pub static BPF_OBJECT: &[u8] = &[];\n").unwrap();
+            return;
+        }
+    };
+
     let ok = Command::new(&clang)
         .args([
             "-O2",
@@ -25,6 +40,7 @@ fn main() {
             "-Wall",
             "-Wextra",
             "-Wno-unused-parameter",
+            arch_define,
             "-c",
         ])
         .arg(&src)

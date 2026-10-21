@@ -14,25 +14,56 @@ jobs:
     # 构建的二进制于 22.04 因 GLIBC_2.39 weak 缺失不可用——基线取矩阵最老 glibc
     container:
       image: ubuntu:22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            slug: x86_64-linux
+            cross: ""
+          - target: aarch64-unknown-linux-gnu
+            slug: aarch64-linux
+            cross: aarch64-linux-gnu-
     steps:
       - uses: actions/checkout@v4
-      # eBPF 对象在 build.rs 里由 clang(-target bpf)编译;22.04 的 clang 带 bpf 后端
+      # eBPF 对象在 build.rs 里由 clang(-target bpf)编译;22.04 的 clang 带 bpf
+      # 后端,且按 CARGO_CFG_TARGET_ARCH 传 -D__TARGET_ARCH_* 分支寄存器布局
       - name: Install toolchain
         run: |
           apt-get update -q
-          DEBIAN_FRONTEND=noninteractive apt-get install -y clang curl git gh
+          DEBIAN_FRONTEND=noninteractive apt-get install -y clang curl git gh \
+            gcc-aarch64-linux-gnu
           curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          rustup target add aarch64-unknown-linux-gnu
       - name: Build
-        run: cargo build --release
-      # 开箱别名:loli → ltop 软链进压缩包,-h 按调用名显示
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        run: cargo build --release --target ${{ matrix.target }}
       - name: Package
         run: |
           mkdir -p dist
-          cp target/release/ltop target/release/ltop-bpf dist/
+          cp "target/${{ matrix.target }}/release/ltop" \
+             "target/${{ matrix.target }}/release/ltop-bpf" dist/
           ln -s ltop dist/loli
-          tar czf "ltop-${GITHUB_REF_NAME#v}-x86_64-linux.tar.gz" -C dist ltop ltop-bpf loli
-          sha256sum "ltop-${GITHUB_REF_NAME#v}-x86_64-linux.tar.gz" > SHA256SUMS
+          tar czf "ltop-${GITHUB_REF_NAME#v}-${{ matrix.slug }}.tar.gz" -C dist ltop ltop-bpf loli
+          sha256sum "ltop-${GITHUB_REF_NAME#v}-${{ matrix.slug }}.tar.gz" > "SHA256SUMS-${{ matrix.slug }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.slug }}
+          path: |
+            ltop-*-${{ matrix.slug }}.tar.gz
+            SHA256SUMS-${{ matrix.slug }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - name: Merge SHA256SUMS
+        run: cat SHA256SUMS-* > SHA256SUMS
       - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -40,10 +71,8 @@ jobs:
         run: |
           # 幂等:重推已有 tag 时不炸,资产 --clobber 覆盖
           if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" \
-              "ltop-${GITHUB_REF_NAME#v}-x86_64-linux.tar.gz" SHA256SUMS --clobber
+            gh release upload "$GITHUB_REF_NAME" ltop-*.tar.gz SHA256SUMS --clobber
           else
-            gh release create "$GITHUB_REF_NAME" \
-              "ltop-${GITHUB_REF_NAME#v}-x86_64-linux.tar.gz" SHA256SUMS \
+            gh release create "$GITHUB_REF_NAME" ltop-*.tar.gz SHA256SUMS \
               --title "$GITHUB_REF_NAME" --generate-notes
           fi

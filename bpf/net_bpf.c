@@ -8,11 +8,12 @@
  * TCP uses the same four syscall symbols for v4 and v6 (tcp_sendmsg /
  * tcp_recvmsg); UDP has separate v6 symbols (udpv6_*).
  *
- * Deliberately header-free: probes read raw register slots of x86_64 struct
- * pt_regs (arg1 = rdi = sk, arg3 = rdx = len for the entry kprobes; retval
- * = rax for the kretprobes, whose arg registers are already clobbered — an
- * entry kprobe stashes sk keyed by the full pid_tgid for its kretprobe).
- * The sk→inode walk is the single struct-coupled part; it uses CO-RE
+ * Deliberately header-free: probes read raw register slots of the interrupted
+ * context's pt_regs (arg1 = sk, arg3 = len for the entry kprobes; retval for
+ * the kretprobes, whose arg registers are already clobbered — an entry kprobe
+ * stashes sk keyed by the full pid_tgid for its kretprobe). The host arch
+ * define is passed by build.rs (-D__TARGET_ARCH_*), libbpf convention. The
+ * sk→inode walk is the single struct-coupled part; it uses CO-RE
  * relocations (field names resolved against /sys/kernel/btf/vmlinux at load
  * time), so no per-kernel builds. /proc/net/udp's pointer column is a
  * per-boot HASH on this kernel and cannot be used for correlation, hence
@@ -36,11 +37,29 @@ static u64 (*get_current_pid_tgid)(void) = (void *)14;
 static long (*probe_read_kernel)(void *dst, u32 size, const void *src) =
 	(void *)113;
 
+/* Per-arch pt_regs: probes read the interrupted context's raw register slots
+ * (see the header note). Only the slots we touch are declared. */
+#if defined(__TARGET_ARCH_aarch64)
+/* arm64: syscall args in x0-x7; retval in x0 at kretprobe time */
+struct pt_regs {
+	u64 regs[31];
+	u64 sp, pc, pstate;
+};
+#define PT_ARG1(ctx) ((ctx)->regs[0])
+#define PT_ARG3(ctx) ((ctx)->regs[2])
+#define PT_RET(ctx) ((ctx)->regs[0])
+#elif defined(__TARGET_ARCH_x86)
 /* x86_64 struct pt_regs; syscall args live in rdi/rsi/rdx */
 struct pt_regs {
 	u64 r15, r14, r13, r12, rbp, rbx, r11, r10, r9, r8;
 	u64 rax, rcx, rdx, rsi, rdi, orig_rax, rip, cs, eflags, rsp, ss;
 };
+#define PT_ARG1(ctx) ((ctx)->rdi)
+#define PT_ARG3(ctx) ((ctx)->rdx)
+#define PT_RET(ctx) ((ctx)->rax)
+#else
+#error "unsupported architecture: build with -D__TARGET_ARCH_x86 or -D__TARGET_ARCH_aarch64"
+#endif
 
 /* CO-RE window onto the chain sock→socket→file→inode; local layouts are
  * irrelevant, relocations patch real offsets by field name */
@@ -211,7 +230,7 @@ static __attribute__((always_inline)) void account(u64 sk, u64 bytes,
 static __attribute__((always_inline)) void stash_sk(struct pt_regs *ctx)
 {
 	u64 id = get_current_pid_tgid();
-	u64 sk = ctx->rdi;
+	u64 sk = PT_ARG1(ctx);
 	map_update_elem(&recv_sk, &id, &sk, 0);
 }
 
@@ -220,7 +239,7 @@ static __attribute__((always_inline)) void take_ret(struct pt_regs *ctx,
 						    int is_recv, int is_udp)
 {
 	u64 id = get_current_pid_tgid();
-	long ret = (long)ctx->rax;
+	long ret = (long)PT_RET(ctx);
 	u64 *skp = map_lookup_elem(&recv_sk, &id);
 	if (!skp)
 		return;
@@ -234,18 +253,18 @@ static __attribute__((always_inline)) void take_ret(struct pt_regs *ctx,
 SEC("kprobe/udp_sendmsg")
 int udp_send(struct pt_regs *ctx)
 {
-	u64 len = ctx->rdx;
+	u64 len = PT_ARG3(ctx);
 	if (sane_bytes(len))
-		account(ctx->rdi, len, 0, 1);
+		account(PT_ARG1(ctx), len, 0, 1);
 	return 0;
 }
 
 SEC("kprobe/udpv6_sendmsg")
 int udp6_send(struct pt_regs *ctx)
 {
-	u64 len = ctx->rdx;
+	u64 len = PT_ARG3(ctx);
 	if (sane_bytes(len))
-		account(ctx->rdi, len, 0, 1);
+		account(PT_ARG1(ctx), len, 0, 1);
 	return 0;
 }
 
