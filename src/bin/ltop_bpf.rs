@@ -2,7 +2,7 @@
 //!
 //! Attaches kprobes on udp_sendmsg / udp_recvmsg (+ udpv6 variants), keeps
 //! per-pid byte counters in a kernel LRU map and writes a snapshot of
-//! cumulative counters to /run/lanmon/udp.json once per interval. The
+//! cumulative counters to /run/ltop/udp.json once per interval. The
 //! unprivileged TUI only reads that file. Needs root (or CAP_BPF +
 //! CAP_PERFMON); exit status 1 with a reason when nothing can be attached.
 //!
@@ -69,7 +69,7 @@ fn run() -> Result<()> {
     }
     let mut args = std::env::args().skip(1);
     let mut interval_ms = 1000u64;
-    let mut out = PathBuf::from("/run/lanmon/udp.json");
+    let mut out = PathBuf::from("/run/ltop/udp.json");
     let mut once = false;
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -84,13 +84,13 @@ fn run() -> Result<()> {
             "--once" => once = true,
             "--help" | "-h" => {
                 println!(
-                    "ltop-bpf v{} — privileged eBPF accounting helper for localist-top
+                    "ltop-bpf v{} — privileged eBPF accounting helper for ltop
 
 USAGE:
     ltop-bpf [OPTIONS]
 
     --interval <MS>   snapshot interval in ms (default 1000, min 100)
-    --out <PATH>      snapshot output path (default /run/lanmon/udp.json)
+    --out <PATH>      snapshot output path (default /run/ltop/udp.json)
     --once            sample once, print, exit (smoke test)
     -h, --help        print this help
 

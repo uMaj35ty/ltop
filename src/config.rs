@@ -1,4 +1,4 @@
-//! Persistent user config: `~/.config/localist-top/config.conf`, plain `key = value`.
+//! Persistent user config: `~/.config/ltop/config.conf`, plain `key = value`.
 //! Loaded at startup; menu settings changes mutate the app and rewrite the
 //! file immediately (no hot file watching — restart-free by construction).
 
@@ -278,7 +278,7 @@ impl Config {
             Ok(x) if !x.is_empty() => PathBuf::from(x),
             _ => PathBuf::from(std::env::var("HOME").ok()?).join(".config"),
         };
-        Some(base.join("localist-top"))
+        Some(base.join("ltop"))
     }
 
     pub fn path() -> Option<PathBuf> {
@@ -290,13 +290,22 @@ impl Config {
     pub fn migrate_legacy_dirs() {
         if let Ok(home) = std::env::var("HOME") {
             for (old, new) in [
+                // localist-top → ltop(2026-10-21 更名);新的在前:两者都在时新者优先
+                (
+                    PathBuf::from(&home).join(".config/localist-top"),
+                    PathBuf::from(&home).join(".config/ltop"),
+                ),
+                (
+                    PathBuf::from(&home).join(".local/state/localist-top"),
+                    PathBuf::from(&home).join(".local/state/ltop"),
+                ),
                 (
                     PathBuf::from(&home).join(".config/lanmon"),
-                    PathBuf::from(&home).join(".config/localist-top"),
+                    PathBuf::from(&home).join(".config/ltop"),
                 ),
                 (
                     PathBuf::from(&home).join(".local/state/lanmon"),
-                    PathBuf::from(&home).join(".local/state/localist-top"),
+                    PathBuf::from(&home).join(".local/state/ltop"),
                 ),
             ] {
                 if old.exists() && !new.exists() {

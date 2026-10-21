@@ -3,6 +3,16 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.3] - 2026-10-21
+
+### Changed
+
+- Internal paths renamed for consistency: config `~/.config/ltop/`, state &
+  logs `~/.local/state/ltop/`, eBPF snapshot `/run/ltop/udp.json` (was
+  `localist-top` / `lanmon`). Existing config and monitoring logs migrate
+  automatically on first start; the GitHub v0.1.2 release is superseded by
+  this one.
+
 ## [0.1.2] - 2026-10-21
 
 ### Fixed

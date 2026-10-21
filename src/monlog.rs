@@ -141,12 +141,12 @@ impl MonLog {
 fn log_dir() -> PathBuf {
     if let Ok(x) = std::env::var("XDG_STATE_HOME") {
         if !x.is_empty() {
-            return PathBuf::from(x).join("localist-top");
+            return PathBuf::from(x).join("ltop");
         }
     }
     match std::env::var("HOME") {
-        Ok(h) if !h.is_empty() => PathBuf::from(h).join(".local/state/localist-top"),
-        _ => PathBuf::from("/tmp/localist-top"),
+        Ok(h) if !h.is_empty() => PathBuf::from(h).join(".local/state/ltop"),
+        _ => PathBuf::from("/tmp/ltop"),
     }
 }
 

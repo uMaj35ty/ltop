@@ -13,7 +13,7 @@ fn main() {
 
     let out = PathBuf::from(std::env::var("OUT_DIR").unwrap());
     let inc = out.join("bpf_object.rs");
-    let obj = out.join("lanmon_udp_bpf.o");
+    let obj = out.join("ltop_udp_bpf.o");
     let clang = std::env::var("CLANG").unwrap_or_else(|_| "clang".into());
 
     let ok = Command::new(&clang)
