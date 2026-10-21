@@ -7,6 +7,26 @@ to whom), what the processes are doing (who eats bandwidth and disk), and what
 the LAN looks like — the main program runs without root, and an optional eBPF
 helper adds per-process and per-connection byte accounting.
 
+## Screenshots
+
+Classic layout on Omarchy, with the desktop theme followed:
+
+![Classic layout — six boxes with live LAN neighbours and grouped connections](assets/screenshots/classic-six-boxes.png)
+
+Wide layout with the detail panel (captured command line, per-connection
+breakdown, track / kill / relaunch) and the theme menu:
+
+![Wide layout with detail panel](assets/screenshots/wide-detail-panel.png)
+
+Tall layout — grouped connections with totals and a tracked row highlighted:
+
+![Tall layout with process groups](assets/screenshots/tall-process-groups.png)
+
+Live Omarchy theme following (`--follow-theme`) — the palette re-colors while
+ltop runs as the desktop theme switches:
+
+![Omarchy theme following](assets/screenshots/omarchy-theme-follow.gif)
+
 ## Features
 
 - **Six boxes, one job each**

@@ -19,6 +19,24 @@
 [/] 搜索  [space] 暂停  [q] 退出  [m] 菜单  [Tab] 布局  [1-6] 盒子  [enter] 详情
 ```
 
+## 截图
+
+Omarchy 上的 classic 布局,主题跟随桌面:
+
+![classic 布局——六盒、实时 LAN 邻居与分组连接](../assets/screenshots/classic-six-boxes.png)
+
+wide 布局 + 详情面板(启动命令、每连接分项、追踪/kill/拉起)与主题菜单:
+
+![wide 布局与详情面板](../assets/screenshots/wide-detail-panel.png)
+
+tall 布局——分组连接带合计,追踪行高亮:
+
+![tall 布局与进程分组](../assets/screenshots/tall-process-groups.png)
+
+实时 Omarchy 主题跟随(`--follow-theme`)——ltop 运行中随桌面切主题换装:
+
+![Omarchy 主题跟随](../assets/screenshots/omarchy-theme-follow.gif)
+
 ## 特性
 
 - **六个盒子,各管一摊**
