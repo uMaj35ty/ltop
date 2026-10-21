@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{OnceLock, RwLock};
+use std::sync::{Mutex, OnceLock, RwLock};
+use std::time::SystemTime;
 
 use ratatui::style::{Color, Modifier, Style};
 
@@ -84,6 +85,18 @@ impl Default for Palette {
 /// omarchy 跟随模式标记(init/apply_omarchy 置位,apply_builtin 清除)
 static FOLLOWING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// 跟随模式下已加载的主题文件与加载时的 mtime:poll_omarchy_follow 据此
+/// 发现 omarchy-theme-set 重写了文件并热重载
+static FOLLOWED: Mutex<Option<(PathBuf, SystemTime)>> = Mutex::new(None);
+
+fn record_followed(p: &Path) {
+    if let Ok(mt) = std::fs::metadata(p).and_then(|m| m.modified()) {
+        if let Ok(mut g) = FOLLOWED.lock() {
+            *g = Some((p.to_path_buf(), mt));
+        }
+    }
+}
+
 fn cells() -> &'static (RwLock<Palette>, RwLock<String>) {
     static CELLS: OnceLock<(RwLock<Palette>, RwLock<String>)> = OnceLock::new();
     CELLS.get_or_init(|| (RwLock::new(Palette::default()), RwLock::new("dracula".into())))
@@ -120,6 +133,7 @@ pub fn init() -> String {
     for p in omarchy_candidates() {
         if load_file(&p) {
             set_following(true);
+            record_followed(&p);
             return p.display().to_string();
         }
     }
@@ -171,11 +185,37 @@ pub fn apply_by_name(name: &str) -> bool {
 }
 
 pub fn apply_omarchy() -> bool {
-    let ok = omarchy_candidates().iter().any(|p| load_file(p));
-    if ok {
-        set_following(true);
+    for p in omarchy_candidates() {
+        if load_file(&p) {
+            set_following(true);
+            record_followed(&p);
+            return true;
+        }
     }
-    ok
+    false
+}
+
+/// 每 tick 调用:跟随模式下检查 Omarchy 主题文件是否被重写(如
+/// omarchy-theme-set),变了就热重载并返回 true,下一帧即新主题。
+/// 文件暂时消失(切换中间态)不动主题,下 tick 再看
+pub fn poll_omarchy_follow() -> bool {
+    if !following_omarchy() {
+        return false;
+    }
+    let Some((path, seen)) = FOLLOWED.lock().ok().and_then(|g| g.clone()) else {
+        return false;
+    };
+    match std::fs::metadata(&path).and_then(|m| m.modified()) {
+        Ok(mt) if mt == seen => false,
+        Ok(_) => {
+            let ok = load_file(&path);
+            if ok {
+                record_followed(&path);
+            }
+            ok
+        }
+        Err(_) => false,
+    }
 }
 
 pub fn builtin_count() -> usize {

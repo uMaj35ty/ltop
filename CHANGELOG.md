@@ -3,6 +3,14 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Live Omarchy theme following: while in the `omarchy` follow mode, re-writing
+  the desktop theme (e.g. `omarchy-theme-set`) hot-reloads ltop's palette
+  within one tick — verified on the real desktop across three theme switches.
+
 ## [0.1.1] - 2026-10-21
 
 First public release.
