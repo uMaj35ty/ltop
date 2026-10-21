@@ -41,7 +41,9 @@ helper adds per-process and per-connection byte accounting.
   CONNS bottom edge aligned to the chart split) / wide / tall; boxes toggled
   with `1`–`6` collapse automatically
 - **Themes & language** — 41 embedded btop themes switchable at runtime, or
-  follow the Omarchy desktop theme (choice is persisted); UI in English or Chinese
+  follow the Omarchy desktop theme *live* (switching the desktop theme
+  re-colors a running ltop within a tick; choice is persisted); UI in English
+  or Chinese
 - **Focus & tracking** — `p`/`c`/`l` single-focus procs/conns/lan, arrow-key selection
   that *follows* the process/connection/neighbour across re-sorts, detail panel with
   tracking pin, kill and relaunch; `enter` on a lan row pins the neighbour and

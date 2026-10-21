@@ -165,6 +165,9 @@ fn run(terminal: &mut Tui, log_interval: Option<Duration>, auto_log: bool) -> Re
         }
 
         if last_tick.elapsed() >= app.tick {
+            // omarchy 跟随模式:主题文件被重写(omarchy-theme-set)即热重载,
+            // 下一帧 draw 自然拿到新调色板
+            theme::poll_omarchy_follow();
             app.update();
             last_tick = Instant::now();
         }
@@ -1283,6 +1286,13 @@ mod tests {
     #[test]
     fn arch_guard_passes_on_x86_64() {
         assert!(arch_guard().is_ok());
+    }
+
+    /// 非 omarchy 跟随档(固定内嵌主题)时 poll 必须是 no-op:
+    /// 固定主题就是用户显式选的,不能被外部文件改写
+    #[test]
+    fn poll_is_noop_when_not_following() {
+        assert!(!theme::poll_omarchy_follow());
     }
 
     /// --help 文本必须覆盖全部入口参数与助手提示:改参数先改 usage_text,
