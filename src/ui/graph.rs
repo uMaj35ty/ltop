@@ -9,13 +9,13 @@ use crate::theme::Gradient;
 pub enum GraphMode {
     /// btop's braille area graph (5x5 lookup, two samples per char)
     Solid,
-    /// bars growing out from the vertical center (localist-top extension)
+    /// bars growing out from the vertical center (ltop extension)
     Centered,
-    /// single-dot trace at the value's height (localist-top extension)
+    /// single-dot trace at the value's height (ltop extension)
     Line,
-    /// oscilloscope-style connected trace (localist-top extension)
+    /// oscilloscope-style connected trace (ltop extension)
     Heartbeat,
-    /// line + soft fill below (localist-top extension)
+    /// line + soft fill below (ltop extension)
     Hybrid,
 }
 
@@ -89,7 +89,7 @@ pub fn braille_bar(frac: f64, width: usize, color: Color) -> Span<'static> {
 /// non-zero sample kept at >= 1 dot. Rows are colored along the gradient from
 /// top (end) to bottom (start).
 ///
-/// Centered / Line / Heartbeat are localist-top extensions rendered on a dot grid.
+/// Centered / Line / Heartbeat are ltop extensions rendered on a dot grid.
 pub fn braille_graph(
     data: &[f64],
     width: usize,

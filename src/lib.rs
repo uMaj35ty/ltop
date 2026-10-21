@@ -40,7 +40,7 @@ fn early_exit(args: &[String]) -> Option<Result<()>> {
         return Some(Ok(()));
     }
     if args.iter().any(|a| a == "--version" || a == "-V") {
-        println!("localist-top {}", env!("CARGO_PKG_VERSION"));
+        println!("ltop {}", env!("CARGO_PKG_VERSION"));
         return Some(Ok(()));
     }
     None
@@ -938,7 +938,7 @@ mod tests {
     /// the LRU map, so a broken clang output fails tests instead of at runtime
     #[test]
     fn bpf_object_parses_with_probes_and_map() {
-        let path = std::path::Path::new(env!("OUT_DIR")).join("lanmon_udp_bpf.o");
+        let path = std::path::Path::new(env!("OUT_DIR")).join("ltop_udp_bpf.o");
         let Ok(bytes) = std::fs::read(&path) else {
             eprintln!("skipped: 没有 eBPF 对象(构建机缺 clang)");
             return;

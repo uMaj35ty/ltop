@@ -55,7 +55,7 @@ tall 布局——分组连接带合计,追踪行高亮:
     已退出进程置灰保留,`s` 键一键拉起/重启;支持搜索、追踪置顶、四种排序
 - **eBPF 网络计费(TCP+UDP,可选)** — netlink 对 UDP 不提供每 socket 字节计数、对 TCP
   有短连接采样洞,eBPF 一并补齐:特权助手 `ltop-bpf` 挂 kprobe 到收发系统调用(含 v6),
-  按 pid 与 socket inode 双账本累计,每秒快照到 `/run/lanmon/udp.json`;无特权的 ltop
+  按 pid 与 socket inode 双账本累计,每秒快照到 `/run/ltop/udp.json`;无特权的 ltop
   读快照差分后并入账本。不需要 nightly 工具链(系统 clang 构建期内嵌);没跑助手时
   功能静默缺席,其余不受影响
 - **监控日志与回放** — `L` 键录制每进程账本到 JSONL(默认 60s 粒度,保留期可调),

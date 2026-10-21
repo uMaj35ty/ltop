@@ -2,7 +2,7 @@
 //! `ltop-bpf` companion daemon (kprobes on udp_sendmsg / udp_recvmsg + v6).
 //!
 //! The daemon writes a snapshot of *cumulative* byte counters to
-//! `/run/lanmon/udp.json` once per sampling interval, keyed two ways: by pid
+//! `/run/ltop/udp.json` once per sampling interval, keyed two ways: by pid
 //! (for the PROCS ledger) and by socket INODE (for CONNS — the BPF program
 //! walks sk→socket→file→inode in-kernel via CO-RE, because /proc/net/udp's
 //! pointer column is a per-boot hash on this kernel and cannot be used for
@@ -137,7 +137,7 @@ impl UdpCollector {
             // the daemon has the matching --out flag
             path: std::env::var("LANMON_UDP_SNAPSHOT")
                 .map(PathBuf::from)
-                .unwrap_or_else(|_| PathBuf::from("/run/lanmon/udp.json")),
+                .unwrap_or_else(|_| PathBuf::from("/run/ltop/udp.json")),
             pids_seen: 0,
             sks_seen: 0,
             fresh: false,

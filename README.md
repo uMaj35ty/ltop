@@ -53,7 +53,7 @@ ltop runs as the desktop theme switches:
   counters for UDP, and per-socket TCP sampling loses connections that live for
   less than one sampling tick; a privileged helper `ltop-bpf` attaches kprobes
   to the send/recv syscalls (v4+v6), accumulates bytes per pid and per socket
-  inode, and writes a snapshot to `/run/lanmon/udp.json` every second. The
+  inode, and writes a snapshot to `/run/ltop/udp.json` every second. The
   unprivileged UI diffs the snapshots and merges them into its ledgers. No
   nightly toolchain needed — the eBPF object is built with the system clang at
   compile time. Without the helper the feature is silently absent; everything
