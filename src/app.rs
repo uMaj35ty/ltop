@@ -134,6 +134,29 @@ impl LayoutMode {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn host_name() -> String {
+    std::fs::read_to_string("/proc/sys/kernel/hostname")
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default()
+}
+
+#[cfg(target_os = "macos")]
+fn host_name() -> String {
+    use std::ffi::CStr;
+    let mut buf = [0 as libc::c_char; 256];
+    // SAFETY: buf is a fully-owned 256-byte buffer for the duration of the call
+    if unsafe { libc::gethostname(buf.as_mut_ptr(), buf.len()) } == 0 {
+        // SAFETY: gethostname NUL-terminates within the buffer on success
+        unsafe { CStr::from_ptr(buf.as_ptr()) }
+            .to_string_lossy()
+            .trim_end_matches('.')
+            .to_string()
+    } else {
+        String::new()
+    }
+}
+
 pub struct App {
     pub net: NetCollector,
     pub lan: LanCollector,
@@ -143,6 +166,9 @@ pub struct App {
     /// eBPF UDP deltas via the ltop-bpf daemon snapshot (passive; silent
     /// degrade when the daemon is not running)
     pub udp: UdpCollector,
+    /// mac:nettop 轮询(PROCS net + CONNS 流行;Linux 无)
+    #[cfg(target_os = "macos")]
+    pub nettop: crate::collect::nettop::NettopCollector,
     pub monlog: MonLog,
     pub lang: Lang,
     pub hostname: String,
@@ -193,9 +219,7 @@ pub struct App {
 impl App {
     pub fn new(cli_log_interval: Option<Duration>) -> Self {
         let cfg = Config::load();
-        let hostname = std::fs::read_to_string("/proc/sys/kernel/hostname")
-            .map(|s| s.trim().to_string())
-            .unwrap_or_default();
+        let hostname = host_name();
         let log_interval =
             cli_log_interval.unwrap_or(Duration::from_millis(cfg.log_interval_ms));
         let mut app = Self {
@@ -205,6 +229,8 @@ impl App {
             conn: ConnCollector::new(),
             proc: ProcCollector::new(),
             udp: UdpCollector::new(),
+            #[cfg(target_os = "macos")]
+            nettop: crate::collect::nettop::NettopCollector::new(),
             monlog: MonLog::new(log_interval, cfg.log_retention_days, hostname.clone()),
             lang: cfg.lang,
             hostname,
@@ -297,10 +323,24 @@ impl App {
         self.net.sample();
         self.lan.sample();
         self.disk.sample();
-        self.conn.sample();
-        let udp = self.udp.sample();
-        self.conn.apply_udp(&udp.inodes);
-        self.proc.sample(&udp.net, &udp.udp);
+        #[cfg(target_os = "linux")]
+        {
+            self.conn.sample();
+            let udp = self.udp.sample();
+            self.conn.apply_udp(&udp.inodes);
+            self.proc.sample(&udp.net, &udp.udp);
+        }
+        // mac:一次 nettop 全量喂两盒——流行 → CONNS,进程行差分 → PROCS
+        #[cfg(target_os = "macos")]
+        {
+            self.nettop.sample();
+            let flows = std::mem::take(&mut self.nettop.flows);
+            self.conn.ingest(flows);
+            self.conn.sample();
+            let net = std::mem::take(&mut self.nettop.net);
+            let udp = std::mem::take(&mut self.nettop.udp);
+            self.proc.sample(&net, &udp);
+        }
         for idx in [crate::app::BOX_PROCS, crate::app::BOX_CONNS, crate::app::BOX_LAN] {
             if let Some(id) = self.sel_anchor[idx] {
                 crate::ui::reselect(self, idx, id);

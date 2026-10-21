@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashSet};
 use std::ffi::CStr;
+#[cfg(target_os = "linux")]
 use std::fs;
 use std::net::{Ipv4Addr, UdpSocket};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
@@ -143,40 +144,59 @@ impl LanCollector {
 
     fn read_gateways(&mut self) {
         self.gateways.clear();
-        let Ok(content) = fs::read_to_string("/proc/net/route") else {
-            return;
-        };
-        for line in content.lines().skip(1) {
-            let cols: Vec<&str> = line.split_whitespace().collect();
-            if cols.len() >= 4 && cols[1] == "00000000" {
-                if let Ok(raw) = u32::from_str_radix(cols[2], 16) {
-                    self.gateways.insert(Ipv4Addr::from(u32::from_be(raw)));
+        #[cfg(target_os = "linux")]
+        {
+            let Ok(content) = fs::read_to_string("/proc/net/route") else {
+                return;
+            };
+            for line in content.lines().skip(1) {
+                let cols: Vec<&str> = line.split_whitespace().collect();
+                if cols.len() >= 4 && cols[1] == "00000000" {
+                    if let Ok(raw) = u32::from_str_radix(cols[2], 16) {
+                        self.gateways.insert(Ipv4Addr::from(u32::from_be(raw)));
+                    }
                 }
+            }
+        }
+        // mac:默认路由经 route 子进程(与 net.rs default_route_iface 同源)
+        #[cfg(target_os = "macos")]
+        {
+            if let Some(ip) = parse_route_gateway(&route_default_output()) {
+                self.gateways.insert(ip);
             }
         }
     }
 
     fn read_arp(&mut self, now: Instant) {
-        let Ok(content) = fs::read_to_string("/proc/net/arp") else {
-            return;
-        };
-        for line in content.lines().skip(1) {
-            let cols: Vec<&str> = line.split_whitespace().collect();
-            if cols.len() < 6 {
-                continue;
+        #[cfg(target_os = "linux")]
+        let entries = {
+            let mut entries = Vec::new();
+            if let Ok(content) = fs::read_to_string("/proc/net/arp") {
+                for line in content.lines().skip(1) {
+                    let cols: Vec<&str> = line.split_whitespace().collect();
+                    if cols.len() < 6 {
+                        continue;
+                    }
+                    let Ok(ip) = cols[0].parse::<Ipv4Addr>() else {
+                        continue;
+                    };
+                    let flags = u16::from_str_radix(cols[2].trim_start_matches("0x"), 16).unwrap_or(0);
+                    let complete = flags & 0x2 != 0;
+                    let mac = cols[3].to_lowercase();
+                    let mac = if complete && mac != "00:00:00:00:00:00" {
+                        Some(mac)
+                    } else {
+                        None
+                    };
+                    entries.push((ip, mac, cols[5].to_string()));
+                }
             }
-            let Ok(ip) = cols[0].parse::<Ipv4Addr>() else {
-                continue;
-            };
-            let flags = u16::from_str_radix(cols[2].trim_start_matches("0x"), 16).unwrap_or(0);
-            let complete = flags & 0x2 != 0;
-            let mac = cols[3].to_lowercase();
-            let mac = if complete && mac != "00:00:00:00:00:00" {
-                Some(mac)
-            } else {
-                None
-            };
-            let iface = cols[5].to_string();
+            entries
+        };
+        #[cfg(target_os = "macos")]
+        let entries: Vec<(Ipv4Addr, Option<String>, String)> = parse_arp_an(&arp_an_output());
+        for (ip, mac, iface) in entries {
+            let complete = mac.is_some();
             if iface == "lo" {
                 continue;
             }
@@ -356,6 +376,86 @@ impl Default for LanCollector {
 
 fn host_addrs(net: Ipv4Addr, prefix: u8) -> Vec<Ipv4Addr> {
     host_range(net, prefix).collect()
+}
+
+#[cfg(target_os = "macos")]
+fn route_default_output() -> String {
+    std::process::Command::new("route")
+        .args(["-n", "get", "default"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+        .unwrap_or_default()
+}
+
+/// `   gateway: 192.168.121.1` 行 → 网关地址
+#[cfg_attr(target_os = "linux", allow(dead_code))]
+fn parse_route_gateway(out: &str) -> Option<Ipv4Addr> {
+    for line in out.lines() {
+        if let Some(i) = line.find("gateway:") {
+            return line[i + "gateway:".len()..].trim().parse().ok();
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "macos")]
+fn arp_an_output() -> String {
+    std::process::Command::new("arp")
+        .arg("-an")
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+        .unwrap_or_default()
+}
+
+/// `? (192.168.121.1) at c0:4a:9:30:d3:af on en0 ifscope [ethernet]`
+/// `? (192.168.121.255) at (incomplete) on en0 ...` → (ip, mac, iface)。
+/// mac 的 MAC 段不补零,这里规范成两位(Linux /proc/net/arp 口径);
+/// 组播/广播表项是协议噪声,跳过。
+#[cfg_attr(target_os = "linux", allow(dead_code))]
+fn parse_arp_an(out: &str) -> Vec<(Ipv4Addr, Option<String>, String)> {
+    let mut out_v = Vec::new();
+    for line in out.lines() {
+        let Some(a) = line.find('(') else { continue };
+        let Some(b) = line[a + 1..].find(')') else { continue };
+        let Ok(ip) = line[a + 1..a + 1 + b].parse::<Ipv4Addr>() else {
+            continue;
+        };
+        if ip.is_multicast() || ip.is_broadcast() || ip.octets()[3] == 255 {
+            continue;
+        }
+        let rest = &line[a + 1 + b..];
+        let Some(at) = rest.find(" at ") else { continue };
+        let tail = &rest[at + 4..];
+        let (mac_raw, complete) = if let Some(end) = tail.find(' ') {
+            let tok = &tail[..end];
+            if tok == "(incomplete)" {
+                (None, false)
+            } else {
+                (Some(tok), true)
+            }
+        } else {
+            (Some(tail.trim()), true)
+        };
+        let iface = tail
+            .split(" on ")
+            .nth(1)
+            .and_then(|s| s.split_whitespace().next())
+            .unwrap_or("")
+            .to_string();
+        let mac = mac_raw.and_then(normalize_mac).filter(|_| complete);
+        out_v.push((ip, mac, iface));
+    }
+    out_v
+}
+
+/// mac arp 输出的段不补零(c0:4a:9:30:d3:af)→ 统一两位小写
+#[cfg_attr(target_os = "linux", allow(dead_code))]
+fn normalize_mac(s: &str) -> Option<String> {
+    let mut parts = Vec::new();
+    for p in s.split(':') {
+        parts.push(format!("{:02x}", u8::from_str_radix(p, 16).ok()?));
+    }
+    (parts.len() == 6).then(|| parts.join(":"))
 }
 
 fn host_range(net: Ipv4Addr, prefix: u8) -> impl Iterator<Item = Ipv4Addr> {
@@ -813,5 +913,52 @@ mod tests {
         m.push(0); // num_names = 0
         m.extend_from_slice(&[0u8; 18]);
         assert_eq!(parse_nbns_response(&m), None);
+    }
+
+    #[test]
+    fn parses_route_gateway_line() {
+        let out = "   route to: default\n destination: default\n       mask: 0.0.0.0\n    gateway: 192.168.121.1\n  interface: en0\n";
+        assert_eq!(
+            parse_route_gateway(out),
+            Some("192.168.121.1".parse().unwrap())
+        );
+        assert_eq!(parse_route_gateway("no gateway here"), None);
+        assert_eq!(parse_route_gateway("gateway: not-an-ip"), None);
+    }
+
+    #[test]
+    fn parses_mac_arp_table_like_bsd_output() {
+        // Air 真机原样输出:MAC 段不补零;含 incomplete、广播与组播行
+        let out = "\
+? (192.168.121.1) at c0:4a:9:30:d3:af on en0 ifscope [ethernet]
+? (192.168.121.111) at c0:c7:db:f4:1e:8d on en0 ifscope permanent [ethernet]
+? (192.168.121.148) at a2:b4:34:4f:e4:6b on en0 ifscope [ethernet]
+? (192.168.121.200) at (incomplete) on en0 ifscope [ethernet]
+? (192.168.121.255) at ff:ff:ff:ff:ff:ff on en0 ifscope [ethernet]
+? (224.0.0.251) at 1:0:5e:0:0:fb on en0 ifscope permanent [ethernet]
+";
+        let rows = parse_arp_an(out);
+        let gw = rows.iter().find(|(ip, ..)| *ip == "192.168.121.1".parse::<Ipv4Addr>().unwrap()).unwrap();
+        // MAC 补零规范成 Linux 口径
+        assert_eq!(gw.1.as_deref(), Some("c0:4a:09:30:d3:af"));
+        assert_eq!(gw.2, "en0");
+        assert!(rows
+            .iter()
+            .any(|(ip, mac, _)| *ip == "192.168.121.200".parse::<Ipv4Addr>().unwrap() && mac.is_none()));
+        // 广播/组播行被过滤
+        assert!(rows
+            .iter()
+            .all(|(ip, ..)| !ip.is_multicast() && ip.octets()[3] != 255));
+        assert_eq!(rows.len(), 4);
+    }
+
+    #[test]
+    fn rejects_malformed_arp_lines() {
+        assert!(parse_arp_an("garbage").is_empty());
+        assert!(parse_arp_an("? (not-an-ip) at ab:cd:ef:01:02:03 on en0").is_empty());
+        // MAC 段不是十六进制 → 视为不完整
+        let rows = parse_arp_an("? (10.0.0.9) at zzz on en0");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].1, None);
     }
 }
