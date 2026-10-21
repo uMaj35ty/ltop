@@ -2,6 +2,10 @@
 
 [English](README.md) | [简体中文](docs/README.zh-CN.md)
 
+[![Crates.io](https://img.shields.io/crates/v/ltop)](https://crates.io/crates/localist-top)
+[![docs.rs](https://img.shields.io/docsrs/ltop)](https://docs.rs/localist-top)
+[![CI](https://github.com/uMaj35ty/ltop/actions/workflows/ci.yml/badge.svg)](https://github.com/uMaj35ty/ltop/actions/workflows/ci.yml)
+
 A terminal monitor for a single machine: where network traffic goes (who talks
 to whom), what the processes are doing (who eats bandwidth and disk), and what
 the LAN looks like — the main program runs without root, and an optional eBPF
@@ -96,6 +100,8 @@ Older kernels trim kprobes/BTF in specialty flavours (e.g. Ubuntu's `-kvm`
 cloud kernel): use the `generic` kernel there — not an ltop limitation.
 
 ```bash
+cargo install ltop                   # from crates.io — binaries only, no config
+# or build from source:
 cargo build --release
 ./target/release/ltop                # run — zero config
 sudo cp target/release/ltop-bpf /usr/local/bin/

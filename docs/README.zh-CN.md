@@ -2,6 +2,10 @@
 
 [English](../README.md) | 简体中文
 
+[![Crates.io](https://img.shields.io/crates/v/ltop)](https://crates.io/crates/localist-top)
+[![docs.rs](https://img.shields.io/docsrs/ltop)](https://docs.rs/localist-top)
+[![CI](https://github.com/uMaj35ty/ltop/actions/workflows/ci.yml/badge.svg)](https://github.com/uMaj35ty/ltop/actions/workflows/ci.yml)
+
 一个终端本地网络监控工具,只盯一台机器:
 网络走向(谁在和谁通信)、进程账本(谁在吃流量/磁盘)、局域网拓扑(网上有谁)——
 无需 root 跑主程序,可选的 eBPF 助手补齐每进程/每连接的字节级计费。
@@ -89,6 +93,8 @@ systemd 单元、无助手静默降级)。ltop 日常开发于 Omarchy(Arch),它
 环境请用 `generic` 内核——不是 ltop 的限制。
 
 ```bash
+cargo install ltop                   # 从 crates.io 安装,开箱即用
+# 或源码构建:
 cargo build --release
 ./target/release/ltop                # 直接跑,零配置可用
 sudo cp target/release/ltop-bpf /usr/local/bin/

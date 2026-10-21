@@ -452,7 +452,7 @@ mod tests {
         assert!(start > 0);
         let cmd = read_pid_cmdline(pid).expect("own cmdline");
         assert!(!cmd.is_empty());
-        assert!(cmd[0].contains("localist_top") || cmd[0].contains("dep"));
+        assert!(cmd[0].contains("ltop") || cmd[0].contains("dep"));
     }
 
     /// full lifecycle: a child that does disk I/O enters the ledger while

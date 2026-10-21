@@ -22,6 +22,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   `omarchy-theme-set`) hot-reloads ltop's palette within one tick — verified
   on the real desktop across three theme switches.
 
+### Changed
+
+- The crates.io crate is **`ltop`** (`cargo install ltop`). A one-off
+  `localist-top` crate with the same 0.1.2 source was published briefly and is
+  yanked; on-disk config/log paths are unchanged.
+
 ## [0.1.1] - 2026-10-21
 
 First public release.
