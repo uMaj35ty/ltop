@@ -11,6 +11,14 @@ to whom), what the processes are doing (who eats bandwidth and disk), and what
 the LAN looks like — the main program runs without root, and an optional eBPF
 helper adds per-process and per-connection byte accounting.
 
+## Quick install
+
+```bash
+cargo install ltop
+```
+
+AUR: `ltop-bin` — coming as soon as the AUR reopens registration (package is ready).
+
 ## Screenshots
 
 Classic layout on Omarchy, with the desktop theme followed:
@@ -73,7 +81,7 @@ ltop runs as the desktop theme switches:
   tracking pin, kill and relaunch; `enter` on a lan row pins the neighbour and
   filters CONNS to that peer
 
-## Requirements & Quick start
+## Requirements & Building from source
 
 Rust stable and Linux, **x86_64 only** — the eBPF probes' register mappings and
 the platform data sources are written for x86_64, and binaries refuse to start
