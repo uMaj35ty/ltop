@@ -387,10 +387,18 @@ fn split_horizontal(w: u16, need: u16, graph_min: u16) -> (u16, u16) {
 }
 
 /// Vertical split for wide/tall (graphs_h, tables_h). Lists get their ideal
-/// height first; the graphs absorb every spare row and only give way down to
+/// height first; the graphs absorb the surplus but are capped at half the
+/// height — on full-screen terminals the surplus flows back to the lists
+/// instead of letting the two charts balloon to 4/5 of the screen. Only when
+/// the lists themselves shrink below ideal do graphs give way down to
 /// `graph_min`, after which the lists start scrolling.
 fn split_vertical(h: u16, graph_min: u16, tables_ideal: u16) -> (u16, u16) {
-    let tables = tables_ideal.clamp(3, h.saturating_sub(graph_min).max(3));
+    let graph_cap = h / 2;
+    let tables = if h.saturating_sub(tables_ideal) > graph_cap {
+        h - graph_cap
+    } else {
+        tables_ideal.clamp(3, h.saturating_sub(graph_min).max(3))
+    };
     (h.saturating_sub(tables), tables)
 }
 
@@ -3572,10 +3580,49 @@ mod tests {
         assert_eq!(split_horizontal(100, 76, 40), (40, 60)); // graphs at their floor
         assert_eq!(split_horizontal(60, 76, 40), (30, 30)); // both cramped, split evenly
         // wide/tall: lists take their ideal height, graphs absorb the surplus
-        assert_eq!(split_vertical(100, 4, 30), (70, 30));
+        // but are capped at half the height — full-screen surplus goes to lists
+        assert_eq!(split_vertical(100, 4, 30), (50, 50));
+        assert_eq!(split_vertical(40, 4, 30), (10, 30));
         // when short, graphs hit graph_min before the lists shrink
         assert_eq!(split_vertical(20, 8, 30), (8, 12));
         assert_eq!(split_vertical(12, 8, 30), (8, 4));
+    }
+
+    /// 全高回归(用户实机截图发现):wide/tall 下两个图表曾吃到 4/5 屏高。
+    /// 复现场景 = 列表内容少(ideal 小)时余量全被图表吞掉。渲染级钉住:
+    /// 只留 PROCS 一个列表盒,tall 全高时 ⁶procs 标题必须起自下半屏
+    #[test]
+    fn tall_layout_caps_graphs_at_half_height() {
+        use ratatui::backend::TestBackend;
+        use ratatui::Terminal;
+
+        let mut app = crate::app::App::new(None);
+        app.layout = crate::app::LayoutMode::Tall;
+        for i in [BOX_LAN, BOX_CONNS, BOX_DISKS] {
+            app.visible[i] = false;
+        }
+        app.update();
+        let mut term = Terminal::new(TestBackend::new(200, 60)).unwrap();
+        term.draw(|f| crate::ui::draw(f, &app)).unwrap();
+        let buf = term.backend().buffer();
+        let rows: Vec<String> = (0..buf.area().height)
+            .map(|y| {
+                (0..buf.area().width)
+                    .map(|x| buf[(x, y)].symbol().to_string())
+                    .collect()
+            })
+            .collect();
+        let title_row = |tag: &str| {
+            rows.iter()
+                .position(|r| r.contains(tag))
+                .unwrap_or_else(|| panic!("找不到标题 {tag}"))
+        };
+        let y_net = title_row("\u{b9}net"); // ¹net 图表区顶
+        let y_procs = title_row("\u{2076}procs"); // ⁶procs 表格区起
+        assert!(
+            y_procs - y_net <= 32,
+            "图表区应 ≤ 半屏:net@{y_net} procs@{y_procs}(总高 60)"
+        );
     }
 
     #[test]

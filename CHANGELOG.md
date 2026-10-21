@@ -5,6 +5,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Fixed
+
+- wide/tall layouts: the two charts could balloon to 4/5 of the screen height
+  on tall terminals when the lists had little content; the graph area is now
+  capped at half the screen and surplus rows flow to the lists.
+
 ### Added
 
 - Live Omarchy theme following: while in the `omarchy` follow mode, re-writing
