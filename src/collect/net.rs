@@ -217,7 +217,7 @@ fn sample_entries() -> std::io::Result<(Vec<DevCounters>, BTreeMap<String, Iface
                 counted.push(name.clone());
                 let d = &*(ifa.ifa_data as *const libc::if_data64);
                 counters.push((name.clone(), d.ifi_ibytes, d.ifi_obytes, d.ifi_iqdrops as u64, 0));
-                entry.operstate = if ifa.ifa_flags & (libc::IFF_UP as i32) != 0 {
+                entry.operstate = if ifa.ifa_flags & (libc::IFF_UP as u32) != 0 {
                     "up".into()
                 } else {
                     "down".into()
