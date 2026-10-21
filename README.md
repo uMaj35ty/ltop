@@ -57,6 +57,24 @@ elsewhere (arm64 is a separate milestone). The eBPF accounting additionally
 needs a clang with the `bpf` target (Arch's `clang` works) and root to deploy
 the helper.
 
+### Tested environments
+
+Release tarballs verified per distribution in QEMU/KVM (open-box binaries,
+eBPF probe attach incl. kprobe, systemd unit, silent degrade without the
+helper). ltop is developed daily on Omarchy (Arch), which doubles as the
+reference desktop environment.
+
+| Environment | Kernel | eBPF accounting | Notes |
+|---|---|---|---|
+| Arch Linux (rolling) | 7.2.7 | ✓ full | also the dev machine (Omarchy desktop) |
+| Ubuntu 24.04 LTS | 6.8 | ✓ full | glibc 2.39 |
+| Ubuntu 22.04 LTS | 5.15 | ✓ full | works **without BTF**; glibc 2.35 is the binary baseline |
+| Debian 13 | 6.12 | ✓ full | glibc 2.41 |
+| Fedora 44 (Workstation live) | — | under test | SELinux enforcing environment |
+
+Older kernels trim kprobes/BTF in specialty flavours (e.g. Ubuntu's `-kvm`
+cloud kernel): use the `generic` kernel there — not an ltop limitation.
+
 ```bash
 cargo build --release
 ./target/release/ltop                # run — zero config
