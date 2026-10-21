@@ -79,9 +79,9 @@ tall 布局——分组连接带合计,追踪行高亮:
 
 ## 要求与源码构建
 
-要求:Rust stable、Linux,**仅支持 x86_64**——eBPF 探针寄存器映射与各数据源按
-x86_64 编写,其他架构启动时明确报错(arm64 为独立里程碑);eBPF 计费另需带
-bpf target 的 clang(Arch 的 `clang` 即可)与 root 权限部署助手。
+要求:Rust stable、Linux,**x86_64 / aarch64**——eBPF 探针内置两套 pt_regs
+寄存器映射,其他架构启动时明确报错;eBPF 计费另需带 bpf target 的
+clang(Arch 的 `clang` 即可)与 root 权限部署助手。
 
 ### 已测试环境
 
@@ -94,6 +94,7 @@ systemd 单元、无助手静默降级)。ltop 日常开发于 Omarchy(Arch),它
 | Arch Linux (rolling) | 7.2.7 | ✓ 完整 | 亦为开发机(Omarchy 桌面) |
 | Ubuntu 24.04 LTS | 6.8 | ✓ 完整 | glibc 2.39 |
 | Ubuntu 22.04 LTS | 5.15 | ✓ 完整 | **无 BTF 也可用**;glibc 2.35 为二进制基线 |
+| Ubuntu 24.04 LTS(aarch64) | 6.8 | ✓ 完整 | QEMU aarch64 仿真;树莓派级硬件预期一致 |
 | Debian 13 | 6.12 | ✓ 完整 | glibc 2.41 |
 | Fedora 44(Workstation live) | 6.19 | ✓ 完整 | SELinux enforcing:零拒绝 |
 

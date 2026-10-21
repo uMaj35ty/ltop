@@ -83,11 +83,10 @@ ltop runs as the desktop theme switches:
 
 ## Requirements & Building from source
 
-Rust stable and Linux, **x86_64 only** — the eBPF probes' register mappings and
-the platform data sources are written for x86_64, and binaries refuse to start
-elsewhere (arm64 is a separate milestone). The eBPF accounting additionally
-needs a clang with the `bpf` target (Arch's `clang` works) and root to deploy
-the helper.
+Rust stable and Linux, **x86_64 / aarch64** — the eBPF probes carry per-arch
+pt_regs register mappings for both, and binaries refuse to start elsewhere.
+The eBPF accounting additionally needs a clang with the `bpf` target (Arch's
+`clang` works) and root to deploy the helper.
 
 ### Tested environments
 
@@ -101,6 +100,7 @@ reference desktop environment.
 | Arch Linux (rolling) | 7.2.7 | ✓ full | also the dev machine (Omarchy desktop) |
 | Ubuntu 24.04 LTS | 6.8 | ✓ full | glibc 2.39 |
 | Ubuntu 22.04 LTS | 5.15 | ✓ full | works **without BTF**; glibc 2.35 is the binary baseline |
+| Ubuntu 24.04 LTS (aarch64) | 6.8 | ✓ full | QEMU aarch64 emulation; Raspberry-Pi-class hardware expected to match |
 | Debian 13 | 6.12 | ✓ full | glibc 2.41 |
 | Fedora 44 (Workstation live) | 6.19 | ✓ full | SELinux enforcing: zero denials |
 
