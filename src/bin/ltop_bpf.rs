@@ -61,9 +61,9 @@ fn main() {
 
 fn run() -> Result<()> {
     // 探针 C 代码的 PT_REGS 寄存器映射按 x86_64 编写,其他架构直接拒绝
-    if std::env::consts::ARCH != "x86_64" {
+    if !matches!(std::env::consts::ARCH, "x86_64" | "aarch64") {
         anyhow::bail!(
-            "ltop-bpf supports x86_64 Linux only (running on {})",
+            "ltop-bpf supports x86_64/aarch64 Linux only (running on {})",
             std::env::consts::ARCH
         );
     }
