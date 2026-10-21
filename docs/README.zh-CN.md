@@ -53,6 +53,23 @@
 x86_64 编写,其他架构启动时明确报错(arm64 为独立里程碑);eBPF 计费另需带
 bpf target 的 clang(Arch 的 `clang` 即可)与 root 权限部署助手。
 
+### 已测试环境
+
+发布压缩包逐发行版在 QEMU/KVM 实测(开箱二进制、eBPF 探针挂载含 kprobe、
+systemd 单元、无助手静默降级)。ltop 日常开发于 Omarchy(Arch),它同时是
+参照桌面环境。
+
+| 环境 | 内核 | eBPF 计费 | 备注 |
+|---|---|---|---|
+| Arch Linux (rolling) | 7.2.7 | ✓ 完整 | 亦为开发机(Omarchy 桌面) |
+| Ubuntu 24.04 LTS | 6.8 | ✓ 完整 | glibc 2.39 |
+| Ubuntu 22.04 LTS | 5.15 | ✓ 完整 | **无 BTF 也可用**;glibc 2.35 为二进制基线 |
+| Debian 13 | 6.12 | ✓ 完整 | glibc 2.41 |
+| Fedora 44(Workstation live) | — | 测试中 | SELinux enforcing 环境 |
+
+更老的内核在特化变体里裁剪 kprobe/BTF(如 Ubuntu 的 `-kvm` 云内核):那种
+环境请用 `generic` 内核——不是 ltop 的限制。
+
 ```bash
 cargo build --release
 ./target/release/ltop                # 直接跑,零配置可用
