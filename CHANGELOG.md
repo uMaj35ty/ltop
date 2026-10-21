@@ -3,13 +3,16 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.2] - 2026-10-21
 
 ### Fixed
 
 - wide/tall layouts: the two charts could balloon to 4/5 of the screen height
   on tall terminals when the lists had little content; the graph area is now
   capped at half the screen and surplus rows flow to the lists.
+- Release binaries are now built on a glibc 2.35 baseline (ubuntu:22.04) —
+  the 0.1.1 binaries required GLIBC_2.39 and failed on older distributions.
+- `ltop --dump | head` no longer panics on pipe close (SIGPIPE restored).
 
 ### Added
 
@@ -39,4 +42,5 @@ First public release.
 - x86_64 Linux only; a launch check aborts with a clear message on other architectures.
 - Data scopes differ by design (PROCS = payload via eBPF; NET box = NIC bytes incl. headers/retransmits) — see the in-app help panel and README "Data scopes".
 
+[0.1.2]: https://github.com/uMaj35ty/ltop/releases/tag/v0.1.2
 [0.1.1]: https://github.com/uMaj35ty/ltop/releases/tag/v0.1.1

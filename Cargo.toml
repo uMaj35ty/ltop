@@ -1,6 +1,6 @@
 [package]
 name = "localist-top"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "btop-styled TUI monitoring only local network, LAN neighbours and disk I/O"
 license = "MIT"

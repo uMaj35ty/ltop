@@ -10,11 +10,19 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # glibc 基线:22.04(2.35)。实测 0.1.1 在 ubuntu-24.04(glibc 2.39)上
+    # 构建的二进制于 22.04 因 GLIBC_2.39 weak 缺失不可用——基线取矩阵最老 glibc
+    container:
+      image: ubuntu:22.04
     steps:
       - uses: actions/checkout@v4
-      # eBPF 对象在 build.rs 里由系统 clang 编译(-target bpf)
-      - name: Install clang
-        run: sudo apt-get update && sudo apt-get install -y clang
+      # eBPF 对象在 build.rs 里由 clang(-target bpf)编译;22.04 的 clang 带 bpf 后端
+      - name: Install toolchain
+        run: |
+          apt-get update -q
+          DEBIAN_FRONTEND=noninteractive apt-get install -y clang curl git gh
+          curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
       - name: Build
         run: cargo build --release
       # 开箱别名:loli → ltop 软链进压缩包,-h 按调用名显示
