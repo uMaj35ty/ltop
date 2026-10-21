@@ -48,12 +48,8 @@ impl NetCollector {
 
     pub fn sample(&mut self) {
         let now = Instant::now();
-        let entries = parse_proc_net_dev().unwrap_or_default();
+        let (entries, mut infos) = sample_entries().unwrap_or_default();
 
-        let mut infos = BTreeMap::new();
-        for (name, ..) in &entries {
-            infos.insert(name.clone(), read_iface_info(name));
-        }
         if let Ok(list) = get_if_addrs() {
             for ifa in list {
                 let s = match ifa.addr {
@@ -180,6 +176,78 @@ fn push_hist(dq: &mut VecDeque<f64>, v: f64) {
     }
 }
 
+/// (counters, per-iface info) — 平台分派
+#[cfg(target_os = "linux")]
+fn sample_entries() -> std::io::Result<(Vec<DevCounters>, BTreeMap<String, IfaceInfo>)> {
+    let entries = parse_proc_net_dev()?;
+    let mut infos = BTreeMap::new();
+    for (name, ..) in &entries {
+        infos.insert(name.clone(), read_iface_info(name));
+    }
+    Ok((entries, infos))
+}
+
+/// mac:单次 getifaddrs 同时取计数器(if_data64)与链路层信息(AF_LINK)
+#[cfg(target_os = "macos")]
+fn sample_entries() -> std::io::Result<(Vec<DevCounters>, BTreeMap<String, IfaceInfo>)> {
+    use std::ffi::CStr;
+
+    unsafe {
+        let mut ifap: *mut libc::ifaddrs = std::ptr::null_mut();
+        if libc::getifaddrs(&mut ifap) != 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        let mut counters: Vec<DevCounters> = Vec::new();
+        let mut infos: BTreeMap<String, IfaceInfo> = BTreeMap::new();
+        let mut counted: Vec<String> = Vec::new();
+        let mut p = ifap;
+        while !p.is_null() {
+            let ifa = &*p;
+            let name = CStr::from_ptr(ifa.ifa_name).to_string_lossy().into_owned();
+            let entry = infos.entry(name.clone()).or_insert_with(|| IfaceInfo {
+                operstate: "unknown".into(),
+                speed_mbps: None,
+                duplex: None,
+                mtu: None,
+                mac: String::new(),
+                addrs: Vec::new(),
+            });
+            // 每个网卡的第一条 ifa_data 记录 = if_data64 计数器
+            if !ifa.ifa_data.is_null() && !counted.contains(&name) {
+                counted.push(name.clone());
+                let d = &*(ifa.ifa_data as *const libc::if_data64);
+                counters.push((name.clone(), d.ifi_ibytes, d.ifi_obytes, d.ifi_iqdrops as u64, 0));
+                entry.operstate = if ifa.ifa_flags & (libc::IFF_UP as i32) != 0 {
+                    "up".into()
+                } else {
+                    "down".into()
+                };
+                entry.mtu = Some(d.ifi_mtu as u64);
+            }
+            // AF_LINK 记录 = MAC 地址
+            if let Some(dl) = ifa.ifa_addr.cast::<libc::sockaddr_dl>().as_ref() {
+                if dl.sdl_family as i32 == libc::AF_LINK && entry.mac.is_empty() {
+                    let nlen = dl.sdl_nlen as usize;
+                    let alen = dl.sdl_alen as usize;
+                    let start = nlen.min(dl.sdl_data.len());
+                    let end = (start + alen).min(dl.sdl_data.len());
+                    entry.mac = dl.sdl_data[start..end]
+                        .iter()
+                        .map(|b| format!("{:02x}", *b as u8))
+                        .collect::<Vec<_>>()
+                        .join(":");
+                }
+            }
+            p = ifa.ifa_next;
+        }
+        libc::freeifaddrs(ifap);
+        for info in infos.values_mut() {
+            info.addrs.sort();
+        }
+        Ok((counters, infos))
+    }
+}
+
 fn read_iface_info(name: &str) -> IfaceInfo {
     let sys = |attr: &str| {
         fs::read_to_string(format!("/sys/class/net/{name}/{attr}"))
@@ -218,12 +286,28 @@ fn parse_proc_net_dev() -> std::io::Result<Vec<DevCounters>> {
     Ok(out)
 }
 
+#[cfg(target_os = "linux")]
 pub fn default_route_iface() -> Option<String> {
     let content = fs::read_to_string("/proc/net/route").ok()?;
     for line in content.lines().skip(1) {
         let cols: Vec<&str> = line.split_whitespace().collect();
         if cols.len() >= 8 && cols[1] == "00000000" {
             return Some(cols[0].to_string());
+        }
+    }
+    None
+}
+
+/// mac:默认路由接口(每秒一次 route 子进程,与 iostat/nettop 同模式)
+#[cfg(target_os = "macos")]
+pub fn default_route_iface() -> Option<String> {
+    let out = std::process::Command::new("route")
+        .args(["-n", "get", "default"])
+        .output()
+        .ok()?;
+    for line in String::from_utf8_lossy(&out.stdout).lines() {
+        if let Some(i) = line.find("interface:") {
+            return Some(line[i + "interface:".len()..].trim().to_string());
         }
     }
     None
