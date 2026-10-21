@@ -81,11 +81,48 @@ impl DiskCollector {
         #[cfg(target_os = "linux")]
         let dm = dm_name_map();
         #[cfg(target_os = "macos")]
-        let dm: HashMap<String, String> = HashMap::new();
+        let _dm: HashMap<String, String> = HashMap::new();
         let mounts = parse_mountinfo();
 
         // group mounts by resolved backing device
         let mut agg: HashMap<String, DiskDev> = HashMap::new();
+        #[cfg(target_os = "macos")]
+        {
+            // APFS 的挂载点在合成卷上(disk3sX,IOKit 统计恒 0),真实 I/O
+            // 计数在物理叶子(disk0s*)——反向 join:设备 = 全部带计数的
+            // 叶子(速率图的数据面),挂载只作行标注,容量仅挂载行有
+            for name in stats.keys() {
+                agg.insert(name.clone(), DiskDev { name: name.clone(), ..Default::default() });
+            }
+            for (_, mount, source, fstype) in mounts {
+                let base = source.rsplit('/').next().unwrap_or("").to_string();
+                match agg.get_mut(&base) {
+                    Some(dev) => {
+                        dev.mounts.push(mount.clone());
+                        dev.fstype = fstype;
+                        if let Some((total, used)) = fs_usage(&mount) {
+                            dev.total = total;
+                            dev.used = used;
+                        }
+                    }
+                    None => {
+                        // 挂载但无计数(网络卷等):容量行,速率恒 0
+                        let mut dev = DiskDev {
+                            name: base.clone(),
+                            fstype,
+                            ..Default::default()
+                        };
+                        if let Some((total, used)) = fs_usage(&mount) {
+                            dev.total = total;
+                            dev.used = used;
+                        }
+                        dev.mounts.push(mount);
+                        agg.insert(base, dev);
+                    }
+                }
+            }
+        }
+        #[cfg(target_os = "linux")]
         for (majmin, mount, source, fstype) in mounts {
             let Some((total, used)) = fs_usage(&mount) else {
                 continue;

@@ -1227,6 +1227,15 @@ fn draw_lan(f: &mut Frame, area: Rect, app: &App, focused: bool) {
     // 滚动窗口:一页 = 表头之下的全部行(inner 已不含边框,只减表头 1 行;
     // 旧写法 -2 把表头算两次,6 行高的盒子只渲染出 2 台设备)
     let visible = inner.height.saturating_sub(1) as usize;
+    if list.is_empty() && app.lan.arp_blocked {
+        let tip = if app.lang == Lang::Zh {
+            "macOS 隐私限制:系统设置 → 隐私与安全性 → 本地网络 → 允许本终端"
+        } else {
+            "macOS privacy: allow this terminal under System Settings → Privacy & Security → Local Network"
+        };
+        f.render_widget(Paragraph::new(vec![Line::from(vec![Span::styled(tip, dim())])]), inner);
+        return;
+    }
     let rows: Vec<Row> = list
         .iter()
         .enumerate()
