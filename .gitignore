@@ -1,0 +1,18 @@
+# 构建产物
+/target
+/dist
+
+# 发布打包本地产物
+*.tar.gz
+SHA256SUMS
+
+# Rust 工具备份
+*.rs.bk
+*.orig
+
+# GSD/AI 工作流内部规划(本地保留,不随仓库分发)
+/.planning/
+
+# 编辑器与系统
+*.swp
+.DS_Store
