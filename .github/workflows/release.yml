@@ -36,6 +36,7 @@ jobs:
       - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           # 幂等:重推已有 tag 时不炸,资产 --clobber 覆盖
           if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
