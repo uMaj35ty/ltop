@@ -83,10 +83,10 @@ ltop runs as the desktop theme switches:
 
 ## Requirements & Building from source
 
-Rust stable and Linux, **x86_64 / aarch64** — the eBPF probes carry per-arch
-pt_regs register mappings for both, and binaries refuse to start elsewhere.
-The eBPF accounting additionally needs a clang with the `bpf` target (Arch's
-`clang` works) and root to deploy the helper.
+Rust stable, and Linux or macOS on **x86_64 / aarch64**. The eBPF
+accounting is Linux-only: its probes carry per-arch pt_regs register
+mappings for both architectures, need a clang with the `bpf` target
+(Arch's `clang` works) and root to deploy the helper.
 
 ### Tested environments
 
@@ -103,9 +103,23 @@ reference desktop environment.
 | Ubuntu 24.04 LTS (aarch64) | 6.8 | ✓ full | QEMU aarch64 emulation; Raspberry-Pi-class hardware expected to match |
 | Debian 13 | 6.12 | ✓ full | glibc 2.41 |
 | Fedora 44 (Workstation live) | 6.19 | ✓ full | SELinux enforcing: zero denials |
+| macOS 27 (Apple Silicon, MacBook Air) | darwin 27 | n/a (`nettop` path) | verified on hardware; see the macOS notes |
 
 Older kernels trim kprobes/BTF in specialty flavours (e.g. Ubuntu's `-kvm`
 cloud kernel): use the `generic` kernel there — not an ltop limitation.
+
+### macOS notes
+
+macOS has no eBPF; the boxes read Apple-native sources instead — PROCS and
+CONNS poll `nettop` (per-process rows and per-socket flows, TCP and UDP in
+one spawn), CONNS attribution scans the caller's own sockets via libproc
+(other users' connections show as `n/a`), DISK reads IOKit IOMedia
+statistics plus per-process rusage, LAN parses `arp -an` and the default
+route. `ltop-bpf` does not exist on macOS. Counters are cumulative per
+live socket: a transfer that completes within one sampling tick is not
+counted (a documented difference from the Linux eBPF path). Bare-terminal
+framebuffer fonts may miss braille glyphs; rendering over SSH or in a
+proper terminal emulator shows them all.
 
 ```bash
 cargo install ltop                   # from crates.io — binaries only, no config
@@ -205,11 +219,14 @@ their last state; the tombstone TTL is configurable in settings).
   which differs from PROCS session totals by design
 - After an `ltop-bpf` restart the eBPF counters start from zero (the UI
   re-baselines automatically via snapshot instance IDs)
+- On macOS the counters cover live sockets only: traffic of a connection
+  that closes within one sampling tick is missed (nettop semantics), and
+  ltop-bpf is not part of the macOS build
 
 ## Development
 
 ```bash
-cargo test        # 93 tests: unit, rendered-frame (TestBackend), live netlink+snapshot integration
+cargo test        # 108 tests: unit, rendered-frame (TestBackend), live netlink+snapshot integration
 cargo clippy      # zero warnings
 ```
 

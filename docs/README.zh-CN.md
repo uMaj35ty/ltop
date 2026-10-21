@@ -79,9 +79,9 @@ tall 布局——分组连接带合计,追踪行高亮:
 
 ## 要求与源码构建
 
-要求:Rust stable、Linux,**x86_64 / aarch64**——eBPF 探针内置两套 pt_regs
-寄存器映射,其他架构启动时明确报错;eBPF 计费另需带 bpf target 的
-clang(Arch 的 `clang` 即可)与 root 权限部署助手。
+要求:Rust stable,Linux 或 macOS,**x86_64 / aarch64**。eBPF 计费仅限
+Linux:探针内置两套 pt_regs 寄存器映射,另需带 bpf target 的 clang
+(Arch 的 `clang` 即可)与 root 权限部署助手。
 
 ### 已测试环境
 
@@ -97,9 +97,20 @@ systemd 单元、无助手静默降级)。ltop 日常开发于 Omarchy(Arch),它
 | Ubuntu 24.04 LTS(aarch64) | 6.8 | ✓ 完整 | QEMU aarch64 仿真;树莓派级硬件预期一致 |
 | Debian 13 | 6.12 | ✓ 完整 | glibc 2.41 |
 | Fedora 44(Workstation live) | 6.19 | ✓ 完整 | SELinux enforcing:零拒绝 |
+| macOS 27(Apple Silicon,MacBook Air) | darwin 27 | 不适用(nettop 路径) | 真机验证;见 macOS 说明 |
 
 更老的内核在特化变体里裁剪 kprobe/BTF(如 Ubuntu 的 `-kvm` 云内核):那种
 环境请用 `generic` 内核——不是 ltop 的限制。
+
+### macOS 说明
+
+macOS 无 eBPF,各盒改读 Apple 原生数据源——PROCS 与 CONNS 轮询 `nettop`
+(进程行 + 每 socket 流行,TCP/UDP 一次覆盖),CONNS 归属经 libproc 扫描
+本用户 socket(他人进程显示 n/a),DISK 读 IOKit IOMedia 统计 + 每进程
+rusage,LAN 解析 `arp -an` 与默认路由。macOS 构建不含 `ltop-bpf`。计数按
+活 socket 累计:一个采样周期内完成的传输不计入(与 Linux eBPF 路径的既知
+差异)。裸终端的 framebuffer 字形可能缺盲文点阵;经 SSH 或在正式终端仿真器
+里渲染完整。
 
 ```bash
 cargo install ltop                   # 从 crates.io 安装,开箱即用
@@ -186,11 +197,13 @@ python3 scripts/snap-diff.py       # 连续采样快照,输出每 pid 原始增�
 - WiFi 网卡内核不提供 `speed`,显示为空
 - CONNS 的 TCP Σ 含建连以来全部历史(内核语义),与 PROCS 会话累计口径不同
 - ltop-bpf 重启后 eBPF 计数从头累计(ltop 依实例 ID 自动重基线,无需干预)
+- macOS 上计数只覆盖活 socket:一个采样周期内关闭的连接不计入(nettop 语义),
+  且 macOS 构建不含 ltop-bpf
 
 ## 开发
 
 ```bash
-cargo test        # 93 项:单元/渲染(TestBackend)/真机合流(netlink+快照)
+cargo test        # 108 项:单元/渲染(TestBackend)/真机合流(netlink+快照)
 cargo clippy      # 全仓零警告
 ```
 
