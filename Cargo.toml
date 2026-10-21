@@ -1,0 +1,33 @@
+[package]
+name = "localist-top"
+version = "0.1.1"
+edition = "2021"
+description = "btop-styled TUI monitoring only local network, LAN neighbours and disk I/O"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/uMaj35ty/ltop"
+default-run = "ltop"
+autobins = false
+
+[[bin]]
+name = "ltop"
+path = "src/bin/ltop.rs"
+
+[[bin]]
+name = "ltop-bpf"
+path = "src/bin/ltop_bpf.rs"
+
+[dependencies]
+anyhow = "1"
+aya = "0.14.0"
+crossterm = "0.28"
+if-addrs = "0.13"
+libc = "0.2"
+ratatui = "0.29"
+
+[dev-dependencies]
+aya-obj = "0.3"
+
+[profile.release]
+lto = true
+strip = true

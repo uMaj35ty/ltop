@@ -1,0 +1,15 @@
+[Unit]
+Description=localist top eBPF UDP per-process collector
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/ltop-bpf
+Restart=on-failure
+RestartSec=5
+# a SIGTERM (systemctl stop, scripts) is a clean exit, not a failure to restart on
+SuccessExitStatus=143
+# kprobe attach and map creation need privileges; running as root is the
+# simplest reliable option (CAP_BPF+CAP_PERFMON file caps also work)
+[Install]
+WantedBy=multi-user.target

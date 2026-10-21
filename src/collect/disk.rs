@@ -1,0 +1,421 @@
+use std::collections::{HashMap, VecDeque};
+use std::ffi::CString;
+use std::fs;
+use std::time::Instant;
+
+const HIST_CAP: usize = 900;
+const SECTOR: f64 = 512.0;
+
+/// Filesystems that are virtual, read-only images, or may block statvfs on stalls
+const FS_BLACKLIST: &[&str] = &[
+    "proc", "sysfs", "devtmpfs", "devpts", "securityfs", "cgroup", "cgroup2", "pstore", "bpf",
+    "autofs", "mqueue", "hugetlbfs", "debugfs", "tracefs", "configfs", "fusectl", "efivarfs",
+    "ramfs", "nsfs", "rpc_pipefs", "overlay", "squashfs", "iso9660", "tmpfs", "nfs", "nfs4",
+    "cifs", "smbfs", "9p", "afs",
+];
+
+/// Virtual/ephemeral block devices kept out of the device tree
+const SKIP_BLOCK_PREFIXES: &[&str] = &["loop", "ram", "zram", "sr", "fd", "nbd", "md"];
+
+#[derive(Clone, Default)]
+pub struct DiskDev {
+    /// kernel device name (stats key): dm-0, sdb1, nvme0n1p1
+    pub name: String,
+    /// /dev/mapper friendly name, e.g. "root" for dm-0
+    pub pretty: Option<String>,
+    pub fstype: String,
+    /// all mountpoints backed by this device (btrfs subvols collapse here)
+    pub mounts: Vec<String>,
+    pub total: u64,
+    pub used: u64,
+    pub rate_r: f64,
+    pub rate_w: f64,
+    pub iops: f64,
+}
+
+#[derive(Clone)]
+pub struct TreeNode {
+    pub name: String,
+    pub pretty: Option<String>,
+    pub size: Option<u64>,
+    pub children: Vec<TreeNode>,
+}
+
+pub struct DiskCollector {
+    prev: HashMap<String, Prev>,
+    /// one entry per backing device (deduped across btrfs subvol mounts)
+    pub devices: Vec<DiskDev>,
+    /// block device hierarchy from /sys/block
+    pub tree: Vec<TreeNode>,
+    pub hist_r: VecDeque<f64>,
+    pub hist_w: VecDeque<f64>,
+    last_t: Instant,
+    /// session cumulative bytes (independently resettable)
+    session_r: f64,
+    session_w: f64,
+}
+
+impl DiskCollector {
+    pub fn new() -> Self {
+        Self {
+            prev: HashMap::new(),
+            devices: Vec::new(),
+            tree: Vec::new(),
+            hist_r: VecDeque::new(),
+            hist_w: VecDeque::new(),
+            last_t: Instant::now(),
+            session_r: 0.0,
+            session_w: 0.0,
+        }
+    }
+
+    pub fn sample(&mut self) {
+        let now = Instant::now();
+        let stats = parse_diskstats();
+        let dm = dm_name_map();
+        let mounts = parse_mountinfo();
+
+        // group mounts by resolved backing device
+        let mut agg: HashMap<String, DiskDev> = HashMap::new();
+        for (majmin, mount, source, fstype) in mounts {
+            let Some((total, used)) = fs_usage(&mount) else {
+                continue;
+            };
+            let base = source.rsplit('/').next().unwrap_or("").to_string();
+            let dm_key = dm.get(&base).cloned();
+            // prefer kernel name, then mapper alias, then major:minor —
+            // the name is what device-tree nodes are keyed by
+            let mut key: Option<String> = None;
+            for c in [Some(base.clone()), dm_key, Some(majmin.clone())].into_iter().flatten() {
+                if stats.contains_key(&c) {
+                    key = Some(c);
+                    break;
+                }
+            }
+            let Some(key) = key else { continue };
+            let entry = agg.entry(key.clone()).or_insert_with(|| DiskDev {
+                name: key.clone(),
+                pretty: dm.get(&base).cloned(),
+                fstype,
+                total,
+                used,
+                ..Default::default()
+            });
+            entry.mounts.push(mount);
+        }
+
+        let mut prev = HashMap::new();
+        let mut devs: Vec<DiskDev> = Vec::new();
+        for (_, mut dev) in agg {
+            dev.mounts.sort();
+            if let (Some(p), Some(raw)) = (self.prev.get(&dev.name), stats.get(&dev.name)) {
+                let dt = now.duration_since(p.t).as_secs_f64().max(1e-6);
+                dev.rate_r = raw.sectors_r.saturating_sub(p.sectors_r) as f64 * SECTOR / dt;
+                dev.rate_w = raw.sectors_w.saturating_sub(p.sectors_w) as f64 * SECTOR / dt;
+                dev.iops = raw.ios.saturating_sub(p.ios) as f64 / dt;
+            }
+            if let Some(raw) = stats.get(&dev.name) {
+                prev.insert(
+                    dev.name.clone(),
+                    Prev {
+                        sectors_r: raw.sectors_r,
+                        sectors_w: raw.sectors_w,
+                        ios: raw.ios,
+                        t: now,
+                    },
+                );
+            }
+            devs.push(dev);
+        }
+        devs.sort_by(|a, b| a.mounts.first().cmp(&b.mounts.first()));
+
+        self.prev = prev;
+        self.devices = devs;
+        self.tree = build_block_tree();
+
+        let tr: f64 = self.devices.iter().map(|d| d.rate_r).sum();
+        let tw: f64 = self.devices.iter().map(|d| d.rate_w).sum();
+        let dt_g = now.duration_since(self.last_t).as_secs_f64();
+        self.last_t = now;
+        self.session_r += tr * dt_g;
+        self.session_w += tw * dt_g;
+        push_hist(&mut self.hist_r, tr);
+        push_hist(&mut self.hist_w, tw);
+    }
+
+    /// (read B/s, write B/s, iops, session read bytes, session write bytes)
+    pub fn totals(&self) -> (f64, f64, f64, u64, u64) {
+        let tr: f64 = self.devices.iter().map(|d| d.rate_r).sum();
+        let tw: f64 = self.devices.iter().map(|d| d.rate_w).sum();
+        let ti: f64 = self.devices.iter().map(|d| d.iops).sum();
+        (tr, tw, ti, self.session_r as u64, self.session_w as u64)
+    }
+
+    pub fn reset_session(&mut self) {
+        self.session_r = 0.0;
+        self.session_w = 0.0;
+    }
+
+    pub fn dev_by_name(&self, name: &str) -> Option<&DiskDev> {
+        self.devices.iter().find(|d| d.name == name)
+    }
+
+    pub fn hist(&self) -> (Vec<f64>, Vec<f64>) {
+        (
+            self.hist_r.iter().copied().collect(),
+            self.hist_w.iter().copied().collect(),
+        )
+    }
+}
+
+impl Default for DiskCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+fn push_hist(dq: &mut VecDeque<f64>, v: f64) {
+    dq.push_back(v);
+    while dq.len() > HIST_CAP {
+        dq.pop_front();
+    }
+}
+
+/// (total_bytes, used_bytes)
+fn fs_usage(path: &str) -> Option<(u64, u64)> {
+    let c = CString::new(path).ok()?;
+    let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
+    // SAFETY: st is a valid, fully-owned allocation for the duration of the call
+    if unsafe { libc::statvfs(c.as_ptr(), &mut st) } != 0 {
+        return None;
+    }
+    let fr = st.f_frsize.max(st.f_bsize) as u64;
+    let total = st.f_blocks as u64 * fr;
+    let used = total.saturating_sub(st.f_bfree as u64 * fr);
+    Some((total, used))
+}
+
+fn read_size(sysdir: &std::path::Path) -> Option<u64> {
+    fs::read_to_string(sysdir.join("size"))
+        .ok()?
+        .trim()
+        .parse::<u64>()
+        .ok()
+        .map(|s| s * 512)
+}
+
+/// Build the physical hierarchy: disk -> partition -> dm (LUKS/LVM).
+/// dm devices spanning several disks become roots (RAID/VG level).
+fn build_block_tree() -> Vec<TreeNode> {
+    let Ok(rd) = fs::read_dir("/sys/block") else {
+        return Vec::new();
+    };
+    type DiskEntry = (String, Option<u64>);
+    type DmEntry = (String, Option<String>, Vec<String>, Option<u64>);
+    let mut disks: Vec<DiskEntry> = Vec::new();
+    let mut dms: Vec<DmEntry> = Vec::new();
+    for e in rd.flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        if name.starts_with("dm-") {
+            let pretty = fs::read_to_string(e.path().join("dm/name"))
+                .ok()
+                .map(|s| s.trim().to_string());
+            let slaves = fs::read_dir(e.path().join("slaves"))
+                .map(|rd| {
+                    rd.flatten()
+                        .map(|s| s.file_name().to_string_lossy().into_owned())
+                        .collect()
+                })
+                .unwrap_or_default();
+            dms.push((name, pretty, slaves, read_size(&e.path())));
+        } else if !SKIP_BLOCK_PREFIXES.iter().any(|p| name.starts_with(p)) {
+            disks.push((name, read_size(&e.path())));
+        }
+    }
+    disks.sort();
+
+    let mut taken = vec![false; dms.len()];
+    let mut roots = Vec::new();
+    for (dname, dsize) in &disks {
+        let mut children = Vec::new();
+        if let Ok(rd) = fs::read_dir(format!("/sys/block/{dname}")) {
+            let mut parts: Vec<(String, Option<u64>)> = rd
+                .flatten()
+                .filter_map(|e| {
+                    let n = e.file_name().to_string_lossy().into_owned();
+                    (n.starts_with(dname.as_str()) && e.path().join("dev").exists())
+                        .then(|| (n, read_size(&e.path())))
+                })
+                .collect();
+            parts.sort();
+            for (pname, psize) in parts {
+                let mut part = TreeNode {
+                    name: pname.clone(),
+                    pretty: None,
+                    size: psize,
+                    children: Vec::new(),
+                };
+                for (i, (dmname, pretty, slaves, size)) in dms.iter().enumerate() {
+                    if !taken[i] && slaves.len() == 1 && slaves[0] == pname {
+                        taken[i] = true;
+                        part.children.push(TreeNode {
+                            name: dmname.clone(),
+                            pretty: pretty.clone(),
+                            size: *size,
+                            children: Vec::new(),
+                        });
+                    }
+                }
+                children.push(part);
+            }
+        }
+        for (i, (dmname, pretty, slaves, size)) in dms.iter().enumerate() {
+            if !taken[i] && slaves.len() == 1 && &slaves[0] == dname {
+                taken[i] = true;
+                children.push(TreeNode {
+                    name: dmname.clone(),
+                    pretty: pretty.clone(),
+                    size: *size,
+                    children: Vec::new(),
+                });
+            }
+        }
+        roots.push(TreeNode {
+            name: dname.clone(),
+            pretty: None,
+            size: *dsize,
+            children,
+        });
+    }
+    for (i, (dmname, pretty, _, size)) in dms.iter().enumerate() {
+        if !taken[i] {
+            roots.push(TreeNode {
+                name: dmname.clone(),
+                pretty: pretty.clone(),
+                size: *size,
+                children: Vec::new(),
+            });
+        }
+    }
+    roots
+}
+
+fn parse_diskstats() -> HashMap<String, DiskRaw> {
+    let mut out = HashMap::new();
+    let Ok(content) = fs::read_to_string("/proc/diskstats") else {
+        return out;
+    };
+    for line in content.lines() {
+        let f: Vec<&str> = line.split_whitespace().collect();
+        if f.len() < 14 {
+            continue;
+        }
+        let name = f[2].to_string();
+        let key = format!("{}:{}", f[0], f[1]);
+        let nums: Vec<u64> = f[3..14].iter().filter_map(|x| x.parse().ok()).collect();
+        if nums.len() < 11 {
+            continue;
+        }
+        let raw = DiskRaw {
+            sectors_r: nums[2],
+            sectors_w: nums[6],
+            ios: nums[0].saturating_add(nums[4]),
+        };
+        // index by major:minor AND by kernel device name
+        out.insert(key, raw.clone());
+        out.insert(name, raw);
+    }
+    out
+}
+
+/// /dev/mapper friendly names -> kernel dm names, e.g. "root" -> "dm-0"
+fn dm_name_map() -> HashMap<String, String> {
+    let mut out = HashMap::new();
+    let Ok(entries) = fs::read_dir("/sys/block") else {
+        return out;
+    };
+    for entry in entries.flatten() {
+        let kernel = entry.file_name().to_string_lossy().into_owned();
+        if let Ok(name) = fs::read_to_string(entry.path().join("dm/name")) {
+            out.insert(name.trim().to_string(), kernel);
+        }
+    }
+    out
+}
+
+#[derive(Clone)]
+struct Prev {
+    sectors_r: u64,
+    sectors_w: u64,
+    ios: u64,
+    t: Instant,
+}
+
+#[derive(Clone)]
+struct DiskRaw {
+    sectors_r: u64,
+    sectors_w: u64,
+    ios: u64,
+}
+
+type Mount = (String, String, String, String); // (major:minor, mountpoint, source, fstype)
+
+fn parse_mountinfo() -> Vec<Mount> {
+    let mut out = Vec::new();
+    let Ok(content) = fs::read_to_string("/proc/self/mountinfo") else {
+        return out;
+    };
+    let mut seen = std::collections::HashSet::new();
+    for line in content.lines() {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        let Some(sep) = fields.iter().position(|f| *f == "-") else {
+            continue;
+        };
+        if sep < 5 || sep + 2 >= fields.len() {
+            continue;
+        }
+        let majmin = fields[2].to_string();
+        let mount = unescape_octal(fields[4]);
+        let fstype = fields[sep + 1].to_string();
+        let source = unescape_octal(fields[sep + 2]);
+
+        if FS_BLACKLIST.iter().any(|b| fstype == *b)
+            || fstype.starts_with("fuse.")
+            && fstype != "fuseblk"
+            || !(mount.starts_with("/mnt")
+                || mount.starts_with("/media")
+                || mount.starts_with("/run/media")
+                || mount == "/"
+                || (!mount.starts_with("/proc")
+                    && !mount.starts_with("/sys")
+                    && !mount.starts_with("/dev")
+                    && !mount.starts_with("/run")))
+        {
+            continue;
+        }
+        if !seen.insert((majmin.clone(), mount.clone())) {
+            continue;
+        }
+        out.push((majmin, mount, source, fstype));
+    }
+    out
+}
+
+fn unescape_octal(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'\\' && i + 3 < bytes.len() {
+            let oct = &s[i + 1..i + 4];
+            if let Ok(v) = u8::from_str_radix(oct, 8) {
+                out.push(v);
+                i += 4;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}

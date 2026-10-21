@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # eBPF 对象在 build.rs 里由系统 clang 编译(-target bpf)
+      - name: Install clang
+        run: sudo apt-get update && sudo apt-get install -y clang
+      - name: Build
+        run: cargo build --release
+      # 开箱别名:loli → ltop 软链进压缩包,-h 按调用名显示
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp target/release/ltop target/release/ltop-bpf dist/
+          ln -s ltop dist/loli
+          tar czf "ltop-${GITHUB_REF_NAME#v}-x86_64-linux.tar.gz" -C dist ltop ltop-bpf loli
+          sha256sum "ltop-${GITHUB_REF_NAME#v}-x86_64-linux.tar.gz" > SHA256SUMS
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 幂等:重推已有 tag 时不炸,资产 --clobber 覆盖
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" \
+              "ltop-${GITHUB_REF_NAME#v}-x86_64-linux.tar.gz" SHA256SUMS --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              "ltop-${GITHUB_REF_NAME#v}-x86_64-linux.tar.gz" SHA256SUMS \
+              --title "$GITHUB_REF_NAME" --generate-notes
+          fi
