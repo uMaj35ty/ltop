@@ -7,6 +7,14 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn main() {
+    // eBPF 仅 Linux;mac 上嵌空对象(TUI 侧 UDP 分项静默缺席,其余不受影响)
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("linux") {
+        let out = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+        std::fs::write(out.join("bpf_object.rs"), "pub static BPF_OBJECT: &[u8] = &[];\n")
+            .unwrap();
+        return;
+    }
+
     let src = PathBuf::from("bpf/net_bpf.c");
     println!("cargo:rerun-if-changed={}", src.display());
     println!("cargo:rerun-if-env-changed=CLANG");

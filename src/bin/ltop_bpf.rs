@@ -13,6 +13,8 @@
 //! behind. Counter continuity across daemon restarts is sacrificed for that
 //! safety (the TUI re-baselines on its next read).
 
+#[cfg(target_os = "linux")]
+mod imp {
 use std::fs;
 use std::io::Write as _;
 use std::os::unix::fs::PermissionsExt;
@@ -48,7 +50,7 @@ const PROBES: [(&str, &str, bool); 10] = [
     ("tcp_recv", "tcp_recvmsg", true),
 ];
 
-fn main() {
+pub fn entry() {
     // 同 ltop:管道截断(--once | head)时静默退出而非 panic
     unsafe {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
@@ -297,4 +299,16 @@ fn now_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
+}
+}
+
+#[cfg(target_os = "linux")]
+fn main() {
+    imp::entry()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn main() {
+    eprintln!("ltop-bpf 仅支持 Linux(当前平台无 eBPF);TUI 主程序不受影响");
+    std::process::exit(1);
 }

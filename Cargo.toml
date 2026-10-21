@@ -19,13 +19,16 @@ path = "src/bin/ltop_bpf.rs"
 
 [dependencies]
 anyhow = "1"
-aya = "0.14.0"
 crossterm = "0.28"
 if-addrs = "0.13"
 libc = "0.2"
 ratatui = "0.29"
 
-[dev-dependencies]
+# aya/eBPF 加载器仅 Linux(ltop-bpf 二进制);mac 构建不引入
+[target.'cfg(target_os = "linux")'.dependencies]
+aya = "0.14.0"
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
 aya-obj = "0.3"
 
 [profile.release]

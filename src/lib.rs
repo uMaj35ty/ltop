@@ -78,11 +78,17 @@ Data scopes differ by design (PROCS = payload, NET box = NIC bytes) — see in-a
 /// 探针寄存器映射覆盖 x86_64 与 aarch64;其他架构启动即明确报错,
 /// 而不是静默产出错账
 pub fn arch_guard() -> Result<()> {
-    if !matches!(std::env::consts::ARCH, "x86_64" | "aarch64") {
+    let ok = match std::env::consts::OS {
+        "linux" => matches!(std::env::consts::ARCH, "x86_64" | "aarch64"),
+        "macos" => matches!(std::env::consts::ARCH, "x86_64" | "aarch64"),
+        _ => false,
+    };
+    if !ok {
         anyhow::bail!(
-            "ltop v{} supports x86_64/aarch64 Linux only (running on {}); \
-             other architectures are not supported — see README",
+            "ltop v{} supports Linux and macOS on x86_64/aarch64 (running on {} {}); \
+             see README",
             env!("CARGO_PKG_VERSION"),
+            std::env::consts::OS,
             std::env::consts::ARCH
         );
     }
@@ -937,6 +943,8 @@ mod tests {
 
     /// the build-time eBPF object must parse and carry all four probes plus
     /// the LRU map, so a broken clang output fails tests instead of at runtime
+    /// (aya_obj 依赖仅 Linux;mac 构建跳过本测试)
+    #[cfg(target_os = "linux")]
     #[test]
     fn bpf_object_parses_with_probes_and_map() {
         let path = std::path::Path::new(env!("OUT_DIR")).join("ltop_udp_bpf.o");
