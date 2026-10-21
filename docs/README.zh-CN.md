@@ -23,6 +23,14 @@
 [/] 搜索  [space] 暂停  [q] 退出  [m] 菜单  [Tab] 布局  [1-6] 盒子  [enter] 详情
 ```
 
+## 快速安装
+
+```bash
+cargo install ltop
+```
+
+AUR:`ltop-bin`——待 AUR 开放注册后提供(打包件已就绪)。
+
 ## 截图
 
 Omarchy 上的 classic 布局,主题跟随桌面:
@@ -69,7 +77,7 @@ tall 布局——分组连接带合计,追踪行高亮:
   重排不漂移),`enter` 详情,`space`/`t` 追踪置顶,`k` kill;`enter` 在 lan 行置顶邻居并联动
   CONNS 只看该对端
 
-## 快速开始
+## 要求与源码构建
 
 要求:Rust stable、Linux,**仅支持 x86_64**——eBPF 探针寄存器映射与各数据源按
 x86_64 编写,其他架构启动时明确报错(arm64 为独立里程碑);eBPF 计费另需带
