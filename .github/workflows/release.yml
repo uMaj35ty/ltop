@@ -56,8 +56,39 @@ jobs:
             ltop-*-${{ matrix.slug }}.tar.gz
             SHA256SUMS-${{ matrix.slug }}
 
+  # mac 双架构:arm64 原生 + x86_64 交叉(Apple SDK 同机可编);无 ltop-bpf
+  build-macos:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            slug: aarch64-darwin
+          - target: x86_64-apple-darwin
+            slug: x86_64-darwin
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: rustup target add ${{ matrix.target }}
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp "target/${{ matrix.target }}/release/ltop" dist/
+          ln -s ltop dist/loli
+          tar czf "ltop-${GITHUB_REF_NAME#v}-${{ matrix.slug }}.tar.gz" -C dist ltop loli
+          shasum -a 256 "ltop-${GITHUB_REF_NAME#v}-${{ matrix.slug }}.tar.gz" > "SHA256SUMS-${{ matrix.slug }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.slug }}
+          path: |
+            ltop-*-${{ matrix.slug }}.tar.gz
+            SHA256SUMS-${{ matrix.slug }}
+
   release:
-    needs: build
+    needs: [build, build-macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

@@ -3,6 +3,22 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **macOS support (Apple Silicon & Intel)** — all six boxes run natively:
+  PROCS and CONNS poll `nettop` (per-process rows and per-socket flows,
+  TCP and UDP in one spawn), CONNS attribution scans the caller's own
+  sockets via libproc, DISK reads IOKit IOMedia statistics plus per-process
+  rusage disk I/O, LAN parses `arp -an` and the default route. Verified on
+  hardware (macOS 27, MacBook Air). macOS has no eBPF: counters are
+  cumulative per live socket, so traffic completing within one sampling
+  tick is not counted; other users' connections are not attributed (`n/a`).
+- Release tarballs for `aarch64-darwin` and `x86_64-darwin` (ltop + loli
+  symlink; ltop-bpf stays Linux-only), CI runs the full suite on a macOS
+  runner.
+
 ## [0.2.0] - 2026-10-21
 
 ### Added
