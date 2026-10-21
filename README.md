@@ -2,8 +2,8 @@
 
 [English](README.md) | [简体中文](docs/README.zh-CN.md)
 
-[![Crates.io](https://img.shields.io/crates/v/ltop)](https://crates.io/crates/localist-top)
-[![docs.rs](https://img.shields.io/docsrs/ltop)](https://docs.rs/localist-top)
+[![Crates.io](https://img.shields.io/crates/v/ltop)](https://crates.io/crates/ltop)
+[![docs.rs](https://img.shields.io/docsrs/ltop)](https://docs.rs/ltop)
 [![CI](https://github.com/uMaj35ty/ltop/actions/workflows/ci.yml/badge.svg)](https://github.com/uMaj35ty/ltop/actions/workflows/ci.yml)
 
 A terminal monitor for a single machine: where network traffic goes (who talks
@@ -121,7 +121,7 @@ ltop --replay [--csv OUT]   # replay/analyse the latest session log
 ltop-bpf --once             # collector: sample once, print, exit (smoke test)
 ```
 
-`~/.config/localist-top/config.conf` is plain `key = value`, written by the
+`~/.config/ltop/config.conf` is plain `key = value`, written by the
 in-app settings panel and safe to hand-edit (applies on restart): refresh
 `tick_ms`, log interval/retention, sweep interval, box toggles, sort defaults,
 tombstone TTL `tombstone_ttl_ms`, `theme`, `lang` and more.

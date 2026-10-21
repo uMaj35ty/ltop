@@ -2,8 +2,8 @@
 
 [English](../README.md) | 简体中文
 
-[![Crates.io](https://img.shields.io/crates/v/ltop)](https://crates.io/crates/localist-top)
-[![docs.rs](https://img.shields.io/docsrs/ltop)](https://docs.rs/localist-top)
+[![Crates.io](https://img.shields.io/crates/v/ltop)](https://crates.io/crates/ltop)
+[![docs.rs](https://img.shields.io/docsrs/ltop)](https://docs.rs/ltop)
 [![CI](https://github.com/uMaj35ty/ltop/actions/workflows/ci.yml/badge.svg)](https://github.com/uMaj35ty/ltop/actions/workflows/ci.yml)
 
 一个终端本地网络监控工具,只盯一台机器:
@@ -114,7 +114,7 @@ ltop --replay [--csv OUT]   # 回放/分析会话日志,缺省取最新一份
 ltop-bpf --once             # 助手采一轮打印后退出(冒烟)
 ```
 
-配置文件 `~/.config/localist-top/config.conf` 为纯文本 `key = value`,设置面板
+配置文件 `~/.config/ltop/config.conf` 为纯文本 `key = value`,设置面板
 即改即存;高阶用法可直接编辑(重启生效):刷新 `tick_ms`、日志粒度/保留期、扫描间隔、
 盒子开关、排序默认值、墓碑时长 `tombstone_ttl_ms`、主题 `theme` 等。
 
