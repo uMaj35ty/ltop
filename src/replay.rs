@@ -354,7 +354,7 @@ fn text(s: &str, key: &str) -> Option<String> {
 }
 
 pub fn print_report(ses: &Session, top: usize) {
-    println!("== localist top 回放 ==");
+    println!("== ltop 回放 ==");
     println!(
         "file  {}\nhost  {}  开始 {}  快照 {} 个  间隔 {}s",
         ses.path.display(),

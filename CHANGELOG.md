@@ -3,6 +3,14 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.2] - unreleased
+
+### Fixed
+
+- Help panel showed a hard-coded "localist top v0.1.0"; the version now
+  follows the build (`CARGO_PKG_VERSION`) and the branding is consistent
+  ("ltop") across the help panel, `--help`, replay output and doc comments.
+
 ## [0.2.1] - 2026-10-22
 
 ### Added

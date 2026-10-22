@@ -1,4 +1,4 @@
-//! ltop-bpf: privileged companion daemon for localist top.
+//! ltop-bpf: privileged companion daemon for ltop.
 //!
 //! Attaches kprobes on udp_sendmsg / udp_recvmsg (+ udpv6 variants), keeps
 //! per-pid byte counters in a kernel LRU map and writes a snapshot of
