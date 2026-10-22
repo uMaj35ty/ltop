@@ -2217,13 +2217,15 @@ fn draw_menu_footer(f: &mut Frame, area: Rect, sel: usize, lang: Lang) {
     f.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
+/// graphs 面板:与 settings 同款风格(居中弹窗、label: value 行列表)
 fn draw_graphs_popup(f: &mut Frame, area: Rect, app: &App) {
-    let rows = [
-        ("n", "net", app.graph_net.label()),
-        ("d", "disk i/o", app.graph_disk.label()),
-        ("a", "all", "set both"),
+    let lang = app.lang;
+    let rows: [(&str, &str, String); 3] = [
+        ("n", "net", app.graph_net.label().to_string()),
+        ("d", "disk i/o", app.graph_disk.label().to_string()),
+        ("a", "all", lang.tr("set_both").to_string()),
     ];
-    let (w, h) = (40.min(area.width), 7.min(area.height));
+    let (w, h) = (60.min(area.width), 7.min(area.height));
     let popup = centered(area, w, h);
     f.render_widget(Clear, popup);
     let block = Block::bordered()
@@ -2244,10 +2246,7 @@ fn draw_graphs_popup(f: &mut Frame, area: Rect, app: &App) {
             ])
         })
         .collect();
-    lines.push(Line::from(Span::styled(
-        app.lang.tr("letters_hint"),
-        dim(),
-    )));
+    lines.push(Line::from(Span::styled(lang.tr("letters_hint"), dim())));
     f.render_widget(Paragraph::new(lines), inner);
 }
 
