@@ -202,6 +202,14 @@ fn run(
 }
 
 fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
+    // 诊断开关:LTOP_KEY_LOG=<文件> 追加记录每个按键事件(排查 ssh 下的
+    // 按键序列串扰,如 esc 触发盒子 hide)
+    if let Ok(path) = std::env::var("LTOP_KEY_LOG") {
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+            let _ = writeln!(f, "{code:?} {modifiers:?}");
+        }
+    }
     if modifiers.contains(KeyModifiers::CONTROL) && code == KeyCode::Char('c') {
         app.quit = true;
         return;
@@ -228,7 +236,11 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
                 }
             }
             KeyCode::Char('m') => app.menu = MenuState::Main(0),
-            KeyCode::Char(c @ '1'..='6') => {
+            // ssh 下 esc 序列可能被解析成带 ALT 修饰的幽灵字符键;盒子的
+            // hide/show 只响应无修饰的数字
+            KeyCode::Char(c @ '1'..='6')
+                if !modifiers.intersects(KeyModifiers::ALT | KeyModifiers::CONTROL) =>
+            {
                 let idx = (c as usize - '1' as usize).min(app::BOX_COUNT - 1);
                 let shown = app.visible.iter().filter(|&&v| v).count();
                 if !(app.visible[idx] && shown <= 1) {

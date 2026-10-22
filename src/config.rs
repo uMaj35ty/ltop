@@ -268,6 +268,7 @@ fn parse_graph(s: &str) -> Option<GraphMode> {
         "line" => Some(GraphMode::Line),
         "heart" => Some(GraphMode::Heartbeat),
         "hybrid" => Some(GraphMode::Hybrid),
+        "block" => Some(GraphMode::Block),
         _ => None,
     }
 }
