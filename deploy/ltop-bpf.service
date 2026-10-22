@@ -1,5 +1,5 @@
 [Unit]
-Description=ltop (localist top) eBPF UDP per-process collector
+Description=ltop eBPF UDP per-process collector
 After=multi-user.target
 
 [Service]
