@@ -341,6 +341,10 @@ fn cycle_setting(app: &mut App, sel: usize, forward: bool) -> bool {
             app.conn.tombstone_ttl = std::time::Duration::from_millis(TOMBS[i]);
             true
         }
+        12 => {
+            app.proc_expand_default = !app.proc_expand_default;
+            true
+        }
         _ => false,
     }
 }
@@ -588,7 +592,7 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
             }
         }
         MenuState::Settings(sel) => {
-            const ROWS: usize = 12;
+            const ROWS: usize = 13;
             let changed = match code {
                 KeyCode::Up | KeyCode::Char('k') => {
                     app.menu = MenuState::Settings(sel.saturating_sub(1));
