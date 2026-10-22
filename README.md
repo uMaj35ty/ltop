@@ -35,6 +35,12 @@ xattr -c ltop-*-darwin.tar.gz
 
 AUR: `ltop-bin` — coming as soon as the AUR reopens registration (package is ready).
 
+## Themes
+
+ltop reads btop-compatible theme files — see
+[docs/custom-theme.md](docs/custom-theme.md) to fix unreadable colours or
+build a full custom theme.
+
 ## Screenshots
 
 Classic layout on Omarchy, with the desktop theme followed:
