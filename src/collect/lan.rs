@@ -72,6 +72,9 @@ pub struct LanCollector {
     /// mac:arp 表枚举被系统隐私机制静默拦截(输出 0 行)——UI 提示用户
     /// 给终端授权「本地网络」;Linux 恒 false
     pub arp_blocked: bool,
+    /// mac:上次主动触发本地网络授权弹窗的时间(节流)
+    #[cfg(target_os = "macos")]
+    mdns_probe_last: Option<Instant>,
     resolving: HashSet<Ipv4Addr>,
     hostname_tx: Sender<(Ipv4Addr, Option<String>)>,
     hostname_rx: Receiver<(Ipv4Addr, Option<String>)>,
@@ -97,6 +100,8 @@ impl LanCollector {
             last_sweep: None,
             resolve_failures: HashSet::new(),
             arp_blocked: false,
+            #[cfg(target_os = "macos")]
+            mdns_probe_last: None,
             resolving: HashSet::new(),
             hostname_tx: tx,
             hostname_rx: rx,
@@ -113,6 +118,34 @@ impl LanCollector {
         self.spawn_resolves();
         self.drain_hostnames();
         self.maybe_sweep(now);
+        #[cfg(target_os = "macos")]
+        self.maybe_probe_local_network(now);
+    }
+
+    /// mac:被隐私机制拦截时,系统不会主动弹「本地网络」授权框(责任进程
+    /// 从没成功访问过本地网络)。周期性发一次 legacy mDNS 组播查询——
+    /// 首次访问本地网络会让 macOS 对责任进程(运行 ltop 的终端)弹授权框;
+    /// 若曾点过拒绝,需 `tccutil reset LocalNetwork` 后重跑。
+    #[cfg(target_os = "macos")]
+    fn maybe_probe_local_network(&mut self, now: Instant) {
+        if !self.arp_blocked || self.subnets.is_empty() {
+            return;
+        }
+        if self
+            .mdns_probe_last
+            .is_some_and(|t| now.duration_since(t) < Duration::from_secs(15))
+        {
+            return;
+        }
+        self.mdns_probe_last = Some(now);
+        let Some(gw) = self.gateways.iter().next().copied() else {
+            return;
+        };
+        thread::spawn(move || {
+            if let Ok(sock) = UdpSocket::bind("0.0.0.0:0") {
+                let _ = sock.send_to(&build_ptr_query(gw, 0x6c74), (MDNS_GROUP, MDNS_PORT));
+            }
+        });
     }
 
     fn refresh_subnets(&mut self) {

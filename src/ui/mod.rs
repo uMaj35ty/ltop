@@ -1419,6 +1419,9 @@ fn draw_disks(f: &mut Frame, area: Rect, app: &App, focused: bool) {
     if inner.width < 16 || inner.height < 2 {
         return;
     }
+    // 表头之下的可视行数封顶:旧写法 min(len-1) 滚到底后从最后一行起渲染
+    // (只剩单行/空白),与 LAN/CONNS/PROCS 的 clamped_offset 同语义
+    let off = off.min(flat.len().saturating_sub((inner.height - 1).max(1) as usize));
 
     let rows: Vec<Row> = flat
         .into_iter()
@@ -3156,6 +3159,56 @@ mod tests {
         assert!(shown.len() >= 5, "尾页行数 {} < 5,像是只剩单行", shown.len());
         // 首屏的行不应再出现
         assert!(!rows.iter().any(|r| r.contains("c0000")), "越界滚动后仍显示首行");
+    }
+
+    /// DISKS 滚到底:off 封顶应是最后一页(可视行数)而非最后一行。
+    /// 回归:DISKS 曾手写 min(len-1)(LAN/CONNS/PROCS 用 clamped_offset,
+    /// 唯它漏网),滚到底后整盒只剩 1 行或空白
+    #[test]
+    fn disks_bottom_scroll_shows_full_last_page() {
+        use ratatui::backend::TestBackend;
+        use ratatui::Terminal;
+
+        let mut app = crate::app::App::new(None);
+        for i in 0..BOX_COUNT {
+            app.visible[i] = i == BOX_DISKS;
+        }
+        // 5 个盘 × 每盘 12 个分区 = 60+ 行树,远超一屏
+        for d in 0..5 {
+            let root = crate::collect::disk::TreeNode {
+                name: format!("sd{d}"),
+                pretty: None,
+                size: None,
+                children: (0..12)
+                    .map(|p| crate::collect::disk::TreeNode {
+                        name: format!("sd{d}p{}", p + 1),
+                        pretty: None,
+                        size: None,
+                        children: Vec::new(),
+                    })
+                    .collect(),
+            };
+            app.disk.tree.push(root);
+        }
+        app.scroll[BOX_DISKS] = 5000;
+        let mut term = Terminal::new(TestBackend::new(120, 40)).unwrap();
+        term.draw(|f| draw(f, &app)).unwrap();
+        let buf = term.backend().buffer();
+        let rows: Vec<String> = (0..buf.area.height)
+            .map(|y| (0..buf.area.width).map(|x| buf[(x, y)].symbol()).collect())
+            .collect();
+        // 尾段分区(sd4p8..p12)应可见
+        assert!(
+            rows.iter().any(|r| r.contains("sd4p11")),
+            "最后一页应包含尾部节点"
+        );
+        // 尾页应是多行(旧 bug 只渲染 1 行)
+        let tail_rows = rows
+            .iter()
+            .filter(|r| ["sd4p", "sd4"].iter().any(|t| r.contains(t)))
+            .count();
+        assert!(tail_rows >= 5, "尾页行数 {tail_rows} < 5,像是只剩单行");
+        assert!(!rows.iter().any(|r| r.contains("sd0p1")), "越界滚动后仍显示首行");
     }
 
     /// proc 排序:同名进程成组,组首行带 ×N 标识
