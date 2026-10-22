@@ -154,6 +154,14 @@ sudo cp deploy/ltop-bpf.service /etc/systemd/system/
 sudo systemctl enable --now ltop-bpf # 开启 UDP/TCP 每进程计费
 ```
 
+**升级时请连同助手一起更新**——`/usr/local/bin/ltop-bpf` 若停留在旧版本,
+会继续把快照写到旧路径,每进程计费将静默归零:
+
+```bash
+sudo cp target/release/ltop-bpf /usr/local/bin/
+sudo systemctl restart ltop-bpf
+```
+
 二进制:`ltop` 与 `ltop-bpf`(特权采集器)。Release 压缩包与 AUR 包内自带
 `loli` 软链别名(`-h` 跟随调用名显示);`cargo install` 的用户可自行
 `ln -s ltop loli`。
