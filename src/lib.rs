@@ -1,4 +1,4 @@
-//! localist top: btop-styled TUI monitor (net / lan / disk io / conns / procs)
+//! ltop: btop-styled TUI monitor (net / lan / disk io / conns / procs)
 
 pub mod app;
 pub mod collect;
@@ -51,7 +51,7 @@ fn early_exit(args: &[String]) -> Option<Result<()>> {
 /// 不随仓库分发;软链指向同一程序,-h 自然跟随调用名
 fn usage_text(prog: &str) -> String {
     format!(
-        "localist-top v{} — btop-styled TUI monitoring for local network, LAN neighbours and disk I/O
+        "ltop v{} — btop-styled TUI monitoring for local network, LAN neighbours and disk I/O
 
 USAGE:
     {prog} [OPTIONS]

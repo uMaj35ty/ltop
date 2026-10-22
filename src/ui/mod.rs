@@ -2606,7 +2606,7 @@ fn draw_help_popup(f: &mut Frame, area: Rect, app: &App) {
 
     let mut lines: Vec<Line> = Vec::new();
     lines.push(Line::from(vec![
-        Span::styled(" localist top v0.1.0", bold(accent())),
+        Span::styled(format!(" ltop v{}", env!("CARGO_PKG_VERSION")), bold(accent())),
         Span::styled("  by uMaj35ty", dim()),
     ]));
     lines.push(Line::from(Span::styled(
