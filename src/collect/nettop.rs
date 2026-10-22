@@ -471,8 +471,11 @@ time,,interface,state,bytes_in,bytes_out,rx_dupe,rx_ooo,re-tx,rtt_avg,rcvsize,tx
     /// 归属链真机验证(mac):自己进程的 listening socket 必须同时出现在
     /// nettop 流行与 socket_info 投影里,且 flow 键一致 —— 偏移/字节序/
     /// v4-in-16 字节布局任何一处错,这个测试都会当场断言失败
+    /// 真机环境集成测试:nettop 快照在 CI runner 上不可控(枚举时机/缓存
+    /// 差异),本地复验: cargo test attribution -- --ignored --nocapture
     #[test]
     #[cfg(target_os = "macos")]
+    #[ignore = "requires live nettop (CI-flaky); run locally with --ignored"]
     fn attribution_joins_nettop_rows_and_socket_info() {
         use crate::collect::macproc;
         use std::net::TcpListener;
