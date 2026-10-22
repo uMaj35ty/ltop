@@ -112,6 +112,13 @@ rusage,LAN 解析 `arp -an` 与默认路由。macOS 构建不含 `ltop-bpf`。�
 差异)。裸终端的 framebuffer 字形可能缺盲文点阵;经 SSH 或在正式终端仿真器
 里渲染完整。
 
+macOS 还把本地网络数据(邻居表、接口字节计数)置于隐私授权之后,且授权框
+指向运行它的「终端 App」——命令行工具本身不会出现在授权列表里。LAN 盒被
+拦截期间 ltop 每数秒主动探测一次本地网络,授权框会自行弹出,允许其所在的
+终端即可;若弹窗曾被拒绝,先 `tccutil reset LocalNetwork` 再启动 ltop,
+或在 系统设置 → 隐私与安全性 → 本地网络 中手动开启终端 App 的开关。
+经 SSH 运行时限制作用于 ltop 自身;完整数据请在本机终端运行。
+
 ```bash
 cargo install ltop                   # 从 crates.io 安装,开箱即用
 # 或源码构建:
