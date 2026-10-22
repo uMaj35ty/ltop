@@ -13,14 +13,24 @@ helper adds per-process and per-connection byte accounting.
 
 ## Quick install
 
+**Homebrew** (macOS & Linux; prebuilt binaries):
+
+```bash
+brew install uMaj35ty/ltop/ltop
+```
+
+**crates.io** (compiles from source; needs a Rust toolchain):
+
 ```bash
 cargo install ltop
 ```
 
-Homebrew (macOS & Linux, prebuilt binaries, v0.2.1+):
+**GitHub Releases** — prebuilt tarballs for `x86_64/aarch64` Linux and
+macOS. Binaries are unsigned: on macOS remove the quarantine attribute
+after downloading:
 
 ```bash
-brew install uMaj35ty/ltop/ltop
+xattr -c ltop-*-darwin.tar.gz
 ```
 
 AUR: `ltop-bin` — coming as soon as the AUR reopens registration (package is ready).
