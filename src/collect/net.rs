@@ -27,8 +27,6 @@ pub struct IfaceRates {
 pub struct NetCollector {
     last_totals: HashMap<String, (u64, u64, Instant)>,
     base_totals: HashMap<String, (u64, u64)>,
-    /// 接口存活以来的原始计数(首次采样;reset 不动——会话 Σ 才可重置)
-    boot_totals: HashMap<String, (u64, u64)>,
     pub ifaces: BTreeMap<String, IfaceInfo>,
     pub rates: HashMap<String, IfaceRates>,
     pub history_rx: HashMap<String, VecDeque<f64>>,
@@ -41,7 +39,6 @@ impl NetCollector {
         Self {
             last_totals: HashMap::new(),
             base_totals: HashMap::new(),
-            boot_totals: HashMap::new(),
             ifaces: BTreeMap::new(),
             rates: HashMap::new(),
             history_rx: HashMap::new(),
@@ -82,7 +79,6 @@ impl NetCollector {
 
         for (name, (rx, tx, _)) in &new_last {
             self.base_totals.entry(name.clone()).or_insert((*rx, *tx));
-            self.boot_totals.entry(name.clone()).or_insert((*rx, *tx));
             let (brx, btx) = self.base_totals[name];
             if let Some(&(prx, ptx, pt)) = self.last_totals.get(name) {
                 let dt = now.duration_since(pt).as_secs_f64().max(1e-6);
@@ -147,19 +143,16 @@ impl NetCollector {
         }
     }
 
-    /// 选中接口的 Alive Σ(接口存活以来的累计;与可重置的会话 Σ 并列)
+    /// 选中接口的 Alive Σ = 当前原始计数器(接口存活以来的累计,不受
+    /// reset 影响——基线只在会话 Σ 上相减)
     pub fn selected_alive(&self) -> Option<(u64, u64)> {
         let sel = self.selected.as_ref()?;
-        let cur = self.last_totals.get(sel)?;
-        let base = self.boot_totals.get(sel)?;
-        Some((cur.0.saturating_sub(base.0), cur.1.saturating_sub(base.1)))
+        self.last_totals.get(sel).map(|(rx, tx, _)| (*rx, *tx))
     }
 
     /// 指定接口的 Alive Σ(--json 全接口用)
     pub fn alive_for(&self, name: &str) -> Option<(u64, u64)> {
-        let cur = self.last_totals.get(name)?;
-        let base = self.boot_totals.get(name)?;
-        Some((cur.0.saturating_sub(base.0), cur.1.saturating_sub(base.1)))
+        self.last_totals.get(name).map(|(rx, tx, _)| (*rx, *tx))
     }
 
     pub fn selected_rates(&self) -> Option<IfaceRates> {
