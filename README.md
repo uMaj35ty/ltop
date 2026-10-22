@@ -43,6 +43,13 @@ versioned field reference. The companion agent skill
 ([docs/skills/ltop-observe/SKILL.md](docs/skills/ltop-observe/SKILL.md))
 teaches agents when and how to use it, with diagnostic recipes.
 
+Measured on a live desktop (same diagnostic question — "what is using the
+network"): the traditional shell-command combination (`ss -tin` + `ps aux` +
+`df -h` + `ip -s link`) came to ~22k tokens, while `ltop --json` filtered
+with `jq` to the relevant fields came to ~1.7k — **~92 % fewer input
+tokens**, with byte-exact socket counters instead of screen-scraped tables.
+The unfiltered full snapshot is ~8k tokens.
+
 ## Themes
 
 ltop reads btop-compatible theme files — see
