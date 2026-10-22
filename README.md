@@ -171,6 +171,15 @@ sudo cp deploy/ltop-bpf.service /etc/systemd/system/
 sudo systemctl enable --now ltop-bpf # enable per-process/per-connection accounting
 ```
 
+**Upgrading**: re-deploy the helper together with the TUI — a stale
+`/usr/local/bin/ltop-bpf` keeps writing its snapshot to the old path and
+per-process accounting silently zeroes:
+
+```bash
+sudo cp target/release/ltop-bpf /usr/local/bin/
+sudo systemctl restart ltop-bpf
+```
+
 Binaries: `ltop` and `ltop-bpf` (privileged collector). Release tarballs and the
 AUR package ship a `loli` symlink as an out-of-the-box alias (`-h` follows the
 invoked name); `cargo install` users can add it with `ln -s ltop loli`.
