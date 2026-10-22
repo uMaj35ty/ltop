@@ -225,6 +225,8 @@ python3 scripts/snap-diff.py      # sample the snapshot, print per-pid raw delta
 | `↑↓` / `PgUp` `PgDn` / wheel | move selection / scroll lists; the wheel scrolls the list under the cursor, clicking a row selects it (btop-style, no visible scrollbar) |
 | `enter` on a lan row | pin the neighbour to the top (red highlight) **and filter CONNS to that peer**; `enter` again unpins and clears; `esc`/`f` also clear |
 | `enter` on a conns/procs row | detail panel: processes show exited state, captured command line, UDP breakdown and uptime; connections show protocol, owner, lifetime, totals and rates; `space`/`t` pin (tracked rows stay on top), `k` kill, `s` relaunch |
+| `z` | zoom: full-screen the focused lan / conns / procs box; press again or `esc` to restore (zoom has its own footer) |
+| `Home` / `End` / `g` / `G` | jump to the first / last row of the focused list (scroll-only boxes jump their scroll) |
 | `k` | SIGTERM the selected process (needs "global kill" enabled in settings) |
 | `L` | start/stop the monitoring log |
 | `s` | LAN sweep on/off |
@@ -240,6 +242,10 @@ their last state; the tombstone TTL is configurable in settings).
   a 10–40 % gap between the two is expected
 - **CONNS**: TCP Σ counts since the connection was established (kernel
   semantics, including before ltop started); UDP Σ is session-accumulated
+- **NET box Σs**: **session Σ** = bytes since ltop started (resets with the
+  reset key); **alive Σ** ≈ the interface's total since boot — the kernel
+  counter as-is (an interface that appears later, e.g. a VPN tunnel, counts
+  from its creation)
 - Traffic through a proxy is attributed to the **proxy process**
 
 ## How it works
