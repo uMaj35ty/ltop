@@ -87,6 +87,89 @@ jobs:
             ltop-*-${{ matrix.slug }}.tar.gz
             SHA256SUMS-${{ matrix.slug }}
 
+  # 发版后自动刷新 homebrew tap(uMaj35ty/homebrew-tap);TAP_TOKEN =
+  # fine-grained PAT(contents:write @ homebrew-tap),仓库 Settings→Secrets 配置
+  update-tap:
+    needs: [build, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          merge-multiple: true
+      - name: Generate formula and push tap
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          VER="${TAG#v}"
+          SHA_M_ARM=$(sha256sum "ltop-${VER}-aarch64-darwin.tar.gz" | cut -d' ' -f1)
+          SHA_M_X86=$(sha256sum "ltop-${VER}-x86_64-darwin.tar.gz" | cut -d' ' -f1)
+          SHA_L_ARM=$(sha256sum "ltop-${VER}-aarch64-linux.tar.gz" | cut -d' ' -f1)
+          SHA_L_X86=$(sha256sum "ltop-${VER}-x86_64-linux.tar.gz" | cut -d' ' -f1)
+          mkdir -p Formula
+          sed -e "s@__VER__@${VER}@g" -e "s@__TAG__@${TAG}@g" \
+              -e "s@__SHA_M_ARM__@${SHA_M_ARM}@" -e "s@__SHA_M_X86__@${SHA_M_X86}@" \
+              -e "s@__SHA_L_ARM__@${SHA_L_ARM}@" -e "s@__SHA_L_X86__@${SHA_L_X86}@" \
+              > Formula/ltop.rb <<'RUBY'
+          class Ltop < Formula
+            desc "btop-styled TUI monitor for local network traffic, LAN neighbours and disk I/O"
+            homepage "https://github.com/uMaj35ty/ltop"
+            version "__VER__"
+
+            on_macos do
+              on_arm do
+                url "https://github.com/uMaj35ty/ltop/releases/download/__TAG__/ltop-__VER__-aarch64-darwin.tar.gz"
+                sha256 "__SHA_M_ARM__"
+              end
+              on_intel do
+                url "https://github.com/uMaj35ty/ltop/releases/download/__TAG__/ltop-__VER__-x86_64-darwin.tar.gz"
+                sha256 "__SHA_M_X86__"
+              end
+            end
+            on_linux do
+              on_arm do
+                url "https://github.com/uMaj35ty/ltop/releases/download/__TAG__/ltop-__VER__-aarch64-linux.tar.gz"
+                sha256 "__SHA_L_ARM__"
+              end
+              on_intel do
+                url "https://github.com/uMaj35ty/ltop/releases/download/__TAG__/ltop-__VER__-x86_64-linux.tar.gz"
+                sha256 "__SHA_L_X86__"
+              end
+            end
+
+            def install
+              bin.install "ltop"
+              on_linux do
+                bin.install "ltop-bpf"
+              end
+              bin.install_symlink "ltop" => "loli"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/ltop --version")
+            end
+          end
+          RUBY
+          git config --global user.name "ltop-release-bot"
+          git config --global user.email "actions@users.noreply.github.com"
+          if git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/uMaj35ty/homebrew-tap.git" tap 2>/dev/null; then
+            cp Formula/ltop.rb tap/Formula/ltop.rb 2>/dev/null || { mkdir -p tap/Formula && cp Formula/ltop.rb tap/; }
+            cd tap
+            git add Formula/ltop.rb
+            git commit -m "ltop ${VER}"
+            git push
+          else
+            git init -b main tap-work
+            cd tap-work
+            mkdir Formula
+            cp ../Formula/ltop.rb Formula/
+            git add Formula/ltop.rb
+            git commit -m "ltop ${VER}"
+            git remote add origin "https://x-access-token:${TAP_TOKEN}@github.com/uMaj35ty/homebrew-tap.git"
+            git push -u origin main
+          fi
+
   release:
     needs: [build, build-macos]
     runs-on: ubuntu-latest

@@ -29,6 +29,12 @@
 cargo install ltop
 ```
 
+Homebrew(macOS 与 Linux,预编译二进制,v0.2.1 起提供):
+
+```bash
+brew install uMaj35ty/ltop/ltop
+```
+
 AUR:`ltop-bin`——待 AUR 开放注册后提供(打包件已就绪)。
 
 ## 截图
