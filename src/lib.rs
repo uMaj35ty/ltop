@@ -1053,6 +1053,7 @@ mod tests {
             app.lan.neighbors.insert(ip, crate::collect::lan::Neighbor {
                 ip,
                 mac: None,
+mac_hidden: false,
                 iface: "eth0".into(),
                 complete: true,
                 hostname: None,
@@ -1402,6 +1403,7 @@ mod tests {
         let mk = |ip: Ipv4Addr, host: &str| Neighbor {
             ip,
             mac: None,
+mac_hidden: false,
             iface: "eth0".into(),
             complete: true,
             hostname: Some(host.into()),

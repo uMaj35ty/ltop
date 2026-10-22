@@ -1314,7 +1314,11 @@ fn neighbor_row(
         Some(c) => Style::new().fg(base_fg).bg(c),
         None => Style::new().fg(base_fg),
     };
-    let mac_plain = nb.mac.clone().unwrap_or_else(|| "expired".into());
+    let mac_plain = if nb.mac_hidden {
+        "—".to_string()
+    } else {
+        nb.mac.clone().unwrap_or_else(|| "expired".into())
+    };
     Row::new([
         Cell::from(Line::from(vec![
             Span::styled(marker.to_string(), fg(color)),
@@ -3341,6 +3345,7 @@ mod tests {
                 crate::collect::lan::Neighbor {
                     ip: format!("10.0.0.{}", k + 1).parse().unwrap(),
                     mac: None,
+mac_hidden: false,
                     iface: "eth0".into(),
                     complete: true,
                     hostname: None,
@@ -3506,6 +3511,7 @@ mod tests {
                 crate::collect::lan::Neighbor {
                     ip: format!("10.0.0.{}", k + 1).parse().unwrap(),
                     mac: None,
+mac_hidden: false,
                     iface: "eth0".into(),
                     complete: true,
                     hostname: None,

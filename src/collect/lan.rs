@@ -46,6 +46,9 @@ impl LanSort {
 pub struct Neighbor {
     pub ip: Ipv4Addr,
     pub mac: Option<String>,
+    /// mac:系统对非 Apple 签名二进制脱敏邻居 MAC——UI 显示 "—" 而非
+    /// "expired"(Linux sweep 猜测语义)
+    pub mac_hidden: bool,
     pub iface: String,
     pub complete: bool,
     pub hostname: Option<String>,
@@ -75,6 +78,13 @@ pub struct LanCollector {
     /// mac:上次主动触发本地网络授权弹窗的时间(节流)
     #[cfg(target_os = "macos")]
     mdns_probe_last: Option<Instant>,
+    /// mac:RTM_GET 子网扫描(邻居表枚举被拦后的手工逐条替代)
+    #[cfg(target_os = "macos")]
+    rt_scan_done: Option<mpsc::Receiver<Vec<(Ipv4Addr, u16)>>>,
+    #[cfg(target_os = "macos")]
+    rt_scan_busy: bool,
+    #[cfg(target_os = "macos")]
+    rt_scan_last: Option<Instant>,
     resolving: HashSet<Ipv4Addr>,
     hostname_tx: Sender<(Ipv4Addr, Option<String>)>,
     hostname_rx: Receiver<(Ipv4Addr, Option<String>)>,
@@ -102,6 +112,12 @@ impl LanCollector {
             arp_blocked: false,
             #[cfg(target_os = "macos")]
             mdns_probe_last: None,
+            #[cfg(target_os = "macos")]
+            rt_scan_done: None,
+            #[cfg(target_os = "macos")]
+            rt_scan_busy: false,
+            #[cfg(target_os = "macos")]
+            rt_scan_last: None,
             resolving: HashSet::new(),
             hostname_tx: tx,
             hostname_rx: rx,
@@ -119,7 +135,95 @@ impl LanCollector {
         self.drain_hostnames();
         self.maybe_sweep(now);
         #[cfg(target_os = "macos")]
-        self.maybe_probe_local_network(now);
+        {
+            self.maybe_probe_local_network(now);
+            self.maybe_rt_scan(now);
+            self.drain_rt_scan(now);
+        }
+    }
+
+    /// mac:邻居表枚举被隐私机制拦死(sysctl 空、RTM 单条 MAC 脱敏),但
+    /// 单条查询的「条目是否存在 + 归属接口」是真的——后台逐条探测子网,
+    /// 重建无 MAC 的邻居列表(IP/主机名/流量联动可用)
+    #[cfg(target_os = "macos")]
+    fn maybe_rt_scan(&mut self, now: Instant) {
+        if self.rt_scan_busy || self.subnets.is_empty() {
+            return;
+        }
+        if self
+            .rt_scan_last
+            .is_some_and(|t| now.duration_since(t) < Duration::from_secs(30))
+        {
+            return;
+        }
+        let Some((_, net, prefix)) = self.pick_subnet() else {
+            return;
+        };
+        let (tx, rx) = mpsc::channel();
+        self.rt_scan_busy = true;
+        self.rt_scan_last = Some(now);
+        self.rt_scan_done = Some(rx);
+        thread::spawn(move || {
+            let pid = std::process::id();
+            let mut seq = 1u32;
+            let mut found = Vec::new();
+            for ip in host_addrs(net, prefix) {
+                seq = seq.wrapping_add(1);
+                if let Some(e) = crate::collect::lan_rtget::probe(ip, seq, pid) {
+                    found.push((ip, e.if_index));
+                }
+            }
+            let _ = tx.send(found);
+        });
+    }
+
+    #[cfg(target_os = "macos")]
+    fn drain_rt_scan(&mut self, now: Instant) {
+        let Some(rx) = &self.rt_scan_done else {
+            return;
+        };
+        let Ok(found) = rx.try_recv() else {
+            return;
+        };
+        self.rt_scan_busy = false;
+        self.rt_scan_done = None;
+        for (ip, if_index) in found {
+            let Some(iface) = if_index_to_name(if_index) else {
+                continue;
+            };
+            if iface == "lo0" || iface.is_empty() {
+                continue;
+            }
+            let is_gateway = self.gateways.contains(&ip);
+            let is_self = self.own_ips.contains(&ip);
+            match self.neighbors.get_mut(&ip) {
+                Some(n) => {
+                    n.iface = iface;
+                    n.mac = None;
+                    n.mac_hidden = true;
+                    n.complete = true;
+                    n.is_gateway = is_gateway;
+                    n.is_self = is_self;
+                    n.last_seen = now;
+                }
+                None => {
+                    self.neighbors.insert(
+                        ip,
+                        Neighbor {
+                            ip,
+                            mac: None,
+                            mac_hidden: true,
+                            iface,
+                            complete: true,
+                            hostname: None,
+                            is_gateway,
+                            is_self,
+                            last_seen: now,
+                        },
+                    );
+                }
+            }
+        }
     }
 
     /// mac:被隐私机制拦截时,系统不会主动弹「本地网络」授权框(责任进程
@@ -261,6 +365,7 @@ impl LanCollector {
                         Neighbor {
                             ip,
                             mac,
+                            mac_hidden: false,
                             iface,
                             complete,
                             hostname: None,
@@ -775,6 +880,7 @@ mod tests {
             c.neighbors.insert(ip, Neighbor {
                 ip,
                 mac: None,
+mac_hidden: false,
                 iface: "eth0".into(),
                 complete: true,
                 hostname: None,
@@ -994,6 +1100,32 @@ mod tests {
         assert_eq!(rows.len(), 4);
     }
 
+    /// 诊断:RTM 扫描真机跑 40 秒看邻居(仅 mac、人工排查用)
+    #[test]
+    #[cfg(target_os = "macos")]
+    #[ignore = "diagnostic"]
+    fn lan_rt_scan_live_debug() {
+        let gw: std::net::Ipv4Addr = "192.168.121.1".parse().unwrap();
+        eprintln!(
+            "single probe gw: {:?}",
+            crate::collect::lan_rtget::probe(gw, 1, std::process::id())
+        );
+        let mut c = LanCollector::new();
+        c.sweep_enabled = false;
+        let t0 = std::time::Instant::now();
+        while t0.elapsed() < std::time::Duration::from_secs(40) {
+            c.sample();
+            thread::sleep(std::time::Duration::from_millis(500));
+        }
+        eprintln!("neighbors {} 个", c.neighbors.len());
+        for n in c.sorted_neighbors() {
+            eprintln!(
+                "  {} if={} gw={} self={} hidden={} host={:?}",
+                n.ip, n.iface, n.is_gateway, n.is_self, n.mac_hidden, n.hostname
+            );
+        }
+    }
+
     #[test]
     fn rejects_malformed_arp_lines() {
         assert!(parse_arp_an("garbage").is_empty());
@@ -1003,4 +1135,18 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].1, None);
     }
+}
+
+/// mac:接口索引 → 接口名(libc::if_indextoname)
+#[cfg(target_os = "macos")]
+fn if_index_to_name(idx: u16) -> Option<String> {
+    let mut buf = [0 as libc::c_char; libc::IF_NAMESIZE];
+    // SAFETY: buf 为全有权的 IF_NAMESIZE 缓冲
+    let p = unsafe { libc::if_indextoname(idx as libc::c_uint, buf.as_mut_ptr()) };
+    if p.is_null() {
+        return None;
+    }
+    // SAFETY: 成功时 p 指向 buf 内的 NUL 结尾字符串
+    let s = unsafe { std::ffi::CStr::from_ptr(p) };
+    Some(s.to_string_lossy().into_owned())
 }
