@@ -17,6 +17,9 @@ pub enum GraphMode {
     Heartbeat,
     /// line + soft fill below (ltop extension)
     Hybrid,
+    /// seamless half-block bars (ltop extension): 8 levels per character,
+    /// immune to the per-glyph gaps braille fonts can show
+    Block,
 }
 
 impl GraphMode {
@@ -26,7 +29,8 @@ impl GraphMode {
             Self::Centered => Self::Line,
             Self::Line => Self::Heartbeat,
             Self::Heartbeat => Self::Hybrid,
-            Self::Hybrid => Self::Solid,
+            Self::Hybrid => Self::Block,
+            Self::Block => Self::Solid,
         }
     }
 
@@ -37,6 +41,7 @@ impl GraphMode {
             Self::Line => "line",
             Self::Heartbeat => "heart",
             Self::Hybrid => "hybrid",
+            Self::Block => "block",
         }
     }
 }
@@ -116,6 +121,9 @@ pub fn braille_graph(
         series = padded;
     }
     let max = series.iter().copied().fold(0.0f64, f64::max).max(max_floor);
+    if mode == GraphMode::Block {
+        return block_graph(&series, width, height, max, grad);
+    }
     let pct: Vec<f64> = series.iter().map(|v| v.max(0.0) / max * 100.0).collect();
     let fills: Vec<usize> = series
         .iter()
@@ -265,7 +273,7 @@ pub fn braille_graph(
                         prev = Some((x, y));
                     }
                 }
-                GraphMode::Solid => unreachable!(),
+                GraphMode::Solid | GraphMode::Block => unreachable!(),
             }
             // braille dot bits: char c = dot columns 2c (x0) + 2c+1 (x1)
             const X0: [u32; 4] = [0x01, 0x02, 0x04, 0x40];
@@ -301,6 +309,43 @@ pub fn braille_graph(
         let s: String = row
             .iter()
             .map(|&b| char::from_u32(0x2800 + b).unwrap_or(' '))
+            .collect();
+        out.push(Line::from(Span::styled(s, Style::new().fg(color))));
+    }
+    out
+}
+
+/// Half-block bar graph (GraphMode::Block): one character per sample per
+/// row, 8 height levels via the vertical block set. No braille glyphs —
+/// immune to the per-glyph gaps that terminal fonts render around braille.
+fn block_graph(
+    series: &[f64],
+    width: usize,
+    height: usize,
+    max: f64,
+    grad: Gradient,
+) -> Vec<Line<'static>> {
+    const BLOCKS: [char; 9] = [' ', '\u{2581}', '\u{2582}', '\u{2583}', '\u{2584}', '\u{2585}', '\u{2586}', '\u{2587}', '\u{2588}'];
+    let blocks_h = height * 8;
+    let fills: Vec<usize> = series
+        .iter()
+        .map(|v| ((v.max(0.0) / max * blocks_h as f64).round() as usize).min(blocks_h))
+        .collect();
+    let mut out = Vec::with_capacity(height);
+    for l in 0..height {
+        let t = if height <= 1 {
+            0.5
+        } else {
+            l as f32 / (height - 1) as f32
+        };
+        let color = grad.at(t);
+        let k = height - 1 - l; // 第 k 个字符(0 = 最底)
+        let s: String = (0..width)
+            .map(|c| {
+                let fill = fills[c];
+                let idx = fill.saturating_sub(k * 8).min(8);
+                BLOCKS[idx]
+            })
             .collect();
         out.push(Line::from(Span::styled(s, Style::new().fg(color))));
     }
@@ -447,5 +492,38 @@ mod tests {
         let row_bottom = flat(&lines[1]);
         assert_eq!(row_top.chars().nth(1), Some('\u{28b8}')); // col3: full right col
         assert_eq!(row_bottom.chars().nth(1), Some('\u{28fc}')); // flat + jump bottom
+    }
+}
+
+#[cfg(test)]
+mod block_tests {
+    use super::*;
+    use ratatui::style::Color;
+
+    fn flat(l: &Line) -> String {
+        l.spans.iter().map(|s| s.content.clone()).collect()
+    }
+
+    #[test]
+    fn block_graph_height_levels() {
+        // 全 100:每列填满所有行,底行全 █
+        let data = vec![100.0; 6];
+        let lines = block_graph(&data, 6, 2, 100.0, Gradient([Color::Green; 3]));
+        assert_eq!(lines.len(), 2);
+        assert_eq!(flat(&lines[1]), "██████");
+        // 顶行:fill=16(k=1 时 16-8=8 → 全 █)
+        assert_eq!(flat(&lines[0]), "██████");
+    }
+
+    #[test]
+    fn block_graph_partial_levels() {
+        // 单行、值 50(4/8):▄
+        let data = vec![50.0; 4];
+        let lines = block_graph(&data, 4, 1, 100.0, Gradient([Color::Green; 3]));
+        assert_eq!(flat(&lines[0]), "▄▄▄▄");
+        // 值 0:空
+        let zero = vec![0.0; 4];
+        let lines = block_graph(&zero, 4, 1, 100.0, Gradient([Color::Green; 3]));
+        assert_eq!(flat(&lines[0]), "    ");
     }
 }
