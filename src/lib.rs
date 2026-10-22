@@ -16,7 +16,8 @@ use anyhow::Result;
 use crossterm::{
     event::{
         self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind,
-        KeyModifiers, MouseEventKind,
+        KeyModifiers, KeyboardEnhancementFlags, MouseEventKind, PopKeyboardEnhancementFlags,
+        PushKeyboardEnhancementFlags,
     },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -145,13 +146,26 @@ pub fn cli_main() -> Result<()> {
 
 fn setup() -> Result<Tui> {
     enable_raw_mode()?;
-    execute!(stdout(), EnterAlternateScreen, EnableMouseCapture)?;
+    // DISAMBIGUATE_ESCAPE_CODES:esc 编码为完整 CSI 序列,消除裸 0x1B 与
+    // 鼠标 SGR 序列的歧义——ssh 分包下 esc 曾被逐字节降级,鼠标事件被
+    // 拆成数字字符误触盒子 hide(取证实测)。不支持的终端忽略此请求。
+    execute!(
+        stdout(),
+        EnterAlternateScreen,
+        EnableMouseCapture,
+        PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
+    )?;
     Ok(Terminal::new(CrosstermBackend::new(stdout()))?)
 }
 
 fn restore() -> Result<()> {
     disable_raw_mode()?;
-    execute!(stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
+    execute!(
+        stdout(),
+        PopKeyboardEnhancementFlags,
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
     Ok(())
 }
 
@@ -569,10 +583,10 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
             _ => {}
         },
         MenuState::Graphs => match code {
-            KeyCode::Char('n') => app.graph_net = app.graph_net.next(),
-            KeyCode::Char('d') => app.graph_disk = app.graph_disk.next(),
+            KeyCode::Char('n') => app.graph_net = app.graph_net.next_with_block(),
+            KeyCode::Char('d') => app.graph_disk = app.graph_disk.next_with_block(),
             KeyCode::Char('a') => {
-                let s = app.graph_net.next();
+                let s = app.graph_net.next_with_block();
                 app.graph_net = s;
                 app.graph_disk = s;
             }

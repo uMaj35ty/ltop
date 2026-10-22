@@ -32,6 +32,7 @@ impl Lang {
         }
     }
 
+    #[cfg(not(test))]
     fn parse(s: &str) -> Option<Self> {
         match s {
             "en" => Some(Self::En),
@@ -252,6 +253,7 @@ impl Default for Config {
     }
 }
 
+#[cfg(not(test))]
 fn parse_layout(s: &str) -> Option<LayoutMode> {
     match s {
         "classic" => Some(LayoutMode::Classic),
@@ -261,6 +263,7 @@ fn parse_layout(s: &str) -> Option<LayoutMode> {
     }
 }
 
+#[cfg(not(test))]
 fn parse_graph(s: &str) -> Option<GraphMode> {
     match s {
         "bar" => Some(GraphMode::Solid),
@@ -317,6 +320,21 @@ impl Config {
     }
 
     pub fn load() -> Self {
+        // 测试与宿主用户配置双向隔离:App::new 读真实 config 会让渲染类
+        // 测试随宿主的 boxes/lang/layout 漂移(实测:宿主 config 里被误
+        // hide 的盒子令 Air 上 4 个渲染测试失败);save 同理 no-op
+        #[cfg(test)]
+        {
+            Self::default()
+        }
+        #[cfg(not(test))]
+        {
+            Self::load_persisted()
+        }
+    }
+
+    #[cfg(not(test))]
+    fn load_persisted() -> Self {
         let mut cfg = Self::default();
         let Some(path) = Self::path() else {
             return cfg;
@@ -467,6 +485,7 @@ impl Config {
         )
     }
 
+    #[cfg(not(test))]
     pub fn save(&self) {
         if let Some(dir) = Self::config_dir() {
             if fs::create_dir_all(&dir).is_ok() {
@@ -476,4 +495,8 @@ impl Config {
             }
         }
     }
+    // 测试环境 no-op:不写宿主真实 config(与 load 隔离配套)
+    #[cfg(test)]
+    pub fn save(&self) {}
+
 }
