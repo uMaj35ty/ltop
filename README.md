@@ -121,16 +121,15 @@ counted (a documented difference from the Linux eBPF path). Bare-terminal
 framebuffer fonts may miss braille glyphs; rendering over SSH or in a
 proper terminal emulator shows them all.
 
-macOS also gates local-network data (neighbour table, interface byte
-counters) behind a privacy prompt, and the prompt targets the *terminal
-app* — command-line tools never appear in the authorization list by
-themselves. While the LAN box is blocked, ltop probes the local network
-every few seconds so the dialog appears on its own; approve the terminal
-it runs under. If the dialog was dismissed before, run
-`tccutil reset LocalNetwork` and start ltop again, or enable the terminal
-manually under System Settings → Privacy & Security → Local Network.
-Over SSH the restriction applies to the ltop binary itself; run ltop in a
-local terminal for full data.
+macOS hides parts of the local network from binaries that are not signed
+by Apple — independent of the Local Network privacy toggle: the neighbour
+table enumerates as empty, single-entry route queries answer with the MAC
+sanitized to the interface's synthetic address, and `getifaddrs` byte
+counters read frozen (all cross-checked in the same second against the
+real values seen by Apple-signed tools). ltop routes around this: the NET
+box counts via `netstat -ib`, and the LAN box rebuilds its neighbour list
+by probing the kernel cache entry-by-entry over the route socket — IPs,
+mDNS hostnames and traffic links are real; MAC addresses show as "—".
 
 ```bash
 cargo install ltop                   # from crates.io — binaries only, no config

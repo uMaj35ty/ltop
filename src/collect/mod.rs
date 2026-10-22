@@ -1,6 +1,7 @@
 pub mod conn;
 pub mod disk;
 pub mod lan;
+pub mod lan_rtget;
 pub mod macproc;
 pub mod net;
 pub mod nettop;
