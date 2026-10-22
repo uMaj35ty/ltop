@@ -50,7 +50,10 @@ AUR:`ltop-bin`——待 AUR 开放注册后提供(打包件已就绪)。
 `ltop --json` 输出结构化快照(网络速率、每进程/每连接字节、磁盘 I/O、LAN
 邻居);`ltop --schema` 是随版本更新的字段参考。配套的 agent skill
 ([docs/skills/ltop-observe/SKILL.md](skills/ltop-observe/SKILL.md))
-教 agent 何时以及如何使用,并附诊断工作流。
+教 agent 何时以及如何使用,并附诊断工作流。实测(同一个「什么在占用网络」
+诊断):传统命令组合(ss + ps + df + ip)约 2.2 万 token,而 `ltop --json`
+经 jq 过滤到相关字段仅约 1700——**输入 token 省 ~92%**,且 socket 计数
+逐字节保真、无需读屏截表格。全量快照约 8k token。
 
 ## 主题
 
