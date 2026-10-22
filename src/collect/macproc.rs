@@ -175,7 +175,9 @@ pub fn disk_io(pid: u32) -> Option<(u64, u64)> {
 /// proc_vnodepathinfo = pvi_cdir(vnode_info_path) + pvi_rdir(same);
 /// vnode_info_path = vnode_info(152B) + vip_path[1024], cwd 路径在偏移 152
 pub fn proc_cwd(pid: u32) -> Option<String> {
-    let mut buf = [0u8; 152 + 1024];
+    // 内核要求 buffer ≥ 整个 proc_vnodepathinfo(= 2352:pvi_cdir + pvi_rdir
+    // 各 1176);只给前一半时 proc_pidinfo 直接失败返回 0
+    let mut buf = [0u8; 1176 * 2];
     // SAFETY: buf 精确等于 PROC_PIDVNODEPATHINFO_SIZE,flavor=9
     let n = unsafe {
         proc_pidinfo(
@@ -558,5 +560,19 @@ mod tests {
         } else {
             eprintln!("syncthing 不在运行");
         }
+    }
+}
+
+#[cfg(test)]
+#[cfg(target_os = "macos")]
+mod live_tests {
+    /// 诊断:proc_cwd 真机验证(仅 mac、人工排查用)
+    #[test]
+    #[ignore = "diagnostic"]
+    fn proc_cwd_live_debug() {
+        eprintln!(
+            "own cwd: {:?}",
+            super::proc_cwd(std::process::id())
+        );
     }
 }

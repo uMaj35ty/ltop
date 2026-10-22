@@ -2667,13 +2667,18 @@ fn help_rows(lang: Lang) -> Vec<(String, String)> {
 fn draw_help_popup(f: &mut Frame, area: Rect, app: &App) {
     let rows = help_rows(app.lang);
     // 双列键位把总高从 ~33 行压到 ~23 行:旧版 h 估算 (+8) 低估头部开销
-    // 且撞终端高度封顶后无滚动,底部(数据口径段/press any)固定被裁
-    let two_col = area.width >= 84;
-    let half = rows.len().div_ceil(2);
+    // 且撞终端高度封顶后无滚动,底部(数据口径段/press any)固定被裁。
+    // 宽度按内容精确计算:双列放不下(横向截断)自动回退单列
     let kw = rows.iter().map(|(k, _)| k.chars().count()).max().unwrap_or(0);
     let desc_w = |rs: &[(String, String)]| {
         rs.iter().map(|(_, d)| d.chars().count()).max().unwrap_or(0)
     };
+    let dw_all = desc_w(&rows);
+    let col_w = 3 + kw + 2 + dw_all + 3;
+    let w_two = (2 + 2 * col_w) as u16;
+    let w_one = (2 + 3 + kw + 2 + dw_all + 4) as u16;
+    let two_col = area.width >= w_two;
+    let half = rows.len().div_ceil(2);
     let mut lines: Vec<Line> = Vec::new();
     lines.push(Line::from(vec![
         Span::styled(format!(" ltop v{}", env!("CARGO_PKG_VERSION")), bold(accent())),
@@ -2733,7 +2738,7 @@ fn draw_help_popup(f: &mut Frame, area: Rect, app: &App) {
     }
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(app.lang.tr("press_any"), dim())));
-    let w = if two_col { 92.min(area.width) } else { 62.min(area.width) };
+    let w = if two_col { w_two } else { w_one.min(area.width) };
     let h = (lines.len() as u16 + 2).min(area.height);
     let popup = centered(area, w, h);
     f.render_widget(Clear, popup);
