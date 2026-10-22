@@ -45,6 +45,16 @@ fn early_exit(args: &[String]) -> Option<Result<()>> {
         println!("ltop {}", env!("CARGO_PKG_VERSION"));
         return Some(Ok(()));
     }
+    // 未知旗标明确报错:静默忽略会让 typo 直接落进 TUI(--json 打错时
+    // 用户以为拿到了 JSON)
+    let known = [
+        "--json", "--schema", "--dump", "--log", "--log-interval", "--follow-theme",
+        "--replay", "--top", "--csv", "--help", "-h", "--version", "-V",
+    ];
+    if let Some(bad) = args.iter().skip(1).find(|a| a.starts_with("--") && !known.contains(&a.as_str())) {
+        eprintln!("ltop: unknown option {bad} (try --help)");
+        return Some(Err(anyhow::anyhow!("unknown option")));
+    }
     None
 }
 
@@ -260,6 +270,18 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
     match app.menu {
         MenuState::None => match code {
             KeyCode::Char('q') => app.quit = true,
+            // z:焦点盒(LAN/CONNS/PROCS)全屏 zoom;再按退出。esc 在 zoom
+            // 中也只退出 zoom(不触发清 focus/选中)
+            KeyCode::Char('z') => {
+                if app.zoom.is_some() {
+                    app.zoom = None;
+                } else if matches!(app.last_focus, crate::app::BOX_LAN | crate::app::BOX_CONNS | crate::app::BOX_PROCS)
+                    && app.visible[app.last_focus]
+                {
+                    app.zoom = Some(app.last_focus);
+                }
+            }
+            KeyCode::Esc if app.zoom.is_some() => app.zoom = None,
             KeyCode::Char(' ') => app.paused = !app.paused,
             KeyCode::Char('/') => {
                 // 打开时载入当前过滤,可直接编辑;清空后 enter 即重置
