@@ -171,6 +171,32 @@ pub fn disk_io(pid: u32) -> Option<(u64, u64)> {
     Some((u64_at(&buf, 136), u64_at(&buf, 144)))
 }
 
+/// working directory of a pid (own uid) via PROC_PIDVNODEPATHINFO:
+/// proc_vnodepathinfo = pvi_cdir(vnode_info_path) + pvi_rdir(same);
+/// vnode_info_path = vnode_info(152B) + vip_path[1024], cwd 路径在偏移 152
+pub fn proc_cwd(pid: u32) -> Option<String> {
+    let mut buf = [0u8; 152 + 1024];
+    // SAFETY: buf 精确等于 PROC_PIDVNODEPATHINFO_SIZE,flavor=9
+    let n = unsafe {
+        proc_pidinfo(
+            pid as c_int,
+            9, // PROC_PIDVNODEPATHINFO
+            0,
+            buf.as_mut_ptr() as *mut c_void,
+            buf.len() as c_int,
+        )
+    };
+    if n <= 0 {
+        return None;
+    }
+    let s = c_str(&buf[152..(152 + 1024).min(buf.len())]);
+    if s.is_empty() {
+        None
+    } else {
+        Some(s)
+    }
+}
+
 /// full executable path of a pid (own uid), as a one-element argv
 pub fn cmdline(pid: u32) -> Option<Vec<String>> {
     let mut buf = [0u8; 1024 + 1];
