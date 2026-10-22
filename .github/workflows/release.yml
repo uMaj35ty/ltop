@@ -87,8 +87,8 @@ jobs:
             ltop-*-${{ matrix.slug }}.tar.gz
             SHA256SUMS-${{ matrix.slug }}
 
-  # 发版后自动刷新 homebrew tap(uMaj35ty/homebrew-tap);TAP_TOKEN =
-  # fine-grained PAT(contents:write @ homebrew-tap),仓库 Settings→Secrets 配置
+  # 发版后自动刷新 homebrew tap(uMaj35ty/homebrew-ltop);TAP_TOKEN =
+  # fine-grained PAT(contents:write @ homebrew-ltop),仓库 Settings→Secrets 配置
   update-tap:
     needs: [build, build-macos]
     runs-on: ubuntu-latest
@@ -153,7 +153,7 @@ jobs:
           RUBY
           git config --global user.name "ltop-release-bot"
           git config --global user.email "actions@users.noreply.github.com"
-          if git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/uMaj35ty/homebrew-tap.git" tap 2>/dev/null; then
+          if git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/uMaj35ty/homebrew-ltop.git" tap 2>/dev/null; then
             cp Formula/ltop.rb tap/Formula/ltop.rb 2>/dev/null || { mkdir -p tap/Formula && cp Formula/ltop.rb tap/; }
             cd tap
             git add Formula/ltop.rb
@@ -166,7 +166,7 @@ jobs:
             cp ../Formula/ltop.rb Formula/
             git add Formula/ltop.rb
             git commit -m "ltop ${VER}"
-            git remote add origin "https://x-access-token:${TAP_TOKEN}@github.com/uMaj35ty/homebrew-tap.git"
+            git remote add origin "https://x-access-token:${TAP_TOKEN}@github.com/uMaj35ty/homebrew-ltop.git"
             git push -u origin main
           fi
 
