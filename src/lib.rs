@@ -807,6 +807,23 @@ fn handle_mouse(app: &mut App, m: &crossterm::event::MouseEvent) {
             }
         }
         MouseEventKind::Down(MouseButton::Left) => {
+            // 双击(同格 400ms 内两次):直接打开该行 detail(procs/conns)
+            if let Some((t0, c0, r0)) = app.last_click {
+                if t0.elapsed() < std::time::Duration::from_millis(400)
+                    && c0 == m.column
+                    && r0 == m.row
+                {
+                    app.last_click = None;
+                    let idx = ui::hit_box(m.column, m.row);
+                    if let Some(b) = idx {
+                        if let Some(id) = ui::selected_id(app, b) {
+                            app.menu = crate::app::MenuState::Detail(b, id);
+                        }
+                    }
+                    return;
+                }
+            }
+            app.last_click = Some((std::time::Instant::now(), m.column, m.row));
             // clicking a procs/conns data row selects (and focuses) it;
             // clicking anywhere else cancels every focus
             let hit = ui::hit_box(m.column, m.row)

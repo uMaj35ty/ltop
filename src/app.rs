@@ -187,6 +187,8 @@ pub struct App {
     pub proc_expand_default: bool,
     /// zoom:独占全屏的盒(LAN/CONNS/PROCS;z 进入/退出;None=正常)
     pub zoom: Option<usize>,
+    /// 鼠标双击检测:上次左键按下(时间, 列, 行)
+    pub last_click: Option<(std::time::Instant, u16, u16)>,
     /// detail 弹窗的字段游标(↑↓ 移动,y 复制选中值)
     pub detail_sel: usize,
     /// 运行中实时跟随 omarchy 主题重写(--follow-theme / theme_live_follow);
@@ -247,6 +249,7 @@ impl App {
             expanded: std::collections::HashSet::new(),
             proc_expand_default: false,
             zoom: None,
+            last_click: None,
             detail_sel: 0,
             theme_live_follow: false,
             search_buf: String::new(),

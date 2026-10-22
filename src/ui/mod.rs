@@ -56,16 +56,19 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     let outer = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(area);
 
-    // zoom:焦点盒(LAN/CONNS/PROCS 之一)独占全屏;esc 退出,其余交互照常
-    if let Some(b) = app.zoom {
-        if matches!(b, crate::app::BOX_LAN | crate::app::BOX_CONNS | crate::app::BOX_PROCS)
-            && app.visible[b]
-        {
-            draw_box(f, outer[0], app, b);
-            return;
-        }
-    }
+    let zoom_active = app
+        .zoom
+        .is_some_and(|b| {
+            matches!(b, crate::app::BOX_LAN | crate::app::BOX_CONNS | crate::app::BOX_PROCS)
+                && app.visible[b]
+        });
 
+    if zoom_active {
+        // zoom:焦点盒独占主区;footer 与 popup(MenuState 分派)照常渲染
+        if let Some(b) = app.zoom {
+            draw_box(f, outer[0], app, b);
+        }
+    } else {
     let graph_ids: Vec<usize> = [BOX_NET, BOX_DISKIO]
         .into_iter()
         .filter(|&i| app.visible[i])
@@ -121,7 +124,20 @@ pub fn draw(f: &mut Frame, app: &App) {
         (true, true) => {}
     }
 
+    }
+
     match app.menu {
+        MenuState::None if app.zoom.is_some() => {
+            // zoom 态 footer:该状态下可用的键(与正常态不同)
+            let lang = app.lang;
+            let key = |k: &str, label: &str| footer_key(k, label);
+            let mut spans: Vec<Span> = vec![Span::styled(" ", dim())];
+            spans.extend(key("z / esc", "exit zoom"));
+            spans.extend(key("enter", lang.tr("detail_desc")));
+            spans.extend(key("space", lang.tr("pause")));
+            spans.extend(key("/", lang.tr("search")));
+            f.render_widget(Paragraph::new(Line::from(spans)), outer[1]);
+        }
         MenuState::None => draw_footer(f, outer[1], app),
         MenuState::Search => {
             // 搜索模式:footer 左侧变输入行,实时回显缓冲
