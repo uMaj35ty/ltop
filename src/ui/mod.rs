@@ -1229,9 +1229,9 @@ fn draw_lan(f: &mut Frame, area: Rect, app: &App, focused: bool) {
     let visible = inner.height.saturating_sub(1) as usize;
     if list.is_empty() && app.lan.arp_blocked {
         let tip = if app.lang == Lang::Zh {
-            "macOS 隐私限制:系统设置 → 隐私与安全性 → 本地网络 → 允许本终端"
+            "macOS 隐私限制:邻居 MAC 不可见(签名限制);本行扫描仅覆盖当前子网"
         } else {
-            "macOS privacy: allow this terminal under System Settings → Privacy & Security → Local Network"
+            "macOS privacy: neighbour MACs are hidden (code-signing gate); scan covers the current subnet only"
         };
         f.render_widget(Paragraph::new(vec![Line::from(vec![Span::styled(tip, dim())])]), inner);
         return;
