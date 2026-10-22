@@ -154,16 +154,23 @@ jobs:
           git config --global user.name "ltop-release-bot"
           git config --global user.email "actions@users.noreply.github.com"
           set -x
-          # 统一路径:全新 init,fetch 远端(空仓失败则跳过),提交后 push
+          # 远端有历史:init 后 fetch 并软重置到远端头(避免孤立 root commit
+          # 被拒 non-fast-forward、add/add 冲突),再提交 formula 差异;空仓
+          # fetch 失败则作为首个提交推送
           mkdir taprepo && cd taprepo
           git init -b main
           git remote add origin "https://x-access-token:${TAP_TOKEN}@github.com/uMaj35ty/homebrew-ltop.git"
-          git fetch origin main 2>/dev/null || echo "remote empty or unreachable"
+          if git fetch origin main 2>/dev/null; then
+            git reset --soft FETCH_HEAD
+            git reset FETCH_HEAD
+          else
+            echo "remote empty or unreachable"
+          fi
           mkdir -p Formula
           cp ../Formula/ltop.rb Formula/
           git add Formula/ltop.rb
-          git commit -m "ltop ${VER}"
-          git push -u origin main || { git pull --rebase origin main && git push -u origin main; }
+          git commit -m "ltop ${VER}" || echo "formula unchanged"
+          git push -u origin main
           ls -la Formula/
 
   release:
