@@ -45,6 +45,11 @@ xattr -c ltop-*-darwin.tar.gz
 
 AUR:`ltop-bin`——待 AUR 开放注册后提供(打包件已就绪)。
 
+## 主题
+
+ltop 读取 btop 兼容的主题文件——修复看不清的颜色或构建完整自定义主题见
+[docs/custom-theme.zh-CN.md](custom-theme.zh-CN.md)。
+
 ## 截图
 
 Omarchy 上的 classic 布局,主题跟随桌面:

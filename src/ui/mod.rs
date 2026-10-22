@@ -1689,8 +1689,10 @@ fn overlay_rect(inner: Rect, y: u16) -> Option<Rect> {
 
 /// two-line detail drawn over the selected row
 fn draw_selected(f: &mut Frame, rect: Rect, lines: Vec<Line<'static>>) {
-    let bgc = palette().hi;
-    let fg = contrast_fg(bgc);
+    // 弱着色深底(渐变暗端):overlay 内容的语义色(accent/dim/红绿流量)
+    // 按深底设计——旧实现用 hi 亮底 + 单色 contrast,两行色彩层次全灭。
+    // Paragraph 只铺 bg 不铺 fg,span 各自的显式色全部保留。
+    let bgc = download().at(0.12);
     // wipe the underlying table text first — Paragraph.style only recolors
     // cells, it does not erase the symbols underneath
     f.render_widget(Clear, rect);
@@ -1698,10 +1700,20 @@ fn draw_selected(f: &mut Frame, rect: Rect, lines: Vec<Line<'static>>) {
     while ls.len() < 2 {
         ls.push(Line::from(""));
     }
+    // 左缘竖条:弱底色后的选中锚点
+    let bar_w = 1.min(rect.width);
     f.render_widget(
-        Paragraph::new(ls).style(Style::new().bg(bgc).fg(fg)),
-        rect,
+        Paragraph::new(vec![Line::from("▌"), Line::from("▌")])
+            .style(Style::new().fg(accent()).bg(bgc)),
+        Rect { x: rect.x, y: rect.y, width: bar_w, height: rect.height },
     );
+    let rest = Rect {
+        x: rect.x + bar_w,
+        y: rect.y,
+        width: rect.width.saturating_sub(bar_w),
+        height: rect.height,
+    };
+    f.render_widget(Paragraph::new(ls).style(Style::new().bg(bgc)), rest);
 }
 
 /// two overlay lines for a selected connection
@@ -2295,6 +2307,30 @@ fn draw_settings_popup(f: &mut Frame, area: Rect, app: &App, sel: usize) {
 /// structured field for the detail popup: (label, value)
 type Field = (&'static str, String);
 
+/// detail 弹窗字段值的配色层级:Text=正文,Dl/Up=收发色(与 NET 盒图表
+/// 同色彩语言),Accent=名字,Hi=状态徽章
+#[derive(Clone, Copy, PartialEq)]
+enum ValStyle {
+    Text,
+    Dl,
+    Up,
+    Accent,
+    Hi,
+}
+
+/// detail 弹窗的字段分组:(组标题, 字段组);空标题 = 首组(无标题行)
+type FieldGroup = (&'static str, Vec<(Field, ValStyle)>);
+
+fn val_style(s: ValStyle) -> Style {
+    match s {
+        ValStyle::Text => text(),
+        ValStyle::Dl => Style::new().fg(download().at(0.5)),
+        ValStyle::Up => Style::new().fg(upload().at(0.5)),
+        ValStyle::Accent => Style::new().fg(accent()),
+        ValStyle::Hi => Style::new().fg(hi()),
+    }
+}
+
 fn proc_status_fields(p: &crate::collect::proc::ProcRow) -> Vec<Field> {
     let mut out: Vec<Field> = Vec::new();
     let pid = p.pid;
@@ -2357,7 +2393,7 @@ fn proc_status_fields(p: &crate::collect::proc::ProcRow) -> Vec<Field> {
 fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u64) {
     let mut pid: Option<u32> = None;
     let mut tracked = false;
-    let mut fields: Vec<Field> = Vec::new();
+    let mut groups: Vec<FieldGroup> = Vec::new();
     let mut gone = String::new();
     let mut start_hint = false;
     match box_idx {
@@ -2367,17 +2403,22 @@ fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u
                 tracked = app.tracked.proc_slot(p.pid).is_some();
                 // resident hint: s starts an exited process, restarts a live one
                 start_hint = p.cmdline.is_some();
-                fields.push(("name", p.name.clone()));
-                fields.push(("pid", p.pid.to_string()));
-                fields.extend(proc_status_fields(p));
-                fields.push(("net \u{3a3}\u{2193}", fmt_bytes(p.net_recv as f64)));
-                fields.push(("net \u{3a3}\u{2191}", fmt_bytes(p.net_sent as f64)));
-                fields.push(("net \u{2193}/s", fmt_speed(p.net_rr)));
-                fields.push(("net \u{2191}/s", fmt_speed(p.net_sr)));
-                fields.push(("disk \u{3a3}R", fmt_bytes(p.disk_r as f64)));
-                fields.push(("disk \u{3a3}W", fmt_bytes(p.disk_w as f64)));
-                fields.push(("disk R/s", fmt_speed(p.disk_rr)));
-                fields.push(("disk W/s", fmt_speed(p.disk_wr)));
+                let mut identity: Vec<(Field, ValStyle)> =
+                    vec![(("name", p.name.clone()), ValStyle::Accent), (("pid", p.pid.to_string()), ValStyle::Text)];
+                identity.extend(proc_status_fields(p).into_iter().map(|f| (f, ValStyle::Text)));
+                let traffic = vec![
+                    (("net \u{3a3}\u{2193}", fmt_bytes(p.net_recv as f64)), ValStyle::Dl),
+                    (("net \u{3a3}\u{2191}", fmt_bytes(p.net_sent as f64)), ValStyle::Up),
+                    (("net \u{2193}/s", fmt_speed(p.net_rr)), ValStyle::Dl),
+                    (("net \u{2191}/s", fmt_speed(p.net_sr)), ValStyle::Up),
+                ];
+                let disk = vec![
+                    (("disk \u{3a3}R", fmt_bytes(p.disk_r as f64)), ValStyle::Text),
+                    (("disk \u{3a3}W", fmt_bytes(p.disk_w as f64)), ValStyle::Text),
+                    (("disk R/s", fmt_speed(p.disk_rr)), ValStyle::Text),
+                    (("disk W/s", fmt_speed(p.disk_wr)), ValStyle::Text),
+                ];
+                groups = vec![("", identity), ("traffic", traffic), ("disk", disk)];
             } else {
                 gone = format!("process {id} is gone");
             }
@@ -2386,28 +2427,36 @@ fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u
             if let Some(c) = app.conn.conns.iter().find(|c| c.inode == id) {
                 pid = c.pid;
                 tracked = app.tracked.conn_slot(c.inode).is_some();
-                let state = if c.is_listen() {
-                    "LISTEN"
+                let (state, state_st) = if c.is_listen() {
+                    ("LISTEN", ValStyle::Hi)
                 } else if c.is_tcp() {
-                    "ESTAB"
+                    ("ESTAB", ValStyle::Dl)
                 } else {
-                    "UDP"
+                    ("UDP", ValStyle::Accent)
                 };
                 let proto = if c.is_tcp() { "tcp" } else { "udp" };
-                fields.push(("name", c.proc.clone().unwrap_or_else(|| app.conn.user_name(c.uid))));
+                let mut identity: Vec<(Field, ValStyle)> = vec![(
+                    ("name", c.proc.clone().unwrap_or_else(|| app.conn.user_name(c.uid))),
+                    ValStyle::Accent,
+                )];
                 if let Some(p) = c.pid {
-                    fields.push(("pid", p.to_string()));
+                    identity.push((("pid", p.to_string()), ValStyle::Text));
                 }
-                fields.push(("user", app.conn.user_name(c.uid)));
-                fields.push(("proto", proto.to_string()));
-                fields.push(("state", state.to_string()));
-                fields.push(("local", sock_str(&c.local)));
-                fields.push(("remote", sock_str(&c.remote)));
-                fields.push(("inode", c.inode.to_string()));
-                fields.push(("net \u{2193}", fmt_bytes(c.bytes_recv as f64)));
-                fields.push(("net \u{2191}", fmt_bytes(c.bytes_sent as f64)));
-                fields.push(("net \u{2193}/s", fmt_speed(c.rate_recv)));
-                fields.push(("net \u{2191}/s", fmt_speed(c.rate_sent)));
+                identity.push((("user", app.conn.user_name(c.uid)), ValStyle::Text));
+                let conn = vec![
+                    (("proto", proto.to_string()), ValStyle::Text),
+                    (("state", state.to_string()), state_st),
+                    (("local", sock_str(&c.local)), ValStyle::Text),
+                    (("remote", sock_str(&c.remote)), ValStyle::Text),
+                    (("inode", c.inode.to_string()), ValStyle::Text),
+                ];
+                let traffic = vec![
+                    (("net \u{2193}", fmt_bytes(c.bytes_recv as f64)), ValStyle::Dl),
+                    (("net \u{2191}", fmt_bytes(c.bytes_sent as f64)), ValStyle::Up),
+                    (("net \u{2193}/s", fmt_speed(c.rate_recv)), ValStyle::Dl),
+                    (("net \u{2191}/s", fmt_speed(c.rate_sent)), ValStyle::Up),
+                ];
+                groups = vec![("", identity), ("connection", conn), ("traffic", traffic)];
             } else {
                 gone = format!("connection {id} is gone");
             }
@@ -2428,18 +2477,22 @@ fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u
     }
 
     let w = 92.min(area.width);
-    let lbl_w = fields
+    let lbl_w = groups
         .iter()
-        .map(|(l, _)| l.chars().count())
+        .flat_map(|(_, fs)| fs.iter())
+        .map(|((l, _), _)| l.chars().count())
         .max()
         .unwrap_or(0);
     // values longer than the column wrap onto continuation lines
     let inner_w = w.saturating_sub(2) as usize;
     let chunk_w = inner_w.saturating_sub(lbl_w + 4).max(10);
     let n_lines: usize = gone.len().min(1)
-        + fields
+        + groups
             .iter()
-            .map(|(_, v)| wrap_chunks(v, chunk_w).len())
+            .map(|(title, fs)| {
+                let head = if title.is_empty() { 0 } else { 2 };
+                head + fs.iter().map(|((_, v), _)| wrap_chunks(v, chunk_w).len()).sum::<usize>()
+            })
             .sum::<usize>();
     // +2 borders +1 blank +1 hint row; the hint row is pinned to the bottom
     // line of the box so the key bindings stay visible even when the fields
@@ -2459,17 +2512,28 @@ fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u
     if !gone.is_empty() {
         all.push(Line::from(Span::styled(format!(" {gone}"), dim())));
     }
-    for (label, value) in &fields {
-        for (i, chunk) in wrap_chunks(value, chunk_w).into_iter().enumerate() {
-            let indent = if i == 0 {
-                format!(" {:<lbl_w$}  ", label)
-            } else {
-                format!(" {:<lbl_w$}  ", "")
-            };
-            all.push(Line::from(vec![
-                Span::styled(indent, Style::new().fg(palette().title)),
-                Span::styled(chunk, text()),
-            ]));
+    for (title, fields) in &groups {
+        if !title.is_empty() {
+            all.push(Line::from(""));
+            all.push(Line::from(Span::styled(
+                format!(" \u{2500}\u{2500} {title} \u{2500}\u{2500}"),
+                bold(hi()),
+            )));
+        }
+        for ((label, value), st) in fields {
+            for (i, chunk) in wrap_chunks(value, chunk_w).into_iter().enumerate() {
+                let indent = if i == 0 {
+                    format!(" {:<lbl_w$}  ", label)
+                } else {
+                    format!(" {:<lbl_w$}  ", "")
+                };
+                let vspan = if *st == ValStyle::Accent {
+                    Span::styled(chunk, bold(accent()))
+                } else {
+                    Span::styled(chunk, val_style(*st))
+                };
+                all.push(Line::from(vec![Span::styled(indent, dim()), vspan]));
+            }
         }
     }
     // pin the hint row(s) to the bottom line of the box so the key bindings
@@ -2592,18 +2656,14 @@ fn help_rows(lang: Lang) -> Vec<(String, String)> {
 /// merged help + about panel
 fn draw_help_popup(f: &mut Frame, area: Rect, app: &App) {
     let rows = help_rows(app.lang);
-    let w = 62.min(area.width);
-    let h = ((rows.len() + 8) as u16).min(area.height);
-    let popup = centered(area, w, h);
-    f.render_widget(Clear, popup);
-    let block = Block::bordered()
-        .border_type(BorderType::Rounded)
-        .style(Style::new().bg(bg().unwrap_or(Color::Reset)))
-        .border_style(Style::new().fg(hi()))
-        .title(title_line(0, "help", '\0', vec![], hi(), false));
-    let inner = block.inner(popup);
-    f.render_widget(block, popup);
-
+    // 双列键位把总高从 ~33 行压到 ~23 行:旧版 h 估算 (+8) 低估头部开销
+    // 且撞终端高度封顶后无滚动,底部(数据口径段/press any)固定被裁
+    let two_col = area.width >= 84;
+    let half = rows.len().div_ceil(2);
+    let kw = rows.iter().map(|(k, _)| k.chars().count()).max().unwrap_or(0);
+    let desc_w = |rs: &[(String, String)]| {
+        rs.iter().map(|(_, d)| d.chars().count()).max().unwrap_or(0)
+    };
     let mut lines: Vec<Line> = Vec::new();
     lines.push(Line::from(vec![
         Span::styled(format!(" ltop v{}", env!("CARGO_PKG_VERSION")), bold(accent())),
@@ -2614,11 +2674,11 @@ fn draw_help_popup(f: &mut Frame, area: Rect, app: &App) {
         dim(),
     )));
     lines.push(Line::from(Span::styled(
-        format!(" theme: {}", theme_name()),
-        dim(),
-    )));
-    lines.push(Line::from(Span::styled(
-        app.lang.tr(if app.udp.fresh { "udp_on" } else { "udp_off" }),
+        format!(
+            " theme: {} \u{b7} {}",
+            theme_name(),
+            app.lang.tr(if app.udp.fresh { "udp_on" } else { "udp_off" })
+        ),
         dim(),
     )));
     lines.push(Line::from(Span::styled(
@@ -2626,28 +2686,55 @@ fn draw_help_popup(f: &mut Frame, area: Rect, app: &App) {
         bold(hi()),
     )));
     for k in ["caliber_procs", "caliber_conns", "caliber_keys"] {
-        lines.push(Line::from(Span::styled(
-            app.lang.tr(k),
-            dim(),
-        )));
+        lines.push(Line::from(Span::styled(app.lang.tr(k), dim())));
     }
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
         " \u{2500}\u{2500} keys \u{2500}\u{2500}",
         bold(hi()),
     )));
-    let kw = rows.iter().map(|(k, _)| k.chars().count()).max().unwrap_or(0);
-    for (k, d) in &rows {
-        lines.push(Line::from(vec![
-            Span::styled(format!(" {:<kw$}  ", k), bold(hi())),
-            Span::styled(d.clone(), text()),
-        ]));
+    let col_spans =
+        |(k, d): &(String, String), dw: usize| -> Vec<Span<'static>> {
+            vec![
+                Span::styled(format!(" {:<kw$}  ", k), bold(hi())),
+                Span::styled(format!("{:<dw$}   ", d), text()),
+            ]
+        };
+    if two_col {
+        let (left, right) = rows.split_at(half);
+        let dw_l = desc_w(left);
+        let dw_r = desc_w(right);
+        for i in 0..half {
+            let mut spans = match left.get(i) {
+                Some(e) => col_spans(e, dw_l),
+                None => vec![Span::raw(" ".repeat(6 + kw + dw_l))],
+            };
+            spans.push(Span::raw("  "));
+            if let Some(e) = right.get(i) {
+                spans.extend(col_spans(e, dw_r));
+            }
+            lines.push(Line::from(spans));
+        }
+    } else {
+        let dw = desc_w(&rows);
+        for e in &rows {
+            lines.push(Line::from(col_spans(e, dw)));
+        }
     }
     lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        app.lang.tr("press_any"),
-        dim(),
-    )));
+    lines.push(Line::from(Span::styled(app.lang.tr("press_any"), dim())));
+    let w = if two_col { 92.min(area.width) } else { 62.min(area.width) };
+    let h = (lines.len() as u16 + 2).min(area.height);
+    let popup = centered(area, w, h);
+    f.render_widget(Clear, popup);
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .style(Style::new().bg(bg().unwrap_or(Color::Reset)))
+        .border_style(Style::new().fg(hi()))
+        .title(title_line(0, "help", '\0', vec![], hi(), false));
+    let inner = block.inner(popup);
+    f.render_widget(block, popup);
+
     f.render_widget(Paragraph::new(lines), inner);
 }
 
