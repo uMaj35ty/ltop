@@ -1184,7 +1184,7 @@ fn draw_net(f: &mut Frame, area: Rect, app: &App, focused: bool) {
     // 头行标签随列宽分级:≥52 全称,≥40 缩写,更窄只留 session
     let head_w = chunks[1].width as usize;
     let sess_lbl = if head_w >= 52 { "  session Σ " } else { " Σs " };
-    let (alive_lbl, show_alive) = if head_w >= 52 {
+    let (alive_lbl, _show_alive) = if head_w >= 52 {
         ("  alive Σ ", true)
     } else if head_w >= 40 {
         (" Σa ", true)
@@ -1207,7 +1207,11 @@ fn draw_net(f: &mut Frame, area: Rect, app: &App, focused: bool) {
         ),
         Span::styled(alive_lbl, dim()),
         Span::styled(
-            alive.map(|(a, _)| fmt_bytes(a as f64)).unwrap_or_default(),
+            if alive_lbl.is_empty() {
+                String::new()
+            } else {
+                alive.map(|(a, _)| fmt_bytes(a as f64)).unwrap_or_default()
+            },
             dim(),
         ),
     ]);
@@ -1224,7 +1228,11 @@ fn draw_net(f: &mut Frame, area: Rect, app: &App, focused: bool) {
         ),
         Span::styled(alive_lbl, dim()),
         Span::styled(
-            alive.map(|(_, a)| fmt_bytes(a as f64)).unwrap_or_default(),
+            if alive_lbl.is_empty() {
+                String::new()
+            } else {
+                alive.map(|(_, a)| fmt_bytes(a as f64)).unwrap_or_default()
+            },
             dim(),
         ),
     ]);
