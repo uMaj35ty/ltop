@@ -588,7 +588,9 @@ fn draw_list_stack(f: &mut Frame, area: Rect, app: &App, ids: &[usize], snap_mid
                 Layout::vertical([Constraint::Fill(1), Constraint::Fill(1)]).split(area);
             // 上半组里 LAN 单独算:钉一个矮个头上限(滚动可见全量),
             // 剩余全部让给信息量最大的 CONNS
-            if ids[0] == BOX_LAN && ids.len() > 2 {
+            // LAN 钉矮个头的前提是 CONNS 可见(矮个头是为给 CONNS 让位);
+            // CONNS hide 后上组只剩 LAN,应占满上半而非留空
+            if ids[0] == BOX_LAN && ids.contains(&BOX_CONNS) && ids.len() > 2 {
                 // 内层 clamp 的上界恒 ≥ 下界(1≤6),迷你终端不会 panic
                 let lan_h = box_ideal_rows(app, BOX_LAN)
                     .min(LAN_BOX_MAX_ROWS)
@@ -1179,16 +1181,34 @@ fn draw_net(f: &mut Frame, area: Rect, app: &App, focused: bool) {
     let rates = app.net.selected_rates();
     let (hrx, htx) = app.net.selected_hist();
 
+    // 头行标签随列宽分级:≥52 全称,≥40 缩写,更窄只留 session
+    let head_w = chunks[1].width as usize;
+    let sess_lbl = if head_w >= 52 { "  session Σ " } else { " Σs " };
+    let (alive_lbl, show_alive) = if head_w >= 52 {
+        ("  alive Σ ", true)
+    } else if head_w >= 40 {
+        (" Σa ", true)
+    } else {
+        ("", false)
+    };
+
+    let alive = app.net.selected_alive();
+
     let rx_head = Line::from(vec![
         Span::styled(" ▼ RX ", bold(download().at(0.5))),
         Span::styled(
             rates.map(|r| fmt_speed(r.rx)).unwrap_or_else(|| "…".into()),
             bold(download().at(0.5)),
         ),
-        Span::styled("  session Σ ", dim()),
+        Span::styled(sess_lbl, dim()),
         Span::styled(
             rates.map(|r| fmt_bytes(r.rx_total as f64)).unwrap_or_default(),
             text(),
+        ),
+        Span::styled(alive_lbl, dim()),
+        Span::styled(
+            alive.map(|(a, _)| fmt_bytes(a as f64)).unwrap_or_default(),
+            dim(),
         ),
     ]);
     let tx_head = Line::from(vec![
@@ -1197,10 +1217,15 @@ fn draw_net(f: &mut Frame, area: Rect, app: &App, focused: bool) {
             rates.map(|r| fmt_speed(r.tx)).unwrap_or_else(|| "…".into()),
             bold(upload().at(0.5)),
         ),
-        Span::styled("  session Σ ", dim()),
+        Span::styled(sess_lbl, dim()),
         Span::styled(
             rates.map(|r| fmt_bytes(r.tx_total as f64)).unwrap_or_default(),
             text(),
+        ),
+        Span::styled(alive_lbl, dim()),
+        Span::styled(
+            alive.map(|(_, a)| fmt_bytes(a as f64)).unwrap_or_default(),
+            dim(),
         ),
     ]);
     f.render_widget(Paragraph::new(rx_head), chunks[1]);
