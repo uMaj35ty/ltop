@@ -17,6 +17,12 @@ helper adds per-process and per-connection byte accounting.
 cargo install ltop
 ```
 
+Homebrew (macOS & Linux, prebuilt binaries, v0.2.1+):
+
+```bash
+brew install uMaj35ty/ltop/ltop
+```
+
 AUR: `ltop-bin` — coming as soon as the AUR reopens registration (package is ready).
 
 ## Screenshots
