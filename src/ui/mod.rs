@@ -56,6 +56,16 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     let outer = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(area);
 
+    // zoom:焦点盒(LAN/CONNS/PROCS 之一)独占全屏;esc 退出,其余交互照常
+    if let Some(b) = app.zoom {
+        if matches!(b, crate::app::BOX_LAN | crate::app::BOX_CONNS | crate::app::BOX_PROCS)
+            && app.visible[b]
+        {
+            draw_box(f, outer[0], app, b);
+            return;
+        }
+    }
+
     let graph_ids: Vec<usize> = [BOX_NET, BOX_DISKIO]
         .into_iter()
         .filter(|&i| app.visible[i])
@@ -1159,7 +1169,7 @@ fn draw_net(f: &mut Frame, area: Rect, app: &App, focused: bool) {
             rates.map(|r| fmt_speed(r.rx)).unwrap_or_else(|| "…".into()),
             bold(download().at(0.5)),
         ),
-        Span::styled("  Σ ", dim()),
+        Span::styled("  session Σ ", dim()),
         Span::styled(
             rates.map(|r| fmt_bytes(r.rx_total as f64)).unwrap_or_default(),
             text(),
@@ -1171,7 +1181,7 @@ fn draw_net(f: &mut Frame, area: Rect, app: &App, focused: bool) {
             rates.map(|r| fmt_speed(r.tx)).unwrap_or_else(|| "…".into()),
             bold(upload().at(0.5)),
         ),
-        Span::styled("  Σ ", dim()),
+        Span::styled("  session Σ ", dim()),
         Span::styled(
             rates.map(|r| fmt_bytes(r.tx_total as f64)).unwrap_or_default(),
             text(),
@@ -2124,7 +2134,7 @@ fn draw_footer(f: &mut Frame, area: Rect, app: &App) {
     spans.extend(key("/", lang.tr("search")));
     spans.extend(key("Tab", &format!("{}:{}", lang.tr("layout"), app.layout.label())));
     spans.extend(key("1-6", "boxes"));
-    spans.extend(key("enter", "detail"));
+    spans.extend(key("z", "zoom"));
     if app.allow_global_kill {
         spans.extend(key("k", "kill"));
     }
@@ -2763,6 +2773,7 @@ fn help_rows(lang: Lang) -> Vec<(String, String)> {
         ("s".into(), t("sweep_desc").to_string()),
         ("+ / -".into(), t("refresh_desc").to_string()),
         ("\u{2191}\u{2193} / wheel".into(), t("sel_scroll_desc").to_string()),
+        ("z".into(), t("zoom_desc").to_string()),
         ("q / esc / m".into(), t("quit_menu_desc").to_string()),
     ]
 }
