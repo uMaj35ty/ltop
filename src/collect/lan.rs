@@ -558,6 +558,20 @@ fn arp_an_output() -> String {
 /// `? (192.168.121.255) at (incomplete) on en0 ...` → (ip, mac, iface)。
 /// mac 的 MAC 段不补零,这里规范成两位(Linux /proc/net/arp 口径);
 /// 组播/广播表项是协议噪声,跳过。
+/// mac:接口索引 → 接口名(libc::if_indextoname)
+#[cfg(target_os = "macos")]
+fn if_index_to_name(idx: u16) -> Option<String> {
+    let mut buf = [0 as libc::c_char; libc::IF_NAMESIZE];
+    // SAFETY: buf 为全有权的 IF_NAMESIZE 缓冲
+    let p = unsafe { libc::if_indextoname(idx as libc::c_uint, buf.as_mut_ptr()) };
+    if p.is_null() {
+        return None;
+    }
+    // SAFETY: 成功时 p 指向 buf 内的 NUL 结尾字符串
+    let s = unsafe { std::ffi::CStr::from_ptr(p) };
+    Some(s.to_string_lossy().into_owned())
+}
+
 #[cfg_attr(target_os = "linux", allow(dead_code))]
 fn parse_arp_an(out: &str) -> Vec<(Ipv4Addr, Option<String>, String)> {
     let mut out_v = Vec::new();
@@ -1135,18 +1149,4 @@ mac_hidden: false,
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].1, None);
     }
-}
-
-/// mac:接口索引 → 接口名(libc::if_indextoname)
-#[cfg(target_os = "macos")]
-fn if_index_to_name(idx: u16) -> Option<String> {
-    let mut buf = [0 as libc::c_char; libc::IF_NAMESIZE];
-    // SAFETY: buf 为全有权的 IF_NAMESIZE 缓冲
-    let p = unsafe { libc::if_indextoname(idx as libc::c_uint, buf.as_mut_ptr()) };
-    if p.is_null() {
-        return None;
-    }
-    // SAFETY: 成功时 p 指向 buf 内的 NUL 结尾字符串
-    let s = unsafe { std::ffi::CStr::from_ptr(p) };
-    Some(s.to_string_lossy().into_owned())
 }
