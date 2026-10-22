@@ -29,8 +29,17 @@ impl GraphMode {
             Self::Centered => Self::Line,
             Self::Line => Self::Heartbeat,
             Self::Heartbeat => Self::Hybrid,
-            Self::Hybrid => Self::Block,
+            Self::Hybrid => Self::Solid,
+            // Block 不参与循环:只能经 graphs 菜单的 next_with_block 选择
             Self::Block => Self::Solid,
+        }
+    }
+
+    /// graphs 菜单的循环:包含 Block(n 键循环不含——block 为显式选择项)
+    pub fn next_with_block(self) -> Self {
+        match self {
+            Self::Hybrid => Self::Block,
+            other => other.next(),
         }
     }
 
