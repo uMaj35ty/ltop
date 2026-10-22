@@ -153,22 +153,18 @@ jobs:
           RUBY
           git config --global user.name "ltop-release-bot"
           git config --global user.email "actions@users.noreply.github.com"
-          if git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/uMaj35ty/homebrew-ltop.git" tap 2>/dev/null; then
-            cp Formula/ltop.rb tap/Formula/ltop.rb 2>/dev/null || { mkdir -p tap/Formula && cp Formula/ltop.rb tap/; }
-            cd tap
-            git add Formula/ltop.rb
-            git commit -m "ltop ${VER}"
-            git push
-          else
-            git init -b main tap-work
-            cd tap-work
-            mkdir Formula
-            cp ../Formula/ltop.rb Formula/
-            git add Formula/ltop.rb
-            git commit -m "ltop ${VER}"
-            git remote add origin "https://x-access-token:${TAP_TOKEN}@github.com/uMaj35ty/homebrew-ltop.git"
-            git push -u origin main
-          fi
+          set -x
+          # 统一路径:全新 init,fetch 远端(空仓失败则跳过),提交后 push
+          mkdir taprepo && cd taprepo
+          git init -b main
+          git remote add origin "https://x-access-token:${TAP_TOKEN}@github.com/uMaj35ty/homebrew-ltop.git"
+          git fetch origin main 2>/dev/null || echo "remote empty or unreachable"
+          mkdir -p Formula
+          cp ../Formula/ltop.rb Formula/
+          git add Formula/ltop.rb
+          git commit -m "ltop ${VER}"
+          git push -u origin main || { git pull --rebase origin main && git push -u origin main; }
+          ls -la Formula/
 
   release:
     needs: [build, build-macos]
