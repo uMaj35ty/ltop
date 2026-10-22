@@ -45,6 +45,13 @@ xattr -c ltop-*-darwin.tar.gz
 
 AUR:`ltop-bin`——待 AUR 开放注册后提供(打包件已就绪)。
 
+## 面向 AI 代理
+
+`ltop --json` 输出结构化快照(网络速率、每进程/每连接字节、磁盘 I/O、LAN
+邻居);`ltop --schema` 是随版本更新的字段参考。配套的 agent skill
+([docs/skills/ltop-observe/SKILL.md](skills/ltop-observe/SKILL.md))
+教 agent 何时以及如何使用,并附诊断工作流。
+
 ## 主题
 
 ltop 读取 btop 兼容的主题文件——修复看不清的颜色或构建完整自定义主题见

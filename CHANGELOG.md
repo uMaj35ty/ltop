@@ -7,6 +7,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **AI-friendly interfaces**: `ltop --json` emits a schema-versioned
+  structured snapshot (all five domains, rates included, platform semantics
+  like macOS MAC sanitization marked); `ltop --schema` is the versioned
+  machine-readable field reference; an agent skill
+  (`docs/skills/ltop-observe/SKILL.md`) packages diagnostic recipes.
+- **Monitoring log v2**: full-domain JSONL snapshots sharing the `--json`
+  schema (was PROCS-only); `log_tracked_only` filters the procs array.
+
+### Changed
+
+- Added `serde`/`serde_json` dependencies for the snapshot/log serialization.
+
 - **OSC 52 copy in the detail popup**: ↑↓/jk moves a field cursor, `y`
   copies the selected value to the terminal clipboard (works over SSH, no
   X11/Wayland dependency); hint row shows `[y] copy`.

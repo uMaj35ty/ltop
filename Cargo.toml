@@ -19,6 +19,8 @@ path = "src/bin/ltop_bpf.rs"
 
 [dependencies]
 anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 crossterm = "0.29"
 if-addrs = "0.15"
 libc = "0.2"

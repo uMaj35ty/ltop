@@ -35,6 +35,14 @@ xattr -c ltop-*-darwin.tar.gz
 
 AUR: `ltop-bin` — coming as soon as the AUR reopens registration (package is ready).
 
+## For AI agents
+
+`ltop --json` emits a structured snapshot (network rates, per-process and
+per-connection accounting, disk I/O, LAN neighbours); `ltop --schema` is the
+versioned field reference. The companion agent skill
+([docs/skills/ltop-observe/SKILL.md](docs/skills/ltop-observe/SKILL.md))
+teaches agents when and how to use it, with diagnostic recipes.
+
 ## Themes
 
 ltop reads btop-compatible theme files — see

@@ -6,7 +6,6 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use crate::collect::proc::ProcRow;
 
 pub struct MonLog {
     pub enabled: bool,
@@ -92,12 +91,12 @@ impl MonLog {
     }
 
     /// Write a snapshot if the interval has elapsed (called every tick)
-    pub fn maybe_write(&mut self, procs: &[ProcRow]) {
+    pub fn maybe_write(&mut self, snap: &crate::snapshot::Snapshot) {
         if !self.enabled || self.last.elapsed() < self.interval {
             return;
         }
         self.last = Instant::now();
-        self.write_snapshot(procs);
+        self.write_snapshot_v2(snap);
     }
 
     /// Flush and close; report the log path on stderr so the user can find it
@@ -109,32 +108,13 @@ impl MonLog {
         self.enabled = false;
     }
 
-    fn write_snapshot(&mut self, procs: &[ProcRow]) {
+    /// v2:全盒快照行(与 `ltop --json` 同 schema);tracked_only 时 procs
+    /// 仅记录置顶进程
+    fn write_snapshot_v2(&mut self, snap: &crate::snapshot::Snapshot) {
         let Some((_, f)) = self.file.as_mut() else {
             return;
         };
-        let secs = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        let mut line = format!("{{\"ts\":{secs},\"procs\":[");
-        let mut first = true;
-        for p in procs {
-            if p.total_bytes() == 0 {
-                continue;
-            }
-            if !first {
-                line.push(',');
-            }
-            first = false;
-            let name = json_str(&p.name);
-            line.push_str(&format!(
-                "{{\"pid\":{},\"name\":\"{name}\",\"net_recv\":{},\"net_sent\":{},\"udp_recv\":{},\"udp_sent\":{},\"disk_r\":{},\"disk_w\":{}}}",
-                p.pid, p.net_recv, p.net_sent, p.udp_recv, p.udp_sent, p.disk_r, p.disk_w
-            ));
-        }
-        line.push_str("]}");
-        let _ = writeln!(f, "{line}");
+        let _ = writeln!(f, "{}", serde_json::to_string(snap).unwrap_or_default());
     }
 }
 
