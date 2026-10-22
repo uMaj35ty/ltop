@@ -125,6 +125,14 @@ impl LayoutMode {
         }
     }
 
+    pub fn prev(self) -> Self {
+        match self {
+            Self::Classic => Self::Tall,
+            Self::Wide => Self::Classic,
+            Self::Tall => Self::Wide,
+        }
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Self::Classic => "classic",
