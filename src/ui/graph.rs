@@ -35,6 +35,18 @@ impl GraphMode {
         }
     }
 
+    /// graphs 菜单的反向循环
+    pub fn prev_with_block(self) -> Self {
+        match self {
+            Self::Solid => Self::Block,
+            Self::Centered => Self::Solid,
+            Self::Line => Self::Centered,
+            Self::Heartbeat => Self::Line,
+            Self::Hybrid => Self::Heartbeat,
+            Self::Block => Self::Hybrid,
+        }
+    }
+
     /// graphs 菜单的循环:包含 Block(n 键循环不含——block 为显式选择项)
     pub fn next_with_block(self) -> Self {
         match self {

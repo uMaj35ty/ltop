@@ -254,6 +254,97 @@ fn osc52_copy(text: &str) {
     let _ = stdout().flush();
 }
 
+/// Settings 菜单:循环改第 sel 项的值(forward=下一个值/反向=上一个值;
+/// 布尔项两向同效)。返回是否发生变更(需存盘)。
+fn cycle_setting(app: &mut App, sel: usize, forward: bool) -> bool {
+    const ROWS: usize = 12;
+    const TICKS: [u64; 5] = [250, 500, 1000, 2000, 5000];
+    const LOGS: [u64; 5] = [10_000, 30_000, 60_000, 300_000, 600_000];
+    const RETENTION: [u32; 3] = [7, 30, 0];
+    const SWEEPS: [u64; 4] = [30, 60, 120, 300];
+    const TOMBS: [u64; 4] = [0, 3000, 5000, 8000];
+    fn step_in(list: &[u64], cur: u64, forward: bool) -> u64 {
+        let i = list.iter().position(|&v| v == cur).unwrap_or(0);
+        let n = list.len();
+        list[if forward { (i + 1) % n } else { (i + n - 1) % n }]
+    }
+    fn step_u32(list: &[u32], cur: u32, forward: bool) -> u32 {
+        let i = list.iter().position(|&v| v == cur).unwrap_or(0);
+        let n = list.len();
+        list[if forward { (i + 1) % n } else { (i + n - 1) % n }]
+    }
+    let _ = ROWS;
+    match sel {
+        0 => {
+            app.lang = app.lang.next();
+            true
+        }
+        1 => {
+            let ms = step_in(&TICKS, app.tick.as_millis() as u64, forward);
+            app.tick = Duration::from_millis(ms);
+            true
+        }
+        2 => {
+            app.layout = if forward { app.layout.next() } else { app.layout.prev() };
+            true
+        }
+        3 => {
+            app.graph_net = if forward {
+                app.graph_net.next_with_block()
+            } else {
+                app.graph_net.prev_with_block()
+            };
+            true
+        }
+        4 => {
+            app.graph_disk = if forward {
+                app.graph_disk.next_with_block()
+            } else {
+                app.graph_disk.prev_with_block()
+            };
+            true
+        }
+        5 => {
+            let ms = step_in(&LOGS, app.log.interval.as_millis() as u64, forward);
+            app.log.interval = Duration::from_millis(ms);
+            true
+        }
+        6 => {
+            let d = step_u32(&RETENTION, app.log.retention_days, forward);
+            app.log.retention_days = d;
+            let _ = app.log.purge_old();
+            true
+        }
+        7 => {
+            let s = step_in(&SWEEPS, app.lan.sweep_interval.as_secs(), forward);
+            app.lan.sweep_interval = Duration::from_secs(s);
+            true
+        }
+        8 => {
+            app.lan.sweep_enabled = !app.lan.sweep_enabled;
+            true
+        }
+        9 => {
+            app.log_tracked_only = !app.log_tracked_only;
+            true
+        }
+        10 => {
+            app.allow_global_kill = !app.allow_global_kill;
+            true
+        }
+        11 => {
+            let cur = app.conn.tombstone_ttl.as_millis() as u64;
+            let i = TOMBS
+                .iter()
+                .position(|&v| v == cur)
+                .map_or(0, |i| if forward { (i + 1) % TOMBS.len() } else { (i + TOMBS.len() - 1) % TOMBS.len() });
+            app.conn.tombstone_ttl = std::time::Duration::from_millis(TOMBS[i]);
+            true
+        }
+        _ => false,
+    }
+}
+
 fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
     // 诊断开关:LTOP_KEY_LOG=<文件> 追加记录每个按键事件(排查 ssh 下的
     // 按键序列串扰,如 esc 触发盒子 hide)
@@ -498,19 +589,6 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
         }
         MenuState::Settings(sel) => {
             const ROWS: usize = 12;
-            const TICKS: [u64; 5] = [250, 500, 1000, 2000, 5000];
-            const LOGS: [u64; 5] = [10_000, 30_000, 60_000, 300_000, 600_000];
-            const RETENTION: [u32; 3] = [7, 30, 0];
-            const SWEEPS: [u64; 4] = [30, 60, 120, 300];
-            fn next_in(list: &[u64], cur: u64) -> u64 {
-                let i = list.iter().position(|&v| v == cur).map_or(0, |i| (i + 1) % list.len());
-                list[i]
-            }
-            fn next_u32(list: &[u32], cur: u32) -> u32 {
-                let i = list.iter().position(|&v| v == cur).map_or(0, |i| (i + 1) % list.len());
-                list[i]
-            }
-            const TOMBS: [u64; 4] = [0, 3000, 5000, 8000];
             let changed = match code {
                 KeyCode::Up | KeyCode::Char('k') => {
                     app.menu = MenuState::Settings(sel.saturating_sub(1));
@@ -520,74 +598,18 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
                     app.menu = MenuState::Settings((sel + 1).min(ROWS - 1));
                     false
                 }
-                KeyCode::Enter | KeyCode::Right | KeyCode::Char('l') => match sel {
-                    0 => {
-                        app.lang = app.lang.next();
-                        true
-                    }
-                    1 => {
-                        let ms = next_in(&TICKS, app.tick.as_millis() as u64);
-                        app.tick = Duration::from_millis(ms);
-                        true
-                    }
-                    2 => {
-                        app.layout = app.layout.next();
-                        true
-                    }
-                    3 => {
-                        app.graph_net = app.graph_net.next();
-                        true
-                    }
-                    4 => {
-                        app.graph_disk = app.graph_disk.next();
-                        true
-                    }
-                    5 => {
-                        let ms = next_in(&LOGS, app.log.interval.as_millis() as u64);
-                        app.log.interval = Duration::from_millis(ms);
-                        true
-                    }
-                    6 => {
-                        let d = next_u32(&RETENTION, app.log.retention_days);
-                        app.log.retention_days = d;
-                        let _ = app.log.purge_old();
-                        true
-                    }
-                    7 => {
-                        let s = next_in(&SWEEPS, app.lan.sweep_interval.as_secs());
-                        app.lan.sweep_interval = Duration::from_secs(s);
-                        true
-                    }
-                    8 => {
-                        app.lan.sweep_enabled = !app.lan.sweep_enabled;
-                        true
-                    }
-                    9 => {
-                        app.log_tracked_only = !app.log_tracked_only;
-                        true
-                    }
-                    10 => {
-                        app.allow_global_kill = !app.allow_global_kill;
-                        true
-                    }
-                    11 => {
-                        let cur = app.conn.tombstone_ttl.as_millis() as u64;
-                        let i = TOMBS
-                            .iter()
-                            .position(|&v| v == cur)
-                            .map_or(0, |i| (i + 1) % TOMBS.len());
-                        app.conn.tombstone_ttl = std::time::Duration::from_millis(TOMBS[i]);
-                        true
-                    }
-                    _ => false,
-                },
+                KeyCode::Enter | KeyCode::Right | KeyCode::Char('l') => {
+                    cycle_setting(app, sel, true)
+                }
+                KeyCode::Left | KeyCode::Char('h') => cycle_setting(app, sel, false),
+                KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('m') => {
+                    app.menu = MenuState::None;
+                    false
+                }
                 _ => false,
             };
             if changed {
                 app.save_config();
-            }
-            if matches!(code, KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('m')) {
-                app.menu = MenuState::None;
             }
         }
         MenuState::Theme(sel, scroll) => match code {
