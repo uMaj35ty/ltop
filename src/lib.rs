@@ -580,7 +580,7 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
                     0 => app.menu = MenuState::Theme(0, 0),
                     1 => app.menu = MenuState::Settings(0),
                     2 => app.menu = MenuState::Reset(0),
-                    3 => app.menu = MenuState::Graphs,
+                    3 => app.menu = MenuState::Graphs(0),
                     4 => app.menu = MenuState::Help,
                     5 => app.quit = true,
                     _ => app.menu = MenuState::None,
@@ -682,7 +682,42 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
             }
             _ => {}
         },
-        MenuState::Graphs => match code {
+        MenuState::Graphs(sel) => match code {
+            KeyCode::Up | KeyCode::Char('k') => {
+                app.menu = MenuState::Graphs(sel.saturating_sub(1))
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                app.menu = MenuState::Graphs((sel + 1).min(2))
+            }
+            // 行改值:Right/l=下一模式,Left/h=上一模式(Block 仅在此可达)
+            KeyCode::Right | KeyCode::Char('l') => match sel {
+                0 => app.graph_net = app.graph_net.next_with_block(),
+                1 => app.graph_disk = app.graph_disk.next_with_block(),
+                _ => {
+                    let s = app.graph_net.next_with_block();
+                    app.graph_net = s;
+                    app.graph_disk = s;
+                }
+            },
+            KeyCode::Left | KeyCode::Char('h') => match sel {
+                0 => app.graph_net = app.graph_net.prev_with_block(),
+                1 => app.graph_disk = app.graph_disk.prev_with_block(),
+                _ => {
+                    let s = app.graph_net.prev_with_block();
+                    app.graph_net = s;
+                    app.graph_disk = s;
+                }
+            },
+            KeyCode::Enter => match sel {
+                0 => app.graph_net = app.graph_net.next_with_block(),
+                1 => app.graph_disk = app.graph_disk.next_with_block(),
+                _ => {
+                    let s = app.graph_net.next_with_block();
+                    app.graph_net = s;
+                    app.graph_disk = s;
+                }
+            },
+            // n/d/a 直达键保留(下一模式)
             KeyCode::Char('n') => app.graph_net = app.graph_net.next_with_block(),
             KeyCode::Char('d') => app.graph_disk = app.graph_disk.next_with_block(),
             KeyCode::Char('a') => {

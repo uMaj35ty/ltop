@@ -186,9 +186,9 @@ pub fn draw(f: &mut Frame, app: &App) {
             draw_menu_footer(f, outer[1], 2, app.lang);
             draw_reset_popup(f, outer[0], sel, app.lang);
         }
-        MenuState::Graphs => {
+        MenuState::Graphs(sel) => {
             draw_menu_footer(f, outer[1], 3, app.lang);
-            draw_graphs_popup(f, outer[0], app);
+            draw_graphs_popup(f, outer[0], app, sel);
         }
         MenuState::Help => {
             draw_menu_footer(f, outer[1], 4, app.lang);
@@ -2218,7 +2218,7 @@ fn draw_menu_footer(f: &mut Frame, area: Rect, sel: usize, lang: Lang) {
 }
 
 /// graphs 面板:与 settings 同款风格(居中弹窗、label: value 行列表)
-fn draw_graphs_popup(f: &mut Frame, area: Rect, app: &App) {
+fn draw_graphs_popup(f: &mut Frame, area: Rect, app: &App, sel: usize) {
     let lang = app.lang;
     let rows: [(&str, &str, String); 3] = [
         ("n", "net", app.graph_net.label().to_string()),
@@ -2237,12 +2237,24 @@ fn draw_graphs_popup(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(block, popup);
     let mut lines: Vec<Line> = rows
         .iter()
-        .map(|(k, word, value)| {
+        .enumerate()
+        .map(|(i, (k, word, value))| {
+            let sel_style =
+                Style::new().fg(bg().unwrap_or(Color::Reset)).bg(hi()).add_modifier(Modifier::BOLD);
+            let (ks, ls, vs) = if i == sel {
+                (sel_style, sel_style, sel_style)
+            } else {
+                (
+                    Style::new().fg(palette().title),
+                    text(),
+                    Style::new().fg(palette().dim),
+                )
+            };
             Line::from(vec![
                 Span::styled(" [", dim()),
-                Span::styled(k.to_string(), bold(hi())),
-                Span::styled(format!("] {word}"), text()),
-                Span::styled(format!("  {value}"), dim()),
+                Span::styled(k.to_string(), ks),
+                Span::styled(format!("] {word}"), ls),
+                Span::styled(format!("  {value}"), vs),
             ])
         })
         .collect();

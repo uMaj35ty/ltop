@@ -56,7 +56,7 @@ pub enum MenuState {
     /// reset popup: 0 net / 1 disk / 2 all
     Reset(usize),
     /// graph style popup (per-scope graph modes)
-    Graphs,
+    Graphs(usize),
     /// help + about popup
     Help,
     /// detailed view of a list item: (box index, stable id)
