@@ -2368,13 +2368,23 @@ fn proc_status_fields(p: &crate::collect::proc::ProcRow) -> Vec<Field> {
             out.push((f.0, format!("{} kB", f.1)));
         }
     }
+    // exe/cwd:linux 读 /proc 符号链接;mac 走 libproc(proc_pidpath 即
+    // exe 路径,cwd 经 PROC_PIDVNODEPATHINFO)
+    #[cfg(target_os = "linux")]
     let exe = std::fs::read_link(format!("/proc/{pid}/exe"))
         .map(|p| p.display().to_string())
         .unwrap_or_else(|_| "-".into());
+    #[cfg(target_os = "macos")]
+    let exe = crate::collect::macproc::cmdline(pid)
+        .and_then(|v| v.into_iter().next())
+        .unwrap_or_else(|| "-".into());
     out.push(("exe", exe));
+    #[cfg(target_os = "linux")]
     let cwd = std::fs::read_link(format!("/proc/{pid}/cwd"))
         .map(|p| p.display().to_string())
         .unwrap_or_else(|_| "-".into());
+    #[cfg(target_os = "macos")]
+    let cwd = crate::collect::macproc::proc_cwd(pid).unwrap_or_else(|| "-".into());
     out.push(("cwd", cwd));
     if let Ok(cmd) = std::fs::read(format!("/proc/{pid}/cmdline")) {
         let s: String = cmd
