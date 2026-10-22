@@ -734,6 +734,28 @@ pub fn clamped_offset(app: &App, idx: usize, visible: usize) -> usize {
     app.scroll[idx].min(list_len(app, idx).saturating_sub(visible.max(1)))
 }
 
+/// 跳到列表顶/底(Home/End/g/G):有选中模型的盒移动选中,DISKS 盒只滚
+pub fn jump_selection(app: &mut App, idx: usize, top: bool) {
+    if idx == crate::app::BOX_DISKS {
+        app.scroll[idx] = if top { 0 } else { usize::MAX };
+        return;
+    }
+    let len = list_len(app, idx);
+    if len == 0 {
+        return;
+    }
+    let target = if top { 0 } else { len - 1 };
+    app.sel[idx] = Some(target);
+    // 窗口跟随,与 move_selection 同语义
+    let cap = box_capacity(idx);
+    let off = &mut app.scroll[idx];
+    if target < *off {
+        *off = target;
+    } else if target + 1 >= *off + cap {
+        *off = target + 1 - cap;
+    }
+}
+
 pub fn list_len(app: &App, idx: usize) -> usize {
     match idx {
         BOX_LAN => app.lan.neighbors.len(),
@@ -1865,7 +1887,7 @@ fn draw_procs(f: &mut Frame, area: Rect, app: &App, focused: bool) {
     if app.proc.is_root {
         rest.push(vec![text_s("root".to_string())]);
     }
-    if app.monlog.enabled {
+    if app.log.enabled {
         rest.push(vec![Span::styled("● rec", bold(hi()))]);
     }
     // eBPF UDP accounting is live: the ltop-bpf daemon snapshot is fresh
@@ -2211,10 +2233,10 @@ fn draw_reset_popup(f: &mut Frame, area: Rect, sel: usize, lang: Lang) {
 
 fn draw_settings_popup(f: &mut Frame, area: Rect, app: &App, sel: usize) {
     let lang = app.lang;
-    let retention = if app.monlog.retention_days == 0 {
+    let retention = if app.log.retention_days == 0 {
         lang.tr("never").to_string()
     } else {
-        format!("{}d", app.monlog.retention_days)
+        format!("{}d", app.log.retention_days)
     };
     let rows: [(&str, String); 13] = [
         (lang.tr("language"), lang.label().to_string()),
@@ -2222,7 +2244,7 @@ fn draw_settings_popup(f: &mut Frame, area: Rect, app: &App, sel: usize) {
         (lang.tr("layout"), app.layout.label().to_string()),
         (lang.tr("net"), app.graph_net.label().to_string()),
         (lang.tr("disk"), app.graph_disk.label().to_string()),
-        (lang.tr("log_interval"), fmt_interval(app.monlog.interval)),
+        (lang.tr("log_interval"), fmt_interval(app.log.interval)),
         (lang.tr("log_retention"), retention),
         (lang.tr("sweep_interval"), fmt_interval(app.lan.sweep_interval)),
         (
@@ -2400,7 +2422,16 @@ fn proc_status_fields(p: &crate::collect::proc::ProcRow) -> Vec<Field> {
     out
 }
 
-fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u64) {
+/// detail 弹窗的字段数据(渲染、游标计数、复制取值三处同源)
+struct DetailData {
+    groups: Vec<FieldGroup>,
+    pid: Option<u32>,
+    tracked: bool,
+    gone: String,
+    start_hint: bool,
+}
+
+fn detail_data(app: &App, box_idx: usize, id: u64) -> DetailData {
     let mut pid: Option<u32> = None;
     let mut tracked = false;
     let mut groups: Vec<FieldGroup> = Vec::new();
@@ -2473,12 +2504,49 @@ fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u
         }
         _ => {}
     }
+    DetailData {
+        groups,
+        pid,
+        tracked,
+        gone,
+        start_hint,
+    }
+}
+
+/// detail 弹窗的字段总数(游标上界)
+pub fn detail_field_count(app: &App, box_idx: usize, id: u64) -> usize {
+    detail_data(app, box_idx, id)
+        .groups
+        .iter()
+        .map(|(_, fs)| fs.len())
+        .sum()
+}
+
+/// 第 detail_sel 个字段的值(y 复制的内容)
+pub fn detail_selected_value(app: &App, box_idx: usize, id: u64) -> Option<String> {
+    let d = detail_data(app, box_idx, id);
+    let mut flat = d
+        .groups
+        .iter()
+        .flat_map(|(_, fs)| fs.iter())
+        .map(|((_, v), _)| v.clone());
+    flat.nth(app.detail_sel)
+}
+
+fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u64) {
+    let DetailData {
+        groups,
+        pid,
+        tracked,
+        gone,
+        start_hint,
+    } = detail_data(app, box_idx, id);
     let track_hint = if tracked {
         "[space] [x] tracked"
     } else {
         "[space] [ ] track"
     };
-    let mut hints = vec![track_hint.to_string(), "[esc] close".to_string()];
+    let mut hints = vec![track_hint.to_string(), "[y] copy".to_string(), "[esc] close".to_string()];
     if let Some(p) = pid {
         hints.insert(2, format!("[k] kill pid {p}"));
     }
@@ -2519,6 +2587,8 @@ fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u
     f.render_widget(block, popup);
 
     let mut all: Vec<Line> = Vec::new();
+    // 每个字段的行区间(游标定位与滚动推导;组标题/空行不计入字段游标)
+    let mut field_rows: Vec<(usize, usize)> = Vec::new();
     if !gone.is_empty() {
         all.push(Line::from(Span::styled(format!(" {gone}"), dim())));
     }
@@ -2531,6 +2601,7 @@ fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u
             )));
         }
         for ((label, value), st) in fields {
+            let start = all.len();
             for (i, chunk) in wrap_chunks(value, chunk_w).into_iter().enumerate() {
                 let indent = if i == 0 {
                     format!(" {:<lbl_w$}  ", label)
@@ -2544,6 +2615,7 @@ fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u
                 };
                 all.push(Line::from(vec![Span::styled(indent, dim()), vspan]));
             }
+            field_rows.push((start, all.len() - start));
         }
     }
     // pin the hint row(s) to the bottom line of the box so the key bindings
@@ -2553,8 +2625,40 @@ fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u
     let hints_h = hint_lines.len() as u16;
     let hints_y = inner.bottom().saturating_sub(hints_h);
     let fields_h = hints_y.saturating_sub(inner.y);
+    // 字段游标:高亮选中字段行(行首 ▸ + 弱底)并推导滚动保证其可见
+    let sel = app.detail_sel.min(field_rows.len().saturating_sub(1));
+    let (s0, n0) = field_rows.get(sel).copied().unwrap_or((0, 1));
+    let vis = fields_h as usize;
+    // 无状态滚动推导:选中行不可见时,让其贴可见区底部(上方留 3 行)
+    let scroll = (s0 + n0).saturating_sub(vis);
+    let hl_bg = download().at(0.12);
+    let lines_with_cursor: Vec<Line> = all
+        .into_iter()
+        .enumerate()
+        .map(|(li, line)| {
+            let in_field = field_rows
+                .get(sel)
+                .is_some_and(|(start, count)| li >= *start && li < start + count);
+            if !in_field {
+                return line;
+            }
+            let bar = if li == s0 { "▸" } else { " " };
+            let mut spans = vec![Span::styled(bar, Style::new().fg(accent()).bg(hl_bg))];
+            spans.extend(line.spans.into_iter().map(|mut sp| {
+                sp.style = sp.style.bg(hl_bg);
+                sp
+            }));
+            Line::from(spans)
+        })
+        .collect();
+    let skipped: Vec<Line> = lines_with_cursor
+        .iter()
+        .skip(scroll)
+        .take(fields_h as usize)
+        .cloned()
+        .collect();
     f.render_widget(
-        Paragraph::new(all),
+        Paragraph::new(skipped),
         Rect { x: inner.x, y: inner.y, width: inner.width, height: fields_h },
     );
     f.render_widget(

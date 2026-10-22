@@ -3,13 +3,13 @@
 pub mod app;
 pub mod collect;
 pub mod config;
-pub mod monlog;
+pub mod log;
 pub mod replay;
 pub mod theme;
 pub mod theme_data;
 pub mod ui;
 
-use std::io::{self, stdout};
+use std::io::{self, stdout, Write};
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
@@ -179,7 +179,7 @@ fn run(
     // CLI --follow-theme 在配置之上再开一档(配置默认关)
     app.theme_live_follow = app.theme_live_follow || follow_theme;
     if auto_log {
-        app.monlog.toggle();
+        app.log.toggle();
     }
     // two warm-up samples so the first frame already has rates
     app.update();
@@ -211,8 +211,28 @@ fn run(
             last_tick = Instant::now();
         }
     }
-    app.monlog.finalize();
+    app.log.finalize();
     Ok(())
+}
+
+/// OSC 52:把文本写入终端本地剪贴板(base64;零依赖,ssh 场景直达本地)
+fn osc52_copy(text: &str) {
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut b64 = String::new();
+    for chunk in text.as_bytes().chunks(3) {
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
+        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        b64.push(T[(n >> 18) as usize & 63] as char);
+        b64.push(T[(n >> 12) as usize & 63] as char);
+        b64.push(if chunk.len() > 1 { T[(n >> 6) as usize & 63] as char } else { '=' });
+        b64.push(if chunk.len() > 2 { T[n as usize & 63] as char } else { '=' });
+    }
+    let _ = write!(stdout(), "\x1b]52;c;{b64}\x07");
+    let _ = stdout().flush();
 }
 
 fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
@@ -328,7 +348,7 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
                 }
             }
             KeyCode::Char('L') => {
-                app.monlog.toggle();
+                app.log.toggle();
             }
             KeyCode::Enter => {
                 let b = app.last_focus;
@@ -355,6 +375,7 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
                             ui::toggle_group(app, &key);
                         }
                     } else if let Some(id) = ui::selected_id(app, b) {
+                        app.detail_sel = 0;
                         app.menu = MenuState::Detail(b, id);
                     }
                 }
@@ -365,6 +386,28 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
                     ui::move_selection(app, b, -1);
                 } else {
                     app.scroll[b] = app.scroll[b].saturating_sub(3);
+                }
+            }
+            // Home/End/g/G:跳顶/跳底(聚焦盒移动选中,未聚焦盒跳滚动;
+            // ssh 幽灵序列防御同数字键——排除 ALT/CTRL)
+            KeyCode::Home | KeyCode::Char('g')
+                if !modifiers.intersects(KeyModifiers::ALT | KeyModifiers::CONTROL) =>
+            {
+                let b = app.last_focus;
+                if app.focus[b] {
+                    ui::jump_selection(app, b, true);
+                } else {
+                    app.scroll[b] = 0;
+                }
+            }
+            KeyCode::End | KeyCode::Char('G')
+                if !modifiers.intersects(KeyModifiers::ALT | KeyModifiers::CONTROL) =>
+            {
+                let b = app.last_focus;
+                if app.focus[b] {
+                    ui::jump_selection(app, b, false);
+                } else {
+                    app.scroll[b] = usize::MAX;
                 }
             }
             KeyCode::Down => {
@@ -469,14 +512,14 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
                         true
                     }
                     5 => {
-                        let ms = next_in(&LOGS, app.monlog.interval.as_millis() as u64);
-                        app.monlog.interval = Duration::from_millis(ms);
+                        let ms = next_in(&LOGS, app.log.interval.as_millis() as u64);
+                        app.log.interval = Duration::from_millis(ms);
                         true
                     }
                     6 => {
-                        let d = next_u32(&RETENTION, app.monlog.retention_days);
-                        app.monlog.retention_days = d;
-                        let _ = app.monlog.purge_old();
+                        let d = next_u32(&RETENTION, app.log.retention_days);
+                        app.log.retention_days = d;
+                        let _ = app.log.purge_old();
                         true
                     }
                     7 => {
@@ -621,6 +664,21 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
         },
         MenuState::Help => app.menu = MenuState::None,
         MenuState::Detail(b, id) => match code {
+            KeyCode::Up => {
+                if app.detail_sel > 0 {
+                    app.detail_sel -= 1;
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if app.detail_sel + 1 < ui::detail_field_count(app, b, id) {
+                    app.detail_sel += 1;
+                }
+            }
+            KeyCode::Char('y') => {
+                if let Some(text) = ui::detail_selected_value(app, b, id) {
+                    osc52_copy(&text);
+                }
+            }
             KeyCode::Char(' ') | KeyCode::Char('t') => ui::toggle_track(app, b, id),
             KeyCode::Char('s') => {
                 // exited process: start it right away; a running one goes

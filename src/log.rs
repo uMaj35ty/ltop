@@ -73,7 +73,7 @@ impl MonLog {
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
-        let path = dir.join(format!("session-{secs}.jsonl"));
+        let path = dir.join(format!("ltop-log-{secs}.jsonl"));
         let Ok(f) = File::create(&path) else {
             return None;
         };
@@ -150,11 +150,14 @@ fn log_dir() -> PathBuf {
     }
 }
 
-/// unix ts from a `session-<ts>.jsonl` file name
+/// unix ts from a `<prefix>-<ts>.jsonl` file name(新旧前缀兼容)
 fn session_ts(name: &str) -> Option<u64> {
-    name.strip_prefix("session-")
-        .and_then(|r| r.strip_suffix(".jsonl"))
-        .and_then(|r| r.parse::<u64>().ok())
+    // 新前缀 ltop-log-;旧 session- 前缀文件仍可读/清理
+    let name = name
+        .strip_prefix("ltop-log-")
+        .or_else(|| name.strip_prefix("session-"))?
+        .strip_suffix(".jsonl")?;
+    name.parse::<u64>().ok()
 }
 
 fn json_str(s: &str) -> String {
@@ -177,6 +180,7 @@ mod tests {
     #[test]
     fn parses_session_file_names() {
         assert_eq!(session_ts("session-1792368483.jsonl"), Some(1792368483));
+        assert_eq!(session_ts("ltop-log-1792368483.jsonl"), Some(1792368483));
         assert_eq!(session_ts("session-abc.jsonl"), None);
         assert_eq!(session_ts("other.jsonl"), None);
         assert_eq!(session_ts("session-12.txt"), None);
