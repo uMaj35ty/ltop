@@ -188,9 +188,49 @@ fn sample_entries() -> std::io::Result<(Vec<DevCounters>, BTreeMap<String, Iface
     Ok((entries, infos))
 }
 
-/// mac:单次 getifaddrs 同时取计数器(if_data64)与链路层信息(AF_LINK)
+/// mac:接口计数走 `netstat -ib`(Apple 二进制不受隐私门控;getifaddrs 的
+/// if_data64 对未授权进程是冻结的假数据,实测 98MB 传输纹丝不动),接口
+/// 元信息(MAC/MTU/状态/地址)仍走 getifaddrs(不受限)
 #[cfg(target_os = "macos")]
 fn sample_entries() -> std::io::Result<(Vec<DevCounters>, BTreeMap<String, IfaceInfo>)> {
+    let entries = parse_netstat_ib(&netstat_ib_output());
+    let (_, mut infos) = sample_link_info()?;
+    for info in infos.values_mut() {
+        info.addrs.sort();
+    }
+    Ok((entries, infos))
+}
+
+#[cfg(target_os = "macos")]
+fn netstat_ib_output() -> String {
+    std::process::Command::new("netstat")
+        .args(["-ib"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+        .unwrap_or_default()
+}
+
+/// `netstat -ib` 的 Link 行 → (name, ibytes, obytes, 0, 0)。
+/// 列:Name Mtu Network Address Ipkts Ierrs Ibytes Opkts Oerrs Obytes [Coll];
+/// 每接口多条(\<Link#N\> 一条 + 每地址一条),计数只认 Link 行
+pub fn parse_netstat_ib(out: &str) -> Vec<DevCounters> {
+    let mut out_v = Vec::new();
+    for line in out.lines().skip(1) {
+        let f: Vec<&str> = line.split_whitespace().collect();
+        if f.len() < 10 || !f[2].starts_with("<Link") {
+            continue;
+        }
+        let (Ok(ib), Ok(ob)) = (f[6].parse::<u64>(), f[9].parse::<u64>()) else {
+            continue;
+        };
+        out_v.push((f[0].to_string(), ib, ob, 0, 0));
+    }
+    out_v
+}
+
+/// getifaddrs 只取链路层信息(AF_LINK 记录:MAC/状态/MTU + 地址列表)
+#[cfg(target_os = "macos")]
+fn sample_link_info() -> std::io::Result<((), BTreeMap<String, IfaceInfo>)> {
     use std::ffi::CStr;
 
     unsafe {
@@ -198,7 +238,6 @@ fn sample_entries() -> std::io::Result<(Vec<DevCounters>, BTreeMap<String, Iface
         if libc::getifaddrs(&mut ifap) != 0 {
             return Err(std::io::Error::last_os_error());
         }
-        let mut counters: Vec<DevCounters> = Vec::new();
         let mut infos: BTreeMap<String, IfaceInfo> = BTreeMap::new();
         let mut counted: Vec<String> = Vec::new();
         let mut p = ifap;
@@ -213,9 +252,8 @@ fn sample_entries() -> std::io::Result<(Vec<DevCounters>, BTreeMap<String, Iface
                 mac: String::new(),
                 addrs: Vec::new(),
             });
-            // 计数器/状态/MTU/MAC 全部只认 AF_LINK 记录:if_data64 挂在
-            // AF_LINK 上,其它族记录的 ifa_data 不是接口级真值(实测 en0
-            // 多记录下首条启发式会取到不动的计数,速率恒 0)
+            // 元信息只认 AF_LINK 记录(MAC/状态/MTU);字节计数已改走
+            // netstat -ib(if_data64 对未授权进程是冻结的假数据)
             if let Some(dl) = ifa.ifa_addr.cast::<libc::sockaddr_dl>().as_ref() {
                 if dl.sdl_family as i32 != libc::AF_LINK {
                     p = ifa.ifa_next;
@@ -225,7 +263,6 @@ fn sample_entries() -> std::io::Result<(Vec<DevCounters>, BTreeMap<String, Iface
                     counted.push(name.clone());
                     if !ifa.ifa_data.is_null() {
                         let d = &*(ifa.ifa_data as *const libc::if_data64);
-                        counters.push((name.clone(), d.ifi_ibytes, d.ifi_obytes, d.ifi_iqdrops as u64, 0));
                         entry.operstate = if ifa.ifa_flags & (libc::IFF_UP as u32) != 0 {
                             "up".into()
                         } else {
@@ -249,10 +286,7 @@ fn sample_entries() -> std::io::Result<(Vec<DevCounters>, BTreeMap<String, Iface
             p = ifa.ifa_next;
         }
         libc::freeifaddrs(ifap);
-        for info in infos.values_mut() {
-            info.addrs.sort();
-        }
-        Ok((counters, infos))
+        Ok(((), infos))
     }
 }
 
@@ -321,4 +355,39 @@ pub fn default_route_iface() -> Option<String> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Air 真机 netstat -ib 原样输出(截选):每接口一条 <Link#N> 行 +
+    /// 每地址一行;计数只认 Link 行
+    #[test]
+    fn parses_netstat_ib_link_rows() {
+        let sample = "\
+Name       Mtu   Network       Address            Ipkts Ierrs     Ibytes    Opkts Oerrs     Obytes  Coll
+en0        1500  <Link#14>   c0:c7:db:f4:1e:8d  5541796     0 3138218733  3941442     0 2567353867     0
+en0        1500  umaj35tydem fe80:e::1432:d53b  5541796     - 3138218733  3941442     - 2567353867     -
+en0        1500  192.168.121  umaj35tydem        5541796     - 3138218733  3941442     - 2567353867     -
+lo0        16384 <Link#2>    <#2>                480123     0 480123456   480123     0 480123456     0
+utun7      1380  <Link#41>   <#41>                     0     0           0        3     0           348     0
+";
+        let mut rows = parse_netstat_ib(sample);
+        rows.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(rows.len(), 3, "只认 Link 行");
+        let en0 = rows.iter().find(|r| r.0 == "en0").unwrap();
+        assert_eq!(en0.1, 3_138_218_733);
+        assert_eq!(en0.2, 2_567_353_867);
+        let utun = rows.iter().find(|r| r.0 == "utun7").unwrap();
+        assert_eq!((utun.1, utun.2), (0, 348));
+    }
+
+    #[test]
+    fn netstat_parse_tolerates_garbage() {
+        assert!(parse_netstat_ib("").is_empty());
+        assert!(parse_netstat_ib("Name Mtu Network").is_empty());
+        // 数值列非数字的行跳过
+        assert!(parse_netstat_ib("en0 1500 <Link#1> x a b c d e f g").is_empty());
+    }
 }
