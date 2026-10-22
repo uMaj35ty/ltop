@@ -3,6 +3,27 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **OSC 52 copy in the detail popup**: ↑↓/jk moves a field cursor, `y`
+  copies the selected value to the terminal clipboard (works over SSH, no
+  X11/Wayland dependency); hint row shows `[y] copy`.
+- **Home/End/g/G jump**: focused lists jump to first/last row (top/bottom
+  for scroll-only boxes); guarded against the SSH ghost-modifier sequences.
+- **Alive Σ in the NET box**: since-interface-up totals shown beside the
+  resettable session Σ (the underlying counters were already collected).
+- **GraphMode::Block**: seamless half-block bars as a non-default graph
+  style (graphs menu only; the `n` cycle keeps the original five).
+- **Renamed** the monitoring log to `ltop-log-<ts>.jsonl` (old
+  `session-*` files still read and purged) and the module to `log`.
+
+### Fixed
+
+- mac detail popup showed `-` for exe/cwd: now sourced from
+  `proc_pidpath` / `PROC_PIDVNODEPATHINFO`.
+
 ## [0.2.2] - 2026-10-22
 
 ### Fixed

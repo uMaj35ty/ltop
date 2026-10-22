@@ -7,7 +7,7 @@ use crate::collect::net::NetCollector;
 use crate::collect::proc::ProcCollector;
 use crate::collect::udp::UdpCollector;
 use crate::config::{Config, Lang};
-use crate::monlog::MonLog;
+use crate::log::MonLog;
 use crate::ui::graph::GraphMode;
 
 /// Boxes, addressed by number keys 1-6 (btop-style toggle badges)
@@ -169,7 +169,7 @@ pub struct App {
     /// mac:nettop 轮询(PROCS net + CONNS 流行;Linux 无)
     #[cfg(target_os = "macos")]
     pub nettop: crate::collect::nettop::NettopCollector,
-    pub monlog: MonLog,
+    pub log: MonLog,
     pub lang: Lang,
     pub hostname: String,
     pub ticks: u64,
@@ -185,6 +185,8 @@ pub struct App {
     pub expanded: std::collections::HashSet<String>,
     /// proc 分组的默认态:false = 折叠(聚合行)、true = 展开
     pub proc_expand_default: bool,
+    /// detail 弹窗的字段游标(↑↓ 移动,y 复制选中值)
+    pub detail_sel: usize,
     /// 运行中实时跟随 omarchy 主题重写(--follow-theme / theme_live_follow);
     /// 默认关,save_config 时原样保留
     pub theme_live_follow: bool,
@@ -231,7 +233,7 @@ impl App {
             udp: UdpCollector::new(),
             #[cfg(target_os = "macos")]
             nettop: crate::collect::nettop::NettopCollector::new(),
-            monlog: MonLog::new(log_interval, cfg.log_retention_days, hostname.clone()),
+            log: MonLog::new(log_interval, cfg.log_retention_days, hostname.clone()),
             lang: cfg.lang,
             hostname,
             ticks: 0,
@@ -242,6 +244,7 @@ impl App {
             search_box: BOX_CONNS,
             expanded: std::collections::HashSet::new(),
             proc_expand_default: false,
+            detail_sel: 0,
             theme_live_follow: false,
             search_buf: String::new(),
             menu: MenuState::None,
@@ -265,7 +268,7 @@ impl App {
         app.lan.sweep_interval = Duration::from_secs(cfg.sweep_interval_s);
         app.lan.sweep_enabled = cfg.sweep;
         // retention housekeeping on startup
-        let _ = app.monlog.purge_old();
+        let _ = app.log.purge_old();
         app.lan.sort = cfg.lan_sort;
         app.conn.filter = cfg.conn_filter;
         app.conn.sort = cfg.conn_sort;
@@ -289,10 +292,10 @@ impl App {
             graph_net: self.graph_net,
             graph_disk: self.graph_disk,
             boxes: self.visible,
-            log_interval_ms: self.monlog.interval.as_millis() as u64,
+            log_interval_ms: self.log.interval.as_millis() as u64,
             log_tracked_only: self.log_tracked_only,
             allow_global_kill: self.allow_global_kill,
-            log_retention_days: self.monlog.retention_days,
+            log_retention_days: self.log.retention_days,
             sweep_interval_s: self.lan.sweep_interval.as_secs(),
             sweep: self.lan.sweep_enabled,
             lan_sort: self.lan.sort,
@@ -354,9 +357,9 @@ impl App {
                 .filter(|p| self.tracked.proc_slot(p.pid).is_some())
                 .cloned()
                 .collect();
-            self.monlog.maybe_write(&rows);
+            self.log.maybe_write(&rows);
         } else {
-            self.monlog.maybe_write(&self.proc.procs);
+            self.log.maybe_write(&self.proc.procs);
         }
         self.ticks += 1;
     }
