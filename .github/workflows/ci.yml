@@ -12,7 +12,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # eBPF 对象在 build.rs 里由系统 clang 编译(-target bpf)
       - name: Install clang
         run: sudo apt-get update && sudo apt-get install -y clang
@@ -25,7 +25,7 @@ jobs:
   test-aarch64:
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install clang
         run: sudo apt-get update && sudo apt-get install -y clang
       - name: Test
@@ -37,7 +37,7 @@ jobs:
   test-macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Test
         run: cargo test
       - name: Clippy
