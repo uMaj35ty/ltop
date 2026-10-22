@@ -25,7 +25,7 @@ jobs:
             slug: aarch64-linux
             cross: aarch64-linux-gnu-
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # eBPF 对象在 build.rs 里由 clang(-target bpf)编译;22.04 的 clang 带 bpf
       # 后端,且按 CARGO_CFG_TARGET_ARCH 传 -D__TARGET_ARCH_* 分支寄存器布局
       - name: Install toolchain
@@ -49,7 +49,7 @@ jobs:
           ln -s ltop dist/loli
           tar czf "ltop-${GITHUB_REF_NAME#v}-${{ matrix.slug }}.tar.gz" -C dist ltop ltop-bpf loli
           sha256sum "ltop-${GITHUB_REF_NAME#v}-${{ matrix.slug }}.tar.gz" > "SHA256SUMS-${{ matrix.slug }}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-${{ matrix.slug }}
           path: |
@@ -68,7 +68,7 @@ jobs:
           - target: x86_64-apple-darwin
             slug: x86_64-darwin
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Toolchain
         run: rustup target add ${{ matrix.target }}
       - name: Build
@@ -80,7 +80,7 @@ jobs:
           ln -s ltop dist/loli
           tar czf "ltop-${GITHUB_REF_NAME#v}-${{ matrix.slug }}.tar.gz" -C dist ltop loli
           shasum -a 256 "ltop-${GITHUB_REF_NAME#v}-${{ matrix.slug }}.tar.gz" > "SHA256SUMS-${{ matrix.slug }}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-${{ matrix.slug }}
           path: |
@@ -91,7 +91,7 @@ jobs:
     needs: [build, build-macos]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           merge-multiple: true
       - name: Merge SHA256SUMS
