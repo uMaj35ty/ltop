@@ -349,18 +349,14 @@ impl App {
                 crate::ui::reselect(self, idx, id);
             }
         }
+        let mut snap = crate::snapshot::from_app(self);
         if self.log_tracked_only {
-            let rows: Vec<_> = self
-                .proc
-                .procs
-                .iter()
-                .filter(|p| self.tracked.proc_slot(p.pid).is_some())
-                .cloned()
-                .collect();
-            self.log.maybe_write(&rows);
-        } else {
-            self.log.maybe_write(&self.proc.procs);
+            // tracked_only:日志行的 procs 仅记录置顶进程
+            let tracked: std::collections::HashSet<u32> =
+                self.tracked.procs.iter().copied().collect();
+            snap.procs.retain(|p| tracked.contains(&p.pid));
         }
+        self.log.maybe_write(&snap);
         self.ticks += 1;
     }
 

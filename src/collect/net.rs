@@ -155,6 +155,13 @@ impl NetCollector {
         Some((cur.0.saturating_sub(base.0), cur.1.saturating_sub(base.1)))
     }
 
+    /// 指定接口的 Alive Σ(--json 全接口用)
+    pub fn alive_for(&self, name: &str) -> Option<(u64, u64)> {
+        let cur = self.last_totals.get(name)?;
+        let base = self.boot_totals.get(name)?;
+        Some((cur.0.saturating_sub(base.0), cur.1.saturating_sub(base.1)))
+    }
+
     pub fn selected_rates(&self) -> Option<IfaceRates> {
         self.selected.as_ref().and_then(|s| self.rates.get(s)).copied()
     }

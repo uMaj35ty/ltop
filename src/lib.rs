@@ -5,6 +5,7 @@ pub mod collect;
 pub mod config;
 pub mod log;
 pub mod replay;
+pub mod snapshot;
 pub mod theme;
 pub mod theme_data;
 pub mod ui;
@@ -58,6 +59,8 @@ USAGE:
     {prog} [OPTIONS]
 
     (no options)            run the TUI
+    --json                  AI-friendly structured snapshot (JSON, schema v1)
+    --schema                field reference for --json (machine-readable)
     --dump                  one-shot diagnostic dump to stdout, then exit
     --log                   start the TUI with the monitoring log enabled
     --log-interval <MS>     monitoring log interval in ms (with --log; default from settings)
@@ -118,6 +121,12 @@ pub fn cli_main() -> Result<()> {
     let boot_cfg = config::Config::load();
     if boot_cfg.theme != "omarchy" {
         let _ = theme::apply_by_name(&boot_cfg.theme);
+    }
+    if args.iter().any(|a| a == "--json") {
+        return json_snapshot();
+    }
+    if args.iter().any(|a| a == "--schema") {
+        return print_schema();
     }
     if args.iter().any(|a| a == "--dump") {
         return dump(&theme_src);
@@ -853,6 +862,62 @@ pub(crate) fn start_cmd(cmd: &[String]) -> std::io::Result<u32> {
             .spawn()
             .map(|child| child.id())
     }
+}
+
+/// AI-friendly structured snapshot: two sampling rounds (rates), JSON out
+pub fn json_snapshot() -> Result<()> {
+    let mut app = App::new(None);
+    app.update();
+    std::thread::sleep(Duration::from_millis(1200));
+    app.update();
+    let snap = snapshot::from_app(&app);
+    println!("{}", serde_json::to_string_pretty(&snap)?);
+    Ok(())
+}
+
+/// field reference for `--json` consumers (machine-parseable, versioned)
+pub fn print_schema() -> Result<()> {
+    let fields: &[(&str, &str, &str)] = &[
+        ("schema", "u32", "snapshot schema version (additive-only within a version)"),
+        ("meta.hostname", "string", "host name"),
+        ("meta.ts", "u64", "unix timestamp (seconds)"),
+        ("meta.version", "string", "ltop version"),
+        ("meta.os / meta.arch", "string", "platform"),
+        ("meta.udp_helper", "bool", "eBPF helper snapshot fresh (Linux only)"),
+        ("net.selected", "string", "interface shown in the TUI"),
+        ("net.interfaces[].name/operstate/mac", "string", "interface identity"),
+        ("net.interfaces[].speed_mbps", "u64?", "link speed (None on Wi-Fi)"),
+        ("net.interfaces[].addresses[]", "string", "CIDR addresses"),
+        ("net.interfaces[].rx_bps/tx_bps", "f64", "instantaneous bytes/s"),
+        ("net.interfaces[].session_rx/session_tx", "u64", "bytes since ltop start"),
+        ("net.interfaces[].alive_rx/alive_tx", "u64", "bytes since interface up"),
+        ("lan.subnets[]", "string", "observed subnets (CIDR)"),
+        ("lan.gateways[]", "string", "default gateways"),
+        ("lan.neighbours[].ip/mac/hostname/iface", "string", "neighbour identity; mac is null on macOS (system sanitizes)"),
+        ("lan.neighbours[].is_gateway/is_self/tracked", "bool", "role flags"),
+        ("disk.devices[].name/mounts[]/fstype", "string", "device identity"),
+        ("disk.devices[].total/used", "u64", "capacity (bytes)"),
+        ("disk.devices[].read_bps/write_bps/iops", "f64", "throughput"),
+        ("disk.session_read/session_write", "u64", "bytes since ltop start"),
+        ("conns[].proto/local/remote/state", "string", "connection identity (state: LISTEN/ESTAB/UDP)"),
+        ("conns[].process/pid/user", "string|u32|null", "owner (null when not owned by you)"),
+        ("conns[].inode", "u64", "stable row key"),
+        ("conns[].bytes_recv/bytes_sent", "u64", "cumulative per-socket bytes"),
+        ("conns[].bps_recv/bps_sent", "f64", "instantaneous bytes/s"),
+        ("procs[].pid/name/alive", "u32|string|bool", "process identity"),
+        ("procs[].net_recv/net_sent/udp_recv/udp_sent", "u64", "session Σ bytes"),
+        ("procs[].net_bps_recv/net_bps_sent", "f64", "network bytes/s"),
+        ("procs[].disk_read/disk_written/disk_bps_read/disk_bps_written", "u64|f64", "disk I/O (own-uid processes)"),
+    ];
+    let out = serde_json::json!({
+        "schema": snapshot::SCHEMA,
+        "command": "ltop --json",
+        "fields": fields.iter().map(|(p, t, d)| serde_json::json!({
+            "path": p, "type": t, "description": d,
+        })).collect::<Vec<_>>(),
+    });
+    println!("{}", serde_json::to_string_pretty(&out)?);
+    Ok(())
 }
 
 /// headless dump of one sampled round (debug aid)
