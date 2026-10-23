@@ -1,5 +1,6 @@
 pub mod graph;
 
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering::Relaxed};
 use std::sync::Mutex;
 
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -49,6 +50,11 @@ pub fn box_rect(idx: usize) -> Option<Rect> {
 
 pub fn draw(f: &mut Frame, app: &App) {
     let area = f.area();
+    // detail 弹窗未打开时,鼠标命中缓存的弹窗几何即刻失效
+    DETAIL_VALID.store(
+        matches!(app.menu, MenuState::Detail(..)),
+        Relaxed,
+    );
     if let Some(bg) = bg() {
         f.render_widget(Block::new().style(Style::new().bg(bg)), area);
     }
@@ -2778,6 +2784,56 @@ pub struct DetailLayout {
 
 /// detail 弹窗的几何与字段行映射——渲染与鼠标命中测试的单一事实源
 fn detail_layout(app: &App, box_idx: usize, id: u64, area: Rect, sel: usize) -> DetailLayout {
+    let width = 92.min(area.width);
+    let DetailContent {
+        field_rows,
+        values,
+        n_lines,
+        hint_lines,
+        hints_h,
+    } = detail_content(app, box_idx, id, width);
+    let h = (n_lines as u16 + 4).min(area.height);
+    let popup = centered(area, width, h);
+    let inner = Rect {
+        x: popup.x + 1,
+        y: popup.y + 1,
+        width: popup.width.saturating_sub(2),
+        height: popup.height.saturating_sub(2),
+    };
+    let hints_y = inner.bottom().saturating_sub(hints_h);
+    let fields_h = hints_y.saturating_sub(inner.y);
+    let sel = sel.min(field_rows.len().saturating_sub(1));
+    let (s0, n0) = field_rows.get(sel).copied().unwrap_or((0, 1));
+    let vis = fields_h as usize;
+    let scroll = (s0 + n0).saturating_sub(vis);
+
+    DetailLayout {
+        popup,
+        inner,
+        fields_h,
+        hints_y,
+        hint_lines,
+        scroll,
+        sel,
+        field_rows,
+        values,
+    }
+}
+
+/// 弹窗内容里与位置无关的部分
+struct DetailContent {
+    /// 每个字段的行区间(起始行, 行数)
+    field_rows: Vec<(usize, usize)>,
+    /// 每个字段的完整值(复制用)
+    values: Vec<String>,
+    /// 总行数(含 gone 行/组标题/空行)
+    n_lines: usize,
+    hint_lines: Vec<String>,
+    hints_h: u16,
+}
+
+/// 渲染与鼠标命中测试共用,保证两视图永不漂移
+fn detail_content(app: &App, box_idx: usize, id: u64, width: u16) -> DetailContent {
     let DetailData {
         groups,
         pid,
@@ -2802,14 +2858,13 @@ fn detail_layout(app: &App, box_idx: usize, id: u64, area: Rect, sel: usize) -> 
         hints.insert(2, "[s] start/restart".to_string());
     }
 
-    let w = 92.min(area.width);
     let lbl_w = groups
         .iter()
         .flat_map(|(_, fs)| fs.iter())
         .map(|((l, _), _)| l.chars().count())
         .max()
         .unwrap_or(0);
-    let inner_w = w.saturating_sub(2) as usize;
+    let inner_w = width.saturating_sub(2) as usize;
     let chunk_w = inner_w.saturating_sub(lbl_w + 4).max(10);
     let n_lines: usize = gone.len().min(1)
         + groups
@@ -2822,14 +2877,6 @@ fn detail_layout(app: &App, box_idx: usize, id: u64, area: Rect, sel: usize) -> 
                     .sum::<usize>()
             })
             .sum::<usize>();
-    let h = (n_lines as u16 + 4).min(area.height);
-    let popup = centered(area, w, h);
-    let inner = Rect {
-        x: popup.x + 1,
-        y: popup.y + 1,
-        width: popup.width.saturating_sub(2),
-        height: popup.height.saturating_sub(2),
-    };
 
     let mut lines = 0usize;
     let mut field_rows: Vec<(usize, usize)> = Vec::new();
@@ -2849,29 +2896,19 @@ fn detail_layout(app: &App, box_idx: usize, id: u64, area: Rect, sel: usize) -> 
             values.push(value.clone());
         }
     }
-    let hint_lines = pack_rows(&hints, inner.width.saturating_sub(1) as usize);
+    let hint_lines = pack_rows(&hints, width.saturating_sub(2) as usize);
     let hints_h = hint_lines.len() as u16;
-    let hints_y = inner.bottom().saturating_sub(hints_h);
-    let fields_h = hints_y.saturating_sub(inner.y);
-    let sel = sel.min(field_rows.len().saturating_sub(1));
-    let (s0, n0) = field_rows.get(sel).copied().unwrap_or((0, 1));
-    let vis = fields_h as usize;
-    let scroll = (s0 + n0).saturating_sub(vis);
-
-    DetailLayout {
-        popup,
-        inner,
-        fields_h,
-        hints_y,
-        hint_lines,
-        scroll,
-        sel,
+    DetailContent {
         field_rows,
         values,
+        n_lines,
+        hint_lines,
+        hints_h,
     }
 }
 
-/// 鼠标命中:弹窗某行对应什么。col 不参与(字段行整行可点)。
+/// 鼠标命中:弹窗某行对应什么。几何直接读渲染时缓存的弹窗矩形(与屏幕上
+/// 真实位置零漂移),col 不参与(字段行整行可点)。
 pub enum DetailHit {
     /// 字段行:(游标索引, 字段完整值)
     Field(usize, String),
@@ -2881,23 +2918,50 @@ pub enum DetailHit {
     Outside,
 }
 
-pub fn detail_hit_test(app: &App, box_idx: usize, id: u64, area: Rect, row: u16) -> DetailHit {
-    let l = detail_layout(app, box_idx, id, area, app.detail_sel);
-    if row < l.inner.y || row >= l.inner.y + l.fields_h {
-        return DetailHit::Outside;
+pub fn detail_hit_test(app: &App, box_idx: usize, id: u64, row: u16) -> DetailHit {
+    if !DETAIL_VALID.load(Relaxed) {
+        return DetailHit::Outside; // 打开 detail 后还没渲染过一帧
     }
-    let all_y = (row - l.inner.y) as usize + l.scroll;
-    for (i, (start, count)) in l.field_rows.iter().enumerate() {
+    let y = DETAIL_Y.load(Relaxed);
+    let h = DETAIL_H.load(Relaxed);
+    if row < y || row >= y + h {
+        return DetailHit::Outside; // 弹窗外
+    }
+    let inner_y = y + 1; // 上边框
+    let fields_h = DETAIL_FIELDS_H.load(Relaxed);
+    if row < inner_y || row >= inner_y + fields_h {
+        return DetailHit::Heading; // 边框/空行/hint 行
+    }
+    let all_y = (row - inner_y) as usize + DETAIL_SCROLL.load(Relaxed) as usize;
+    let width = DETAIL_W.load(Relaxed);
+    let DetailContent { field_rows, values, .. } = detail_content(app, box_idx, id, width);
+    for (i, (start, count)) in field_rows.iter().enumerate() {
         if all_y >= *start && all_y < start + count {
-            return DetailHit::Field(i, l.values[i].clone());
+            return DetailHit::Field(i, values[i].clone());
         }
     }
     DetailHit::Heading
 }
 
+// detail 弹窗实际渲染几何的缓存:鼠标命中测试直接用它,避免用全屏尺寸
+// 复算 centered 时与主区(少 footer 一行)产生半行级取整偏差
+static DETAIL_Y: AtomicU16 = AtomicU16::new(0);
+static DETAIL_H: AtomicU16 = AtomicU16::new(0);
+static DETAIL_W: AtomicU16 = AtomicU16::new(0);
+static DETAIL_FIELDS_H: AtomicU16 = AtomicU16::new(0);
+static DETAIL_SCROLL: AtomicU16 = AtomicU16::new(0);
+static DETAIL_VALID: AtomicBool = AtomicBool::new(false);
+
 fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u64) {
     let DetailData { groups, gone, .. } = detail_data(app, box_idx, id);
     let l = detail_layout(app, box_idx, id, area, app.detail_sel);
+    // 缓存实际渲染几何:鼠标命中测试(detail_hit_test)据此定位,与屏幕零漂移
+    DETAIL_Y.store(l.popup.y, Relaxed);
+    DETAIL_H.store(l.popup.height, Relaxed);
+    DETAIL_W.store(l.popup.width, Relaxed);
+    DETAIL_FIELDS_H.store(l.fields_h, Relaxed);
+    DETAIL_SCROLL.store(l.scroll as u16, Relaxed);
+    DETAIL_VALID.store(true, Relaxed);
 
     f.render_widget(Clear, l.popup);
     let block = Block::bordered()

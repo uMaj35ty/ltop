@@ -934,8 +934,6 @@ fn handle_mouse(app: &mut App, m: &crossterm::event::MouseEvent) {
     // detail 弹窗打开时接管鼠标:单击字段行移动游标、双击复制字段值、
     // 滚轮逐字段步进、点击弹窗外关闭面板
     if let crate::app::MenuState::Detail(b, id) = app.menu {
-        let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
-        let area = ratatui::layout::Rect::new(0, 0, cols, rows);
         let dbl = app.last_click.is_some_and(|(t0, c0, r0)| {
             t0.elapsed() < std::time::Duration::from_millis(400)
                 && c0 == m.column
@@ -951,7 +949,7 @@ fn handle_mouse(app: &mut App, m: &crossterm::event::MouseEvent) {
                 app.detail_sel = (app.detail_sel + 1).min(n.saturating_sub(1));
             }
             MouseEventKind::Down(MouseButton::Left) => {
-                match ui::detail_hit_test(app, b, id, area, m.row) {
+                match ui::detail_hit_test(app, b, id, m.row) {
                     ui::DetailHit::Field(idx, value) => {
                         app.detail_sel = idx;
                         if dbl {
@@ -1428,7 +1426,7 @@ mod tests {
         term.draw(|f| ui::draw(f, &app)).unwrap(); // smoke: empty-data path renders
         let area = ratatui::layout::Rect::new(0, 0, 120, 40);
         assert!(matches!(
-            ui::detail_hit_test(&app, app::BOX_PROCS, 0, area, 39),
+            ui::detail_hit_test(&app, app::BOX_PROCS, 0, 39),
             ui::DetailHit::Outside
         ));
     }
