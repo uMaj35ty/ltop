@@ -2314,12 +2314,27 @@ fn draw_menu_footer(f: &mut Frame, area: Rect, sel: usize, lang: Lang) {
 /// graphs 面板:与 settings 同款风格(居中弹窗、label: value 行列表)
 fn draw_graphs_popup(f: &mut Frame, area: Rect, app: &App, sel: usize) {
     let lang = app.lang;
-    let rows: [(&str, &str, String); 3] = [
+    let ratio_label = |r: u32| format!("{r}×");
+    let rows: [(&str, &str, String); 5] = [
         ("n", "net", app.graph_net.label().to_string()),
         ("d", "disk i/o", app.graph_disk.label().to_string()),
         ("a", "all", lang.tr("set_both").to_string()),
+        (
+            "c",
+            "coupled scaling",
+            if app.net_graph_coupled {
+                format!("on ({})", ratio_label(app.net_graph_scale_ratio))
+            } else {
+                lang.tr("off").to_string()
+            },
+        ),
+        (
+            "r",
+            "scale ratio",
+            ratio_label(app.net_graph_scale_ratio),
+        ),
     ];
-    let (w, h) = (60.min(area.width), 7.min(area.height));
+    let (w, h) = (60.min(area.width), 9.min(area.height));
     let popup = centered(area, w, h);
     f.render_widget(Clear, popup);
     let block = Block::bordered()
