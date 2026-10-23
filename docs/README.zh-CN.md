@@ -55,6 +55,22 @@ AUR:`ltop-bin`——待 AUR 开放注册后提供(打包件已就绪)。
 经 jq 过滤到相关字段仅约 1700——**输入 token 省 ~92%**,且 socket 计数
 逐字节保真、无需读屏截表格。全量快照约 8k token。
 
+时间窗任务(「盯着 10 分钟再汇报」)用 **`ltop watch` + `ltop report`**:
+watch 无头录制 schema v1 JSONL,report 聚合出摘要——每进程/每连接窗口
+总和(末快照累计 − 首快照累计)、峰值速率、活跃时长——不用轮询 `--json`:
+
+```bash
+ltop watch --duration 10m --proc chrome   # 录制(崩溃安全 JSONL,无需 root)
+ltop report ~/.local/state/ltop/ltop-session-*.jsonl --json   # ~2KB 摘要
+```
+
+实测:10 分钟窗口轮询 `--json` 约 4 万 token,`report --json` 摘要约 1k——
+**token 省 ~97%**,且窗口总和是精确差分而非抽样估计。一次性提问仍用
+单发 `--json`(jq 过滤后 ~1.7k token)最合适。
+
+watch 产物与 TUI 监控日志同 schema,`report` 两者通吃;任意查询交给
+`jq`(文件就是标准 JSON)。旧 `session-*` 日志(v1,仅 PROCS)归 `--replay`。
+
 ## 主题
 
 ltop 读取 btop 兼容的主题文件——修复看不清的颜色或构建完整自定义主题见
@@ -97,6 +113,10 @@ tall 布局——分组连接带合计,追踪行高亮:
   功能静默缺席,其余不受影响
 - **监控日志与回放** — `L` 键录制每进程账本到 JSONL(默认 60s 粒度,保留期可调),
   `--replay` 差分还原录制期增量并输出报表,`--csv` 导出
+- **无头 watch + report** — `ltop watch` 把完整 schema v1 快照逐行写入 JSONL
+  (interval/duration/哨兵文件可控,`--proc` 聚焦模式,SIGINT 优雅收尾);
+  `ltop report` 聚合出每进程/每连接的窗口总和、峰值与存活时长——AI 代理要的
+  机器可读摘要
 - **三种布局** — `Tab` 在 classic(左图右表,CONNS 底边与图表分界线对齐)/ wide / tall 间切换,
   盒子开关(1–6)后自动收缩
 - **主题与语言** — 内嵌 41 个 btop 官方主题热切换,或跟随 Omarchy 当前主题
@@ -165,16 +185,21 @@ sudo cp target/release/ltop-bpf /usr/local/bin/
 sudo systemctl restart ltop-bpf
 ```
 
-二进制:`ltop` 与 `ltop-bpf`(特权采集器)。Release 压缩包与 AUR 包内自带
-`loli` 软链别名(`-h` 跟随调用名显示);`cargo install` 的用户可自行
-`ln -s ltop loli`。
+二进制:`ltop` 与 `ltop-bpf`(特权采集器)。**`loli` 开箱软链别名——原名
+*localist top* 时代的遗留——自 0.2.4 起彻底退役**:Release 压缩包、brew
+formula 与 AUR 包都不再附带。需要别名请自行创建(帮助文本跟随调用名):
 
 ```bash
-ltop --theme <btop.theme>   # 指定主题文件
-ltop --dump                 # 无界面打印一轮采集结果(调试)
-ltop --log                  # 启动即录制监控日志
-ltop --replay [--csv OUT]   # 回放/分析会话日志,缺省取最新一份
-ltop-bpf --once             # 助手采一轮打印后退出(冒烟)
+ln -s "$(command -v ltop)" ~/.local/bin/loli   # 名字随意
+```
+
+```bash
+ltop watch --duration 5m --proc chrome   # 无头采集到 JSONL
+ltop report <file.jsonl> [--json]        # 采集文件的窗口摘要
+ltop --dump                              # 无界面打印一轮采集结果(调试)
+ltop --log                               # 启动即录制监控日志
+ltop --replay [--csv OUT]                # 回放/分析旧版会话日志,缺省取最新一份
+ltop-bpf --once                          # 助手采一轮打印后退出(冒烟)
 ```
 
 配置文件 `~/.config/ltop/config.conf` 为纯文本 `key = value`,设置面板
@@ -252,7 +277,7 @@ python3 scripts/snap-diff.py       # 连续采样快照,输出每 pid 原始增�
 ## 开发
 
 ```bash
-cargo test        # 108 项:单元/渲染(TestBackend)/真机合流(netlink+快照)
+cargo test        # 130 项:单元/渲染(TestBackend)/真机合流(netlink+快照)
 cargo clippy      # 全仓零警告
 ```
 

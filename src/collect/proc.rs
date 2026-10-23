@@ -202,14 +202,8 @@ impl ProcCollector {
         #[cfg(target_os = "macos")]
         let mac_pids = {
             let rows = crate::collect::macproc::list_pids();
-            self.mac_comms = rows
-                .iter()
-                .map(|m| (m.pid, m.comm.clone()))
-                .collect();
-            self.mac_starts = rows
-                .iter()
-                .map(|m| (m.pid, m.start_epoch))
-                .collect();
+            self.mac_comms = rows.iter().map(|m| (m.pid, m.comm.clone())).collect();
+            self.mac_starts = rows.iter().map(|m| (m.pid, m.start_epoch)).collect();
             rows
         };
 
@@ -594,7 +588,10 @@ mod tests {
             if let Some(row) = c.procs.iter().find(|r| r.pid == pid) {
                 saw_alive = saw_alive || row.alive;
                 if row.alive {
-                    assert!(row.cmdline.as_ref().is_some_and(|cmd| cmd[0].contains("sh")));
+                    assert!(row
+                        .cmdline
+                        .as_ref()
+                        .is_some_and(|cmd| cmd[0].contains("sh")));
                 }
             }
             if child.try_wait().expect("poll").is_some() {

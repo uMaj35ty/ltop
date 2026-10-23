@@ -43,12 +43,26 @@ versioned field reference. The companion agent skill
 ([docs/skills/ltop-observe/SKILL.md](docs/skills/ltop-observe/SKILL.md))
 teaches agents when and how to use it, with diagnostic recipes.
 
-Measured on a live desktop (same diagnostic question — "what is using the
-network"): the traditional shell-command combination (`ss -tin` + `ps aux` +
-`df -h` + `ip -s link`) came to ~22k tokens, while `ltop --json` filtered
-with `jq` to the relevant fields came to ~1.7k — **~92 % fewer input
-tokens**, with byte-exact socket counters instead of screen-scraped tables.
-The unfiltered full snapshot is ~8k tokens.
+For time-window monitoring ("watch this for 10 minutes, then report"),
+**`ltop watch`** records schema-v1 JSONL headlessly and **`ltop report`**
+aggregates it into a summary — totals per process/connection (window
+differencing), peak rates, active time — instead of polling `--json`:
+
+```bash
+ltop watch --duration 10m --proc chrome   # record (crash-safe JSONL, no root)
+ltop report ~/.local/state/ltop/ltop-session-*.jsonl --json   # ~2 KB summary
+```
+
+Measured on a live desktop: polling `--json` over a 10-minute watch costs
+~40k tokens; a `report --json` summary is ~1k — **~97 % fewer tokens**,
+with exact window sums (last snapshot cumulative − first) instead of
+sampled guesses. For one-shot questions the single `--json` snapshot
+(filtered with `jq`) stays the right tool: ~1.7k tokens vs ~22k for the
+traditional shell-command combination, and ~8k unfiltered.
+
+`watch` output and the TUI monitoring log share the same schema — `report`
+reads both; arbitrary queries go through `jq` (the files are plain JSON).
+Old `session-*` logs (v1, procs only) belong to `--replay`.
 
 ## Themes
 
@@ -106,6 +120,10 @@ ltop runs as the desktop theme switches:
 - **Monitoring log & replay** — `L` records per-process ledgers to JSONL
   (60 s granularity by default, retention configurable); `--replay` rebuilds
   session deltas into a report, `--csv` exports it
+- **Headless watch + report** — `ltop watch` records full schema-v1 snapshots
+  to JSONL (interval/duration/sentinel-file controlled, `--proc` focus mode,
+  graceful SIGINT); `ltop report` sums windows, peaks and lifetimes per
+  process/connection — the machine-readable summary AI agents poll for
 - **Three layouts** — `Tab` cycles classic (charts left, tables right with the
   CONNS bottom edge aligned to the chart split) / wide / tall; boxes toggled
   with `1`–`6` collapse automatically
@@ -187,16 +205,23 @@ sudo cp target/release/ltop-bpf /usr/local/bin/
 sudo systemctl restart ltop-bpf
 ```
 
-Binaries: `ltop` and `ltop-bpf` (privileged collector). Release tarballs and the
-AUR package ship a `loli` symlink as an out-of-the-box alias (`-h` follows the
-invoked name); `cargo install` users can add it with `ln -s ltop loli`.
+Binaries: `ltop` and `ltop-bpf` (privileged collector). **The `loli`
+out-of-the-box alias — a leftover from the original *localist top* naming —
+is fully retired as of 0.2.4**: tarballs, the brew formula and the AUR
+package no longer ship it. If you want an alias, make your own (help
+follows the invoked name):
 
 ```bash
-ltop --theme <btop.theme>   # theme file
-ltop --dump                 # print one sampling round headlessly (debug)
-ltop --log                  # start with the monitoring log recording
-ltop --replay [--csv OUT]   # replay/analyse the latest session log
-ltop-bpf --once             # collector: sample once, print, exit (smoke test)
+ln -s "$(command -v ltop)" ~/.local/bin/loli   # or any name you like
+```
+
+```bash
+ltop watch --duration 5m --proc chrome   # headless capture to JSONL
+ltop report <file.jsonl> [--json]        # window summary of a capture
+ltop --dump                              # print one sampling round headlessly (debug)
+ltop --log                               # start with the monitoring log recording
+ltop --replay [--csv OUT]                # replay/analyse a legacy session log
+ltop-bpf --once                          # collector: sample once, print, exit (smoke test)
 ```
 
 `~/.config/ltop/config.conf` is plain `key = value`, written by the
@@ -288,7 +313,7 @@ their last state; the tombstone TTL is configurable in settings).
 ## Development
 
 ```bash
-cargo test        # 108 tests: unit, rendered-frame (TestBackend), live netlink+snapshot integration
+cargo test        # 130 tests: unit, rendered-frame (TestBackend), live netlink+snapshot integration
 cargo clippy      # zero warnings
 ```
 

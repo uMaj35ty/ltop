@@ -13,9 +13,9 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::time::{Duration, Instant};
 
 #[cfg(target_os = "linux")]
-use libc::{AF_INET, AF_INET6};
-#[cfg(target_os = "linux")]
 use libc::AF_NETLINK;
+#[cfg(target_os = "linux")]
+use libc::{AF_INET, AF_INET6};
 
 #[cfg(target_os = "linux")]
 const NETLINK_SOCK_DIAG: libc::c_int = 4;
@@ -353,7 +353,9 @@ impl ConnCollector {
         }
         let live_inodes: HashSet<u64> = live.iter().map(|c| c.inode).collect();
         self.tombstones.retain(|(c, born)| {
-            c.dead && now.duration_since(*born) < self.tombstone_ttl && !live_inodes.contains(&c.inode)
+            c.dead
+                && now.duration_since(*born) < self.tombstone_ttl
+                && !live_inodes.contains(&c.inode)
         });
         let prev = std::mem::take(&mut self.last_live);
         for (ino, c) in prev {
@@ -365,11 +367,7 @@ impl ConnCollector {
             }
         }
         self.last_live = live.iter().map(|c| (c.inode, c.clone())).collect();
-        let mut tombs: Vec<Conn> = self
-            .tombstones
-            .iter()
-            .map(|(c, _)| c.clone())
-            .collect();
+        let mut tombs: Vec<Conn> = self.tombstones.iter().map(|(c, _)| c.clone()).collect();
         live.append(&mut tombs);
     }
 
@@ -423,9 +421,7 @@ impl ConnCollector {
             // so the LAN box Σ covers both transports; only this round's
             // delta goes in — udp_totals is cumulative and would snowball
             if !c.is_listen() {
-                if let (IpAddr::V4(ip), Some(&(dr, ds))) =
-                    (c.remote.0, round_bytes.get(&c.inode))
-                {
+                if let (IpAddr::V4(ip), Some(&(dr, ds))) = (c.remote.0, round_bytes.get(&c.inode)) {
                     let e = self.remote_totals.entry(ip).or_insert((0, 0));
                     e.0 += dr;
                     e.1 += ds;
@@ -473,7 +469,11 @@ fn dump_family(family: libc::c_int, proto: u8, out: &mut Vec<Conn>) {
     // SAFETY: raw netlink socket, all buffers sized by the protocol's fixed
     // message layout; fd is closed on every return path below.
     unsafe {
-        let fd = libc::socket(AF_NETLINK, libc::SOCK_RAW | libc::SOCK_CLOEXEC, NETLINK_SOCK_DIAG);
+        let fd = libc::socket(
+            AF_NETLINK,
+            libc::SOCK_RAW | libc::SOCK_CLOEXEC,
+            NETLINK_SOCK_DIAG,
+        );
         if fd < 0 {
             return;
         }
@@ -544,7 +544,7 @@ fn build_req(family: u8, proto: u8) -> Vec<u8> {
     b[17] = proto;
     b[18] = 1 << (INET_DIAG_INFO - 1); // idiag_ext: ask for tcp_info
     b[20..24].copy_from_slice(&0xffff_ffffu32.to_ne_bytes()); // all states
-    // inet_diag_sockid cookie = NOCOOKIE (dump request)
+                                                              // inet_diag_sockid cookie = NOCOOKIE (dump request)
     b[16 + 48..16 + 52].copy_from_slice(&INET_DIAG_NOCOOKIE.to_ne_bytes());
     b[16 + 52..16 + 56].copy_from_slice(&INET_DIAG_NOCOOKIE.to_ne_bytes());
     b
@@ -619,7 +619,10 @@ fn ip_from(b: &[u8], family: u8) -> IpAddr {
 #[cfg(target_os = "linux")]
 fn normalize(ip: IpAddr) -> IpAddr {
     match ip {
-        IpAddr::V6(v6) => v6.to_ipv4_mapped().map(IpAddr::V4).unwrap_or(IpAddr::V6(v6)),
+        IpAddr::V6(v6) => v6
+            .to_ipv4_mapped()
+            .map(IpAddr::V4)
+            .unwrap_or(IpAddr::V6(v6)),
         v4 => v4,
     }
 }
@@ -916,11 +919,7 @@ mod tests {
         let mut c = ConnCollector::new();
         c.sample();
         let inode = {
-            let row = c
-                .conns
-                .iter()
-                .find(|c| !c.is_tcp())
-                .expect("没有 UDP 行");
+            let row = c.conns.iter().find(|c| !c.is_tcp()).expect("没有 UDP 行");
             row.inode
         };
         let path = std::env::temp_dir().join(format!("ltop-udp-e2e-{}", std::process::id()));

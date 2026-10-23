@@ -319,7 +319,11 @@ mod tests {
     fn snap(inst: &str, ts: u64, pids: &[(u64, u64, u64)]) -> Snap {
         Snap {
             ts,
-            inst: if inst.is_empty() { None } else { Some(inst.into()) },
+            inst: if inst.is_empty() {
+                None
+            } else {
+                Some(inst.into())
+            },
             pids: map(pids),
             upids: Counters::new(),
             sks: Counters::new(),
@@ -340,10 +344,12 @@ mod tests {
     fn empty_or_malformed_snapshots_yield_none() {
         assert!(parse_snapshot("").is_none());
         assert!(parse_snapshot("{").is_none());
-        assert!(parse_snapshot("{\"inst\":\"x\",\"ts\":1,\"pids\":[],\"sks\":[]}")
-            .unwrap()
-            .pids
-            .is_empty());
+        assert!(
+            parse_snapshot("{\"inst\":\"x\",\"ts\":1,\"pids\":[],\"sks\":[]}")
+                .unwrap()
+                .pids
+                .is_empty()
+        );
         // truncated tail keeps the complete leading entries
         let s = parse_snapshot(
             "{\"inst\":\"x\",\"ts\":7,\"pids\":[{\"pid\":9,\"recv\":1,\"sent\":2},{\"pid\":",
@@ -355,7 +361,10 @@ mod tests {
 
     #[test]
     fn str_after_reads_up_to_closing_quote() {
-        assert_eq!(str_after("{\"inst\":\"a-b-1\"}", "\"inst\":\""), Some("a-b-1"));
+        assert_eq!(
+            str_after("{\"inst\":\"a-b-1\"}", "\"inst\":\""),
+            Some("a-b-1")
+        );
         assert_eq!(str_after("{\"ts\":1}", "\"inst\":\""), None);
     }
 
@@ -461,7 +470,15 @@ mod tests {
         let mut c = UdpCollector::new();
         assert!(c.ingest(snap("A", 1000, &[(7, 500, 300)])).net.is_empty());
         let d = c.ingest(snap("A", 2000, &[(7, 900, 300)])).net;
-        assert_eq!(d, vec![UdpDelta { pid: 7, recv: 400, sent: 0, dt: 1.0 }]);
+        assert_eq!(
+            d,
+            vec![UdpDelta {
+                pid: 7,
+                recv: 400,
+                sent: 0,
+                dt: 1.0
+            }]
+        );
     }
 
     #[test]

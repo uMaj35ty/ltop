@@ -88,7 +88,10 @@ pub fn parse_dump(out: &str) -> (Vec<NetProcRow>, Vec<NetFlowRow>) {
             // 只留 Linux 同口径的行:TCP 仅 Established/Listen(其余状态丢弃),
             // UDP(state 列为空)全留
             let state = f[3];
-            if proto == IPPROTO_TCP && !state.is_empty() && state != "Established" && state != "Listen"
+            if proto == IPPROTO_TCP
+                && !state.is_empty()
+                && state != "Established"
+                && state != "Listen"
             {
                 continue;
             }
@@ -387,16 +390,11 @@ time,,interface,state,bytes_in,bytes_out,rx_dupe,rx_ooo,re-tx,rtt_avg,rcvsize,tx
         assert_eq!(inodes.len(), conns.len());
         // 键稳定:同元组不同次解析得到同一 inode
         let f = &conns[0];
-        assert_eq!(
-            flow_inode(f.proto, &f.local, &f.remote),
-            f.inode
-        );
+        assert_eq!(flow_inode(f.proto, &f.local, &f.remote), f.inode);
         // 未归属行带 NO_UID,监听行状态位正确
         assert_eq!(conns.iter().map(|c| c.uid).min(), Some(NO_UID));
         assert!(conns.iter().any(|c| c.is_listen()));
-        assert!(conns
-            .iter()
-            .any(|c| !c.is_tcp() && c.state == UDP_STATE));
+        assert!(conns.iter().any(|c| !c.is_tcp() && c.state == UDP_STATE));
         let listen = conns.iter().find(|c| c.is_listen()).unwrap();
         assert_eq!(listen.state, TCP_LISTEN);
     }
@@ -510,11 +508,7 @@ time,,interface,state,bytes_in,bytes_out,rx_dupe,rx_ooo,re-tx,rtt_avg,rcvsize,tx
         cc.ingest(flows);
         cc.sample();
         let attributed = cc.conns.iter().filter(|c| c.pid.is_some()).count();
-        eprintln!(
-            "conns: {} attributed: {}",
-            cc.conns.len(),
-            attributed
-        );
+        eprintln!("conns: {} attributed: {}", cc.conns.len(), attributed);
         for c in cc.conns.iter().take(10) {
             eprintln!(
                 "  {} pid={:?} proc={:?} uid={} ino={:016x}",

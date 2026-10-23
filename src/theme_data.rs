@@ -1,44 +1,125 @@
 // Builtin btop themes, verbatim from the btop project (https://github.com/aristocratos/btop, Apache-2.0)
 pub static BUILTIN_THEMES: &[(&str, &str)] = &[
     ("adapta", include_str!("../assets/themes/adapta.theme")),
-    ("adwaita-dark", include_str!("../assets/themes/adwaita-dark.theme")),
+    (
+        "adwaita-dark",
+        include_str!("../assets/themes/adwaita-dark.theme"),
+    ),
     ("adwaita", include_str!("../assets/themes/adwaita.theme")),
     ("ayu", include_str!("../assets/themes/ayu.theme")),
     ("dracula", include_str!("../assets/themes/dracula.theme")),
-    ("dusklight", include_str!("../assets/themes/dusklight.theme")),
-    ("elementarish", include_str!("../assets/themes/elementarish.theme")),
-    ("everforest-dark-hard", include_str!("../assets/themes/everforest-dark-hard.theme")),
-    ("everforest-dark-medium", include_str!("../assets/themes/everforest-dark-medium.theme")),
-    ("everforest-light-medium", include_str!("../assets/themes/everforest-light-medium.theme")),
-    ("flat-remix-light", include_str!("../assets/themes/flat-remix-light.theme")),
-    ("flat-remix", include_str!("../assets/themes/flat-remix.theme")),
-    ("flexoki-dark", include_str!("../assets/themes/flexoki-dark.theme")),
-    ("flexoki-light", include_str!("../assets/themes/flexoki-light.theme")),
+    (
+        "dusklight",
+        include_str!("../assets/themes/dusklight.theme"),
+    ),
+    (
+        "elementarish",
+        include_str!("../assets/themes/elementarish.theme"),
+    ),
+    (
+        "everforest-dark-hard",
+        include_str!("../assets/themes/everforest-dark-hard.theme"),
+    ),
+    (
+        "everforest-dark-medium",
+        include_str!("../assets/themes/everforest-dark-medium.theme"),
+    ),
+    (
+        "everforest-light-medium",
+        include_str!("../assets/themes/everforest-light-medium.theme"),
+    ),
+    (
+        "flat-remix-light",
+        include_str!("../assets/themes/flat-remix-light.theme"),
+    ),
+    (
+        "flat-remix",
+        include_str!("../assets/themes/flat-remix.theme"),
+    ),
+    (
+        "flexoki-dark",
+        include_str!("../assets/themes/flexoki-dark.theme"),
+    ),
+    (
+        "flexoki-light",
+        include_str!("../assets/themes/flexoki-light.theme"),
+    ),
     ("gotham", include_str!("../assets/themes/gotham.theme")),
-    ("greyscale", include_str!("../assets/themes/greyscale.theme")),
-    ("gruvbox_dark", include_str!("../assets/themes/gruvbox_dark.theme")),
-    ("gruvbox_dark_v2", include_str!("../assets/themes/gruvbox_dark_v2.theme")),
-    ("gruvbox_light", include_str!("../assets/themes/gruvbox_light.theme")),
-    ("gruvbox_material_dark", include_str!("../assets/themes/gruvbox_material_dark.theme")),
+    (
+        "greyscale",
+        include_str!("../assets/themes/greyscale.theme"),
+    ),
+    (
+        "gruvbox_dark",
+        include_str!("../assets/themes/gruvbox_dark.theme"),
+    ),
+    (
+        "gruvbox_dark_v2",
+        include_str!("../assets/themes/gruvbox_dark_v2.theme"),
+    ),
+    (
+        "gruvbox_light",
+        include_str!("../assets/themes/gruvbox_light.theme"),
+    ),
+    (
+        "gruvbox_material_dark",
+        include_str!("../assets/themes/gruvbox_material_dark.theme"),
+    ),
     ("horizon", include_str!("../assets/themes/horizon.theme")),
-    ("HotPurpleTrafficLight", include_str!("../assets/themes/HotPurpleTrafficLight.theme")),
-    ("kanagawa-dragon", include_str!("../assets/themes/kanagawa-dragon.theme")),
-    ("kanagawa-lotus", include_str!("../assets/themes/kanagawa-lotus.theme")),
-    ("kanagawa-wave", include_str!("../assets/themes/kanagawa-wave.theme")),
+    (
+        "HotPurpleTrafficLight",
+        include_str!("../assets/themes/HotPurpleTrafficLight.theme"),
+    ),
+    (
+        "kanagawa-dragon",
+        include_str!("../assets/themes/kanagawa-dragon.theme"),
+    ),
+    (
+        "kanagawa-lotus",
+        include_str!("../assets/themes/kanagawa-lotus.theme"),
+    ),
+    (
+        "kanagawa-wave",
+        include_str!("../assets/themes/kanagawa-wave.theme"),
+    ),
     ("kyli0x", include_str!("../assets/themes/kyli0x.theme")),
-    ("matcha-dark-sea", include_str!("../assets/themes/matcha-dark-sea.theme")),
+    (
+        "matcha-dark-sea",
+        include_str!("../assets/themes/matcha-dark-sea.theme"),
+    ),
     ("monokai", include_str!("../assets/themes/monokai.theme")),
-    ("night-owl", include_str!("../assets/themes/night-owl.theme")),
+    (
+        "night-owl",
+        include_str!("../assets/themes/night-owl.theme"),
+    ),
     ("nord", include_str!("../assets/themes/nord.theme")),
     ("onedark", include_str!("../assets/themes/onedark.theme")),
     ("orange", include_str!("../assets/themes/orange.theme")),
     ("paper", include_str!("../assets/themes/paper.theme")),
-    ("phoenix-night", include_str!("../assets/themes/phoenix-night.theme")),
-    ("solarized_dark", include_str!("../assets/themes/solarized_dark.theme")),
-    ("solarized_light", include_str!("../assets/themes/solarized_light.theme")),
-    ("tokyo-night", include_str!("../assets/themes/tokyo-night.theme")),
-    ("tokyo-storm", include_str!("../assets/themes/tokyo-storm.theme")),
-    ("tomorrow-night", include_str!("../assets/themes/tomorrow-night.theme")),
+    (
+        "phoenix-night",
+        include_str!("../assets/themes/phoenix-night.theme"),
+    ),
+    (
+        "solarized_dark",
+        include_str!("../assets/themes/solarized_dark.theme"),
+    ),
+    (
+        "solarized_light",
+        include_str!("../assets/themes/solarized_light.theme"),
+    ),
+    (
+        "tokyo-night",
+        include_str!("../assets/themes/tokyo-night.theme"),
+    ),
+    (
+        "tokyo-storm",
+        include_str!("../assets/themes/tokyo-storm.theme"),
+    ),
+    (
+        "tomorrow-night",
+        include_str!("../assets/themes/tomorrow-night.theme"),
+    ),
     ("twilight", include_str!("../assets/themes/twilight.theme")),
     ("whiteout", include_str!("../assets/themes/whiteout.theme")),
 ];

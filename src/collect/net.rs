@@ -115,7 +115,12 @@ impl NetCollector {
                 return;
             }
         }
-        let candidates: Vec<String> = self.rates.keys().filter(|k| k.as_str() != "lo").cloned().collect();
+        let candidates: Vec<String> = self
+            .rates
+            .keys()
+            .filter(|k| k.as_str() != "lo")
+            .cloned()
+            .collect();
         let pick = candidates
             .into_iter()
             .find(|k| Some(k.as_str()) == default_route_iface().as_deref())
@@ -125,7 +130,12 @@ impl NetCollector {
     }
 
     pub fn cycle_selected(&mut self) {
-        let names: Vec<String> = self.rates.keys().filter(|k| k.as_str() != "lo").cloned().collect();
+        let names: Vec<String> = self
+            .rates
+            .keys()
+            .filter(|k| k.as_str() != "lo")
+            .cloned()
+            .collect();
         if names.is_empty() {
             return;
         }
@@ -156,7 +166,10 @@ impl NetCollector {
     }
 
     pub fn selected_rates(&self) -> Option<IfaceRates> {
-        self.selected.as_ref().and_then(|s| self.rates.get(s)).copied()
+        self.selected
+            .as_ref()
+            .and_then(|s| self.rates.get(s))
+            .copied()
     }
 
     pub fn selected_hist(&self) -> (Vec<f64>, Vec<f64>) {

@@ -10,8 +10,11 @@ fn main() {
     // eBPF 仅 Linux;mac 上嵌空对象(TUI 侧 UDP 分项静默缺席,其余不受影响)
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("linux") {
         let out = PathBuf::from(std::env::var("OUT_DIR").unwrap());
-        std::fs::write(out.join("bpf_object.rs"), "pub static BPF_OBJECT: &[u8] = &[];\n")
-            .unwrap();
+        std::fs::write(
+            out.join("bpf_object.rs"),
+            "pub static BPF_OBJECT: &[u8] = &[];\n",
+        )
+        .unwrap();
         return;
     }
 
@@ -31,9 +34,7 @@ fn main() {
         "x86_64" => "-D__TARGET_ARCH_x86",
         "aarch64" => "-D__TARGET_ARCH_aarch64",
         other => {
-            println!(
-                "cargo:warning=不支持的架构 {other}:嵌入空 eBPF 对象,UDP 计费将不可用"
-            );
+            println!("cargo:warning=不支持的架构 {other}:嵌入空 eBPF 对象,UDP 计费将不可用");
             std::fs::write(&inc, "pub static BPF_OBJECT: &[u8] = &[];\n").unwrap();
             return;
         }
@@ -61,7 +62,10 @@ fn main() {
     if ok {
         std::fs::write(
             &inc,
-            format!("pub static BPF_OBJECT: &[u8] = include_bytes!({:?});\n", obj),
+            format!(
+                "pub static BPF_OBJECT: &[u8] = include_bytes!({:?});\n",
+                obj
+            ),
         )
         .unwrap();
     } else {

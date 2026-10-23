@@ -459,7 +459,11 @@ impl Config {
     }
 
     pub fn content(&self) -> String {
-        let boxes: String = self.boxes.iter().map(|&b| if b { '1' } else { '0' }).collect();
+        let boxes: String = self
+            .boxes
+            .iter()
+            .map(|&b| if b { '1' } else { '0' })
+            .collect();
         format!(
             "lang = {}\nlayout = {}\ntick_ms = {}\ngraph_net = {}\ngraph_disk = {}\nboxes = {}\nlog_interval_ms = {}\nlog_retention_days = {}\nsweep_interval_s = {}\nsweep = {}\nlog_tracked_only = {}\nallow_global_kill = {}\nlan_sort = {}\nconn_filter = {}\nconn_sort = {}\nproc_sort = {}\ntombstone_ttl_ms = {}\ntheme = {}\ntheme_live_follow = {}\nproc_expand_default = {}\n",
             self.lang.label(),
@@ -502,5 +506,4 @@ impl Config {
     // 测试环境 no-op:不写宿主真实 config(与 load 隔离配套)
     #[cfg(test)]
     pub fn save(&self) {}
-
 }

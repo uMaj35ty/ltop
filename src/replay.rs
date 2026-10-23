@@ -85,25 +85,38 @@ pub fn run_replay(args: &[String]) -> Result<()> {
         i += 1;
     }
 
+    let zh = crate::cli_lang_zh();
+    let p = |en: &str, c: &str| crate::pick_s(zh, en, c);
     let path = match file {
         Some(p) => p,
-        None => newest_in(&log_dir()).context(concat!(
-            "state 目录里没有会话日志；先用 `L` 键或 --log 录制，",
-            "或指定文件：ltop --replay <session-*.jsonl>"
+        None => newest_in(&log_dir()).context(p(
+            "no session log in the state dir; record with the L key or --log first, or specify a file: ltop --replay <session-*.jsonl>",
+            "state 目录里没有会话日志；先用 `L` 键或 --log 录制，或指定文件：ltop --replay <session-*.jsonl>",
         ))?,
     };
     let ses = load_file(&path)?;
-    print_report(&ses, top);
+    print_report(&ses, top, zh);
     if let Some(out) = csv {
         write_csv(&ses, &out)?;
-        println!("CSV 已导出到 {}", out.display());
+        println!(
+            "{}",
+            p(
+                &format!("CSV exported to {}", out.display()),
+                &format!("CSV 已导出到 {}", out.display())
+            )
+        );
     }
     Ok(())
 }
 
 pub fn load_file(path: &std::path::Path) -> Result<Session> {
-    let f = std::fs::File::open(path)
-        .with_context(|| format!("打不开 {}", path.display()))?;
+    let f = std::fs::File::open(path).with_context(|| {
+        crate::pick_s(
+            crate::cli_lang_zh(),
+            &format!("cannot open {}", path.display()),
+            &format!("打不开 {}", path.display()),
+        )
+    })?;
     let rd = std::io::BufReader::new(f);
     let mut ses = Session {
         path: path.to_path_buf(),
@@ -138,7 +151,14 @@ pub fn load_file(path: &std::path::Path) -> Result<Session> {
         let mut net_sum = 0u64;
         for sp in &procs {
             let key = (sp.pid, sp.name.clone());
-            let cur = [sp.net_recv, sp.net_sent, sp.udp_recv, sp.udp_sent, sp.disk_r, sp.disk_w];
+            let cur = [
+                sp.net_recv,
+                sp.net_sent,
+                sp.udp_recv,
+                sp.udp_sent,
+                sp.disk_r,
+                sp.disk_w,
+            ];
             let agg = ses
                 .procs
                 .iter_mut()
@@ -242,7 +262,11 @@ fn parse_procs(line: &str) -> Vec<SnapProc> {
         return Vec::new();
     };
     let bytes = line.as_bytes();
-    let Some(mut i) = bytes[start..].iter().position(|&b| b == b'[').map(|p| start + p + 1) else {
+    let Some(mut i) = bytes[start..]
+        .iter()
+        .position(|&b| b == b'[')
+        .map(|p| start + p + 1)
+    else {
         return Vec::new();
     };
     let mut out = Vec::new();
@@ -316,10 +340,7 @@ fn num(s: &str, key: &str) -> Option<u64> {
     loop {
         let p = s[from..].find(&pat)? + from;
         let rest = &s[p + pat.len()..];
-        let digits: String = rest
-            .chars()
-            .take_while(|c| c.is_ascii_digit())
-            .collect();
+        let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
         if !digits.is_empty() {
             return digits.parse().ok();
         }
@@ -353,23 +374,49 @@ fn text(s: &str, key: &str) -> Option<String> {
     Some(out)
 }
 
-pub fn print_report(ses: &Session, top: usize) {
-    println!("== ltop 回放 ==");
+pub fn print_report(ses: &Session, top: usize, zh: bool) {
+    let p = |en: &str, c: &str| crate::pick_s(zh, en, c);
     println!(
-        "file  {}\nhost  {}  开始 {}  快照 {} 个  间隔 {}s",
-        ses.path.display(),
-        if ses.host.is_empty() { "—" } else { &ses.host },
-        fmt_ts(ses.start),
-        ses.samples,
-        ses.interval_s
+        "{}",
+        p("== ltop replay ==", "== ltop 回放 ==")
+    );
+    println!(
+        "{}",
+        p(
+            &format!(
+                "file  {}\nhost  {}  start {}  {} snapshots  interval {}s",
+                ses.path.display(),
+                if ses.host.is_empty() { "—" } else { &ses.host },
+                fmt_ts(ses.start),
+                ses.samples,
+                ses.interval_s
+            ),
+            &format!(
+                "file  {}\nhost  {}  开始 {}  快照 {} 个  间隔 {}s",
+                ses.path.display(),
+                if ses.host.is_empty() { "—" } else { &ses.host },
+                fmt_ts(ses.start),
+                ses.samples,
+                ses.interval_s
+            )
+        )
     );
     if ses.procs.is_empty() {
-        println!("（日志里没有进程快照）");
+        println!(
+            "{}",
+            p("(no process snapshots in the log)", "(日志里没有进程快照)")
+        );
         return;
     }
     println!(
         "\n{:<28} {:>9} {:>9} {:>9} {:>9} {:>10} {:>4}",
-        "进程", "Σ收", "Σ发", "Σ读盘", "Σ写盘", "峰值网速", "采样"
+        p("Process", "进程"),
+        p("Σrx", "Σ收"),
+        p("Σtx", "Σ发"),
+        p("Σrd", "Σ读盘"),
+        p("Σwr", "Σ写盘"),
+        p("peak B/s", "峰值网速"),
+        p("smp", "采样")
     );
     for a in ses.procs.iter().take(top) {
         println!(
@@ -385,10 +432,22 @@ pub fn print_report(ses: &Session, top: usize) {
     }
     let shown = ses.procs.len().min(top);
     if ses.procs.len() > shown {
-        println!("（其余 {} 个进程未列出，--top N 调整）", ses.procs.len() - shown);
+        println!(
+            "{}",
+            p(
+                &format!(
+                    "({} more processes not shown; adjust --top N)",
+                    ses.procs.len() - shown
+                ),
+                &format!("(其余 {} 个进程未列出,--top N 调整)", ses.procs.len() - shown)
+            )
+        );
     }
     if !ses.busy.is_empty() {
-        println!("\n最忙时段:");
+        println!(
+            "{}",
+            p("\nBusiest intervals:", "\n最忙时段:")
+        );
         for (ts, rate) in &ses.busy {
             println!("  {}  {}/s", fmt_ts(*ts), crate::fmt_human(*rate));
         }
@@ -396,8 +455,15 @@ pub fn print_report(ses: &Session, top: usize) {
 }
 
 fn write_csv(ses: &Session, out: &std::path::Path) -> Result<()> {
-    let mut w = std::io::BufWriter::new(std::fs::File::create(out)
-        .with_context(|| format!("创建 {} 失败", out.display()))?);
+    let mut w = std::io::BufWriter::new(
+        std::fs::File::create(out).with_context(|| {
+            crate::pick_s(
+                crate::cli_lang_zh(),
+                &format!("cannot create {}", out.display()),
+                &format!("创建 {} 失败", out.display()),
+            )
+        })?,
+    );
     writeln!(
         w,
         "name,pid,first_ts,last_ts,samples,net_recv,net_sent,udp_recv,udp_sent,disk_r,disk_w,peak_net_bps"
@@ -432,7 +498,7 @@ fn csv_field(s: &str) -> String {
     }
 }
 
-fn fmt_ts(ts: u64) -> String {
+pub(crate) fn fmt_ts(ts: u64) -> String {
     let t = ts as i64 as libc::time_t;
     let mut tm: libc::tm = unsafe { std::mem::zeroed() };
     unsafe {
@@ -467,7 +533,8 @@ mod tests {
     );
 
     fn load_str(tag: &str, s: &str) -> Session {
-        let dir = std::env::temp_dir().join(format!("ltop-replay-test-{}-{tag}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ltop-replay-test-{}-{tag}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join("session-1700000000.jsonl");
         std::fs::write(&p, s).unwrap();
@@ -555,7 +622,10 @@ mod tests {
 
     #[test]
     fn text_unescapes_json_strings() {
-        assert_eq!(text("{\"name\":\"a\\\"b\\\\c\"}", "name").unwrap(), "a\"b\\c");
+        assert_eq!(
+            text("{\"name\":\"a\\\"b\\\\c\"}", "name").unwrap(),
+            "a\"b\\c"
+        );
         assert_eq!(text("{\"name\":\"中文\"}", "name").unwrap(), "中文");
         assert_eq!(num("{\"ts\":123,\"x\":1}", "ts"), Some(123));
     }

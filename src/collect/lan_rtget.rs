@@ -179,7 +179,11 @@ mod tests {
         b[RTM_SEQ_OFF..RTM_SEQ_OFF + 4].copy_from_slice(&seq.to_ne_bytes());
         b[RTM_PID_OFF..RTM_PID_OFF + 4].copy_from_slice(&pid.to_ne_bytes());
         b[RTM_ERRNO_OFF..RTM_ERRNO_OFF + 4].copy_from_slice(&errno.to_ne_bytes());
-        let addrs = if with_gw { RTA_DST | RTA_GATEWAY } else { RTA_DST };
+        let addrs = if with_gw {
+            RTA_DST | RTA_GATEWAY
+        } else {
+            RTA_DST
+        };
         b[RTM_ADDRS_OFF..RTM_ADDRS_OFF + 4].copy_from_slice(&addrs.to_ne_bytes());
         // dst sockaddr_in @144(len=16 family=AF_INET)
         b[RTM_HDR_LEN] = 16;
@@ -208,8 +212,12 @@ mod tests {
 
     #[test]
     fn parse_reply_reads_llinfo_entry_and_interface() {
-        let (if_index, llinfo) =
-            parse_reply(&reply(7, 42, 0, RTF_UP | RTF_HOST | RTF_LLINFO, true), 7, 42).unwrap();
+        let (if_index, llinfo) = parse_reply(
+            &reply(7, 42, 0, RTF_UP | RTF_HOST | RTF_LLINFO, true),
+            7,
+            42,
+        )
+        .unwrap();
         assert_eq!(if_index, 14);
         assert!(llinfo, "LLINFO 条目才算邻居");
     }
@@ -226,9 +234,18 @@ mod tests {
 
     #[test]
     fn parse_reply_rejects_mismatch_and_errors() {
-        assert!(parse_reply(&reply(8, 42, 0, 0, true), 7, 42).is_none(), "seq 不匹配");
-        assert!(parse_reply(&reply(7, 43, 0, 0, true), 7, 42).is_none(), "pid 不匹配");
-        assert!(parse_reply(&reply(7, 42, 65 /*ESRCH*/, 0, true), 7, 42).is_none(), "errno 非零");
+        assert!(
+            parse_reply(&reply(8, 42, 0, 0, true), 7, 42).is_none(),
+            "seq 不匹配"
+        );
+        assert!(
+            parse_reply(&reply(7, 43, 0, 0, true), 7, 42).is_none(),
+            "pid 不匹配"
+        );
+        assert!(
+            parse_reply(&reply(7, 42, 65 /*ESRCH*/, 0, true), 7, 42).is_none(),
+            "errno 非零"
+        );
         // 无 GATEWAY sockaddr → 无法归属接口
         assert!(parse_reply(&reply(7, 42, 0, RTF_LLINFO, false), 7, 42).is_none());
     }

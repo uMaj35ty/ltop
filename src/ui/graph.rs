@@ -170,7 +170,11 @@ pub fn braille_graph(
                     for (ai, &v) in [left, pct[c]].iter().enumerate() {
                         // btop no_zero: floor applies everywhere except the very
                         // first char's left column (the drawing baseline)
-                        let clamp_min = if l == height - 1 && !(c == 0 && ai == 0) { 1 } else { 0 };
+                        let clamp_min = if l == height - 1 && !(c == 0 && ai == 0) {
+                            1
+                        } else {
+                            0
+                        };
                         res[ai] = if v >= cur_high {
                             4
                         } else if v <= cur_low {
@@ -204,8 +208,7 @@ pub fn braille_graph(
                         let end = (bl1 + 1 + f.div_ceil(2)).min(dots_h);
                         let (lo, hi) = grid.split_at_mut(2 * c + 1);
                         let (col0, col1) = (&mut lo[2 * c], &mut hi[0]);
-                        for (a, b) in col0.iter_mut().zip(col1.iter_mut()).take(end).skip(start)
-                        {
+                        for (a, b) in col0.iter_mut().zip(col1.iter_mut()).take(end).skip(start) {
                             *a = true;
                             *b = true;
                         }
@@ -220,13 +223,9 @@ pub fn braille_graph(
                         let x = 2 * i + 1;
                         let y = trace_y(f).min(dots_h - 1);
                         if let Some((px, py)) = prev {
-                            for (xx, col) in
-                            line.iter_mut().enumerate().take(x + 1).skip(px + 1)
-                        {
+                            for (xx, col) in line.iter_mut().enumerate().take(x + 1).skip(px + 1) {
                                 let t = (xx - px) as f32 / (x - px) as f32;
-                                let yy = (py as f32
-                                    + (y as f32 - py as f32) * t)
-                                    .round() as usize;
+                                let yy = (py as f32 + (y as f32 - py as f32) * t).round() as usize;
                                 for y2 in last.min(yy)..=last.max(yy) {
                                     col[y2.min(dots_h - 1)] = true;
                                 }
@@ -267,9 +266,7 @@ pub fn braille_graph(
                             for s in 1..=steps {
                                 let xx = px + s;
                                 let t = s as f32 / steps as f32;
-                                let yy = (py as f32
-                                    + (y as f32 - py as f32) * t)
-                                    .round() as usize;
+                                let yy = (py as f32 + (y as f32 - py as f32) * t).round() as usize;
                                 match mode {
                                     GraphMode::Line => {
                                         for y2 in last.min(yy)..=last.max(yy) {
@@ -346,7 +343,10 @@ fn block_graph(
     max: f64,
     grad: Gradient,
 ) -> Vec<Line<'static>> {
-    const BLOCKS: [char; 9] = [' ', '\u{2581}', '\u{2582}', '\u{2583}', '\u{2584}', '\u{2585}', '\u{2586}', '\u{2587}', '\u{2588}'];
+    const BLOCKS: [char; 9] = [
+        ' ', '\u{2581}', '\u{2582}', '\u{2583}', '\u{2584}', '\u{2585}', '\u{2586}', '\u{2587}',
+        '\u{2588}',
+    ];
     let blocks_h = height * 8;
     let fills: Vec<usize> = series
         .iter()
@@ -386,7 +386,14 @@ mod tests {
     #[test]
     fn solid_full_block_at_max() {
         let data = vec![100.0; 10];
-        let lines = braille_graph(&data, 10, 1, 1.0, Gradient([Color::Green; 3]), GraphMode::Solid);
+        let lines = braille_graph(
+            &data,
+            10,
+            1,
+            1.0,
+            Gradient([Color::Green; 3]),
+            GraphMode::Solid,
+        );
         assert_eq!(lines.len(), 1);
         let text = flat(&lines[0]);
         // first char: left column is the baseline (0) => table[0][4] = ⢸;
@@ -420,10 +427,19 @@ mod tests {
         // suffix window: identical to rendering just the last `width` samples,
         // so the shape never wobbles as the window slides
         let width = 20;
-        let data: Vec<f64> = (0..width + 37).map(|i| if i % 17 == 0 { 900_000.0 } else { 1200.0 }).collect();
+        let data: Vec<f64> = (0..width + 37)
+            .map(|i| if i % 17 == 0 { 900_000.0 } else { 1200.0 })
+            .collect();
         let grad = Gradient([Color::Green; 3]);
         let full = braille_graph(&data, width, 3, 64.0 * 1024.0, grad, GraphMode::Solid);
-        let suffix = braille_graph(&data[data.len() - width..], width, 3, 64.0 * 1024.0, grad, GraphMode::Solid);
+        let suffix = braille_graph(
+            &data[data.len() - width..],
+            width,
+            3,
+            64.0 * 1024.0,
+            grad,
+            GraphMode::Solid,
+        );
         for (a, b) in full.iter().zip(&suffix) {
             assert_eq!(a.spans[0].content, b.spans[0].content);
         }
@@ -488,7 +504,14 @@ mod tests {
     #[test]
     fn line_mode_draws_connected_polyline() {
         let data = vec![0.0, 100.0];
-        let lines = braille_graph(&data, 2, 2, 1.0, Gradient([Color::Green; 3]), GraphMode::Line);
+        let lines = braille_graph(
+            &data,
+            2,
+            2,
+            1.0,
+            Gradient([Color::Green; 3]),
+            GraphMode::Line,
+        );
         // 2-dot stroke: col1 {0,1}; segment to col3 tops out via col2 {4,5},
         // col3 {4..7} (vertical connect) => continuous, no holes
         let row_bottom = flat(&lines[1]);

@@ -9,7 +9,7 @@ license=('MIT')
 depends=('glibc' 'gcc-libs')
 optdepends=('clang: rebuild from source with eBPF accounting'
             'sudo: deploy the ltop-bpf helper service')
-provides=('ltop' 'ltop-bpf' 'loli')
+provides=('ltop' 'ltop-bpf')
 conflicts=('localist-top' 'localist-top-bin')
 source=("ltop-$pkgver-x86_64-linux.tar.gz::$url/releases/download/v$pkgver/ltop-$pkgver-x86_64-linux.tar.gz"
         "ltop-bpf.service::$url/raw/v$pkgver/deploy/ltop-bpf.service")
@@ -20,7 +20,5 @@ options=('!strip')
 package() {
     install -Dm755 "$srcdir/ltop" "$pkgdir/usr/bin/ltop"
     install -Dm755 "$srcdir/ltop-bpf" "$pkgdir/usr/bin/ltop-bpf"
-    # 开箱别名:与 Release tarball 同口径
-    ln -s ltop "$pkgdir/usr/bin/loli"
     install -Dm644 "$srcdir/ltop-bpf.service" "$pkgdir/usr/lib/systemd/system/ltop-bpf.service"
 }

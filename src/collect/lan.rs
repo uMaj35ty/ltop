@@ -13,8 +13,7 @@ const KEEP_ALIVE: Duration = Duration::from_secs(600);
 pub const DEFAULT_SWEEP_INTERVAL: Duration = Duration::from_secs(60);
 const MAX_CONCURRENT_RESOLVES: usize = 16;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-#[derive(Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum LanSort {
     Ip,
     Hostname,
@@ -220,7 +219,6 @@ impl LanCollector {
         }
     }
 
-
     fn refresh_subnets(&mut self) {
         self.subnets.clear();
         self.own_ips.clear();
@@ -232,7 +230,10 @@ impl LanCollector {
                 continue;
             };
             self.own_ips.insert(v4.ip);
-            if NON_LAN_IFACE_PREFIXES.iter().any(|p| ifa.name.starts_with(p)) {
+            if NON_LAN_IFACE_PREFIXES
+                .iter()
+                .any(|p| ifa.name.starts_with(p))
+            {
                 continue;
             }
             let mask = u32::from(v4.netmask);
@@ -290,7 +291,8 @@ impl LanCollector {
                     let Ok(ip) = cols[0].parse::<Ipv4Addr>() else {
                         continue;
                     };
-                    let flags = u16::from_str_radix(cols[2].trim_start_matches("0x"), 16).unwrap_or(0);
+                    let flags =
+                        u16::from_str_radix(cols[2].trim_start_matches("0x"), 16).unwrap_or(0);
                     let complete = flags & 0x2 != 0;
                     let mac = cols[3].to_lowercase();
                     let mac = if complete && mac != "00:00:00:00:00:00" {
@@ -353,7 +355,8 @@ impl LanCollector {
     }
 
     fn prune(&mut self, now: Instant) {
-        self.neighbors.retain(|_, n| now.duration_since(n.last_seen) < KEEP_ALIVE);
+        self.neighbors
+            .retain(|_, n| now.duration_since(n.last_seen) < KEEP_ALIVE);
     }
 
     fn spawn_resolves(&mut self) {
@@ -451,8 +454,7 @@ impl LanCollector {
         self.subnets
             .iter()
             .find(|(_, net, prefix)| {
-                host_range(*net, *prefix)
-                    .any(|ip| self.gateways.contains(&ip))
+                host_range(*net, *prefix).any(|ip| self.gateways.contains(&ip))
             })
             .or_else(|| self.subnets.first())
             .cloned()
@@ -470,13 +472,16 @@ impl LanCollector {
                     .then(u32::from(a.ip).cmp(&u32::from(b.ip)))
             }),
             LanSort::Mac => list.sort_by(|a, b| {
-                a.mac.as_deref()
+                a.mac
+                    .as_deref()
                     .unwrap_or("")
                     .cmp(b.mac.as_deref().unwrap_or(""))
                     .then(u32::from(a.ip).cmp(&u32::from(b.ip)))
             }),
             LanSort::Iface => list.sort_by(|a, b| {
-                a.iface.cmp(&b.iface).then(u32::from(a.ip).cmp(&u32::from(b.ip)))
+                a.iface
+                    .cmp(&b.iface)
+                    .then(u32::from(a.ip).cmp(&u32::from(b.ip)))
             }),
         }
         // 置顶组提前(组内保持既有顺序)
@@ -549,7 +554,9 @@ fn parse_arp_an(out: &str) -> Vec<(Ipv4Addr, Option<String>, String)> {
     let mut out_v = Vec::new();
     for line in out.lines() {
         let Some(a) = line.find('(') else { continue };
-        let Some(b) = line[a + 1..].find(')') else { continue };
+        let Some(b) = line[a + 1..].find(')') else {
+            continue;
+        };
         let Ok(ip) = line[a + 1..a + 1 + b].parse::<Ipv4Addr>() else {
             continue;
         };
@@ -557,7 +564,9 @@ fn parse_arp_an(out: &str) -> Vec<(Ipv4Addr, Option<String>, String)> {
             continue;
         }
         let rest = &line[a + 1 + b..];
-        let Some(at) = rest.find(" at ") else { continue };
+        let Some(at) = rest.find(" at ") else {
+            continue;
+        };
         let tail = &rest[at + 4..];
         let (mac_raw, complete) = if let Some(end) = tail.find(' ') {
             let tok = &tail[..end];
@@ -617,7 +626,8 @@ const MDNS_PORT: u16 = 5353;
 /// resolver, no multicast traffic beyond one query packet.
 fn resolve_mdns(ip: Ipv4Addr) -> Option<String> {
     let sock = UdpSocket::bind("0.0.0.0:0").ok()?;
-    sock.set_read_timeout(Some(Duration::from_millis(600))).ok()?;
+    sock.set_read_timeout(Some(Duration::from_millis(600)))
+        .ok()?;
     let query = build_ptr_query(ip, 0x6c74);
     let mut buf = [0u8; 1500];
     for _ in 0..2 {
@@ -630,8 +640,12 @@ fn resolve_mdns(ip: Ipv4Addr) -> Option<String> {
                         return Some(name);
                     }
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock
-                       || e.kind() == std::io::ErrorKind::TimedOut => continue,
+                Err(e)
+                    if e.kind() == std::io::ErrorKind::WouldBlock
+                        || e.kind() == std::io::ErrorKind::TimedOut =>
+                {
+                    continue
+                }
                 Err(_) => return None,
             }
         }
@@ -647,7 +661,14 @@ fn build_ptr_query(ip: Ipv4Addr, id: u16) -> Vec<u8> {
     m.extend_from_slice(&[0x00, 0x00]); // flags: standard query
     m.extend_from_slice(&[0x00, 0x01]); // qdcount = 1
     m.extend_from_slice(&[0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-    for label in [d.to_string(), c.to_string(), b.to_string(), a.to_string(), "in-addr".into(), "arpa".into()] {
+    for label in [
+        d.to_string(),
+        c.to_string(),
+        b.to_string(),
+        a.to_string(),
+        "in-addr".into(),
+        "arpa".into(),
+    ] {
         m.push(label.len() as u8);
         m.extend_from_slice(label.as_bytes());
     }
@@ -743,7 +764,8 @@ fn read_name(buf: &[u8], i: &mut usize) -> Option<String> {
 /// answer; phones and most Linux boxes do not.
 fn resolve_nbns(ip: Ipv4Addr) -> Option<String> {
     let sock = UdpSocket::bind("0.0.0.0:0").ok()?;
-    sock.set_read_timeout(Some(Duration::from_millis(400))).ok()?;
+    sock.set_read_timeout(Some(Duration::from_millis(400)))
+        .ok()?;
     let query = build_nbns_query(0x2a2a);
     let mut buf = [0u8; 1500];
     for _ in 0..2 {
@@ -800,7 +822,7 @@ fn parse_nbns_response(buf: &[u8]) -> Option<String> {
     }
     let mut i = 12usize;
     read_name(buf, &mut i)?; // RR name (encoded `*` label or a pointer)
-    // type(2) class(2) ttl(4) rdlen(2)
+                             // type(2) class(2) ttl(4) rdlen(2)
     if i + 10 > buf.len() {
         return None;
     }
@@ -863,17 +885,20 @@ mod tests {
         let mut c = LanCollector::new();
         for k in 1..=3u32 {
             let ip = format!("10.0.0.{k}").parse().unwrap();
-            c.neighbors.insert(ip, Neighbor {
+            c.neighbors.insert(
                 ip,
-                mac: None,
-mac_hidden: false,
-                iface: "eth0".into(),
-                complete: true,
-                hostname: None,
-                is_gateway: false,
-                is_self: false,
-                last_seen: std::time::Instant::now(),
-            });
+                Neighbor {
+                    ip,
+                    mac: None,
+                    mac_hidden: false,
+                    iface: "eth0".into(),
+                    complete: true,
+                    hostname: None,
+                    is_gateway: false,
+                    is_self: false,
+                    last_seen: std::time::Instant::now(),
+                },
+            );
         }
         c.tracked.insert("10.0.0.3".parse().unwrap());
         let ips: Vec<_> = c
@@ -901,9 +926,7 @@ mac_hidden: false,
         assert_eq!(&q[2..4], &[0, 0]); // query
         assert_eq!(&q[4..6], &[0, 1]); // one question
         let tail = &q[12..];
-        let expected: &[&[u8]] = &[
-            b"7", b"1", b"168", b"192", b"in-addr", b"arpa",
-        ];
+        let expected: &[&[u8]] = &[b"7", b"1", b"168", b"192", b"in-addr", b"arpa"];
         let mut pos = 0;
         for lbl in expected {
             assert_eq!(tail[pos], lbl.len() as u8);
@@ -931,7 +954,7 @@ mac_hidden: false,
         m.extend_from_slice(&[0x6c, 0x74]); // id
         m.extend_from_slice(&[0x84, 0x00]); // response
         m.extend_from_slice(&[0, 1, 0, 1, 0, 0, 0, 0]); // qd 1, an 1
-        // question: 7.1.168.192.in-addr.arpa PTR IN
+                                                        // question: 7.1.168.192.in-addr.arpa PTR IN
         m.extend_from_slice(&name_bytes("7.1.168.192.in-addr.arpa"));
         m.extend_from_slice(&[0, 12, 0, 1]);
         // answer: name = pointer to question (0xC00C), PTR "MyPhone.local"
@@ -1072,13 +1095,16 @@ mac_hidden: false,
 ? (224.0.0.251) at 1:0:5e:0:0:fb on en0 ifscope permanent [ethernet]
 ";
         let rows = parse_arp_an(out);
-        let gw = rows.iter().find(|(ip, ..)| *ip == "192.168.121.1".parse::<Ipv4Addr>().unwrap()).unwrap();
+        let gw = rows
+            .iter()
+            .find(|(ip, ..)| *ip == "192.168.121.1".parse::<Ipv4Addr>().unwrap())
+            .unwrap();
         // MAC 补零规范成 Linux 口径
         assert_eq!(gw.1.as_deref(), Some("c0:4a:09:30:d3:af"));
         assert_eq!(gw.2, "en0");
-        assert!(rows
-            .iter()
-            .any(|(ip, mac, _)| *ip == "192.168.121.200".parse::<Ipv4Addr>().unwrap() && mac.is_none()));
+        assert!(rows.iter().any(|(ip, mac, _)| *ip
+            == "192.168.121.200".parse::<Ipv4Addr>().unwrap()
+            && mac.is_none()));
         // 广播/组播行被过滤
         assert!(rows
             .iter()

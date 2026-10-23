@@ -1,17 +1,20 @@
 //! AI-friendly structured snapshot (schema v1) — one serialization source
-//! shared by `ltop --json` and the monitoring log (v2 JSONL).
+//! shared by `ltop --json`, the monitoring log (v2 JSONL), `ltop watch`
+//! output and `ltop report` input.
 //!
 //! Compatibility contract: the `schema` field lets consumers branch; fields
 //! are additive-only within a schema version (new keys may appear, existing
-//! keys never change meaning or disappear).
+//! keys never change meaning or disappear). Deserialize derives this side so
+//! report can read back what watch/monlog wrote; serde ignores unknown keys,
+//! which is what makes the additive contract work across versions.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::app::App;
 
 pub const SCHEMA: u32 = 1;
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct Snapshot {
     pub schema: u32,
     pub meta: Meta,
@@ -22,18 +25,18 @@ pub struct Snapshot {
     pub procs: Vec<ProcSnapshot>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct Meta {
     pub hostname: String,
     pub ts: u64,
-    pub version: &'static str,
-    pub os: &'static str,
-    pub arch: &'static str,
+    pub version: String,
+    pub os: String,
+    pub arch: String,
     /// eBPF helper snapshot is fresh (UDP per-process accounting is live)
     pub udp_helper: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct IfaceSnapshot {
     pub name: String,
     pub operstate: String,
@@ -51,13 +54,13 @@ pub struct IfaceSnapshot {
     pub alive_tx: u64,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct NetSnapshot {
     pub selected: String,
     pub interfaces: Vec<IfaceSnapshot>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct NeighborSnapshot {
     pub ip: String,
     /// None on macOS (system sanitizes MACs for non-Apple-signed binaries)
@@ -69,14 +72,14 @@ pub struct NeighborSnapshot {
     pub tracked: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct LanSnapshot {
     pub subnets: Vec<String>,
     pub gateways: Vec<String>,
     pub neighbours: Vec<NeighborSnapshot>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct DiskDevSnapshot {
     pub name: String,
     pub mounts: Vec<String>,
@@ -88,14 +91,14 @@ pub struct DiskDevSnapshot {
     pub iops: f64,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct DiskSnapshot {
     pub devices: Vec<DiskDevSnapshot>,
     pub session_read: u64,
     pub session_write: u64,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct ConnSnapshot {
     pub proto: String,
     pub local: String,
@@ -111,7 +114,7 @@ pub struct ConnSnapshot {
     pub bps_sent: f64,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct ProcSnapshot {
     pub pid: u32,
     pub name: String,
@@ -144,10 +147,7 @@ pub fn from_app(app: &App) -> Snapshot {
         .iter()
         .map(|(iname, info)| {
             let rates = app.net.rates.get(iname);
-            let (alive_rx, alive_tx) = app
-                .net
-                .alive_for(iname)
-                .unwrap_or((0, 0));
+            let (alive_rx, alive_tx) = app.net.alive_for(iname).unwrap_or((0, 0));
             IfaceSnapshot {
                 name: iname.clone(),
                 operstate: info.operstate.clone(),
@@ -185,7 +185,11 @@ pub fn from_app(app: &App) -> Snapshot {
         .conns
         .iter()
         .map(|c| ConnSnapshot {
-            proto: if c.is_tcp() { "tcp".into() } else { "udp".into() },
+            proto: if c.is_tcp() {
+                "tcp".into()
+            } else {
+                "udp".into()
+            },
             local: crate::collect::conn::sock_str(&c.local),
             remote: crate::collect::conn::sock_str(&c.remote),
             state: if c.is_listen() {
@@ -232,12 +236,15 @@ pub fn from_app(app: &App) -> Snapshot {
         meta: Meta {
             hostname: app.hostname.clone(),
             ts: unix_ts(),
-            version: env!("CARGO_PKG_VERSION"),
-            os: std::env::consts::OS,
-            arch: std::env::consts::ARCH,
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            os: std::env::consts::OS.to_string(),
+            arch: std::env::consts::ARCH.to_string(),
             udp_helper: app.udp.fresh,
         },
-        net: NetSnapshot { selected: name, interfaces },
+        net: NetSnapshot {
+            selected: name,
+            interfaces,
+        },
         lan: LanSnapshot {
             subnets: app
                 .lan

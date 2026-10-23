@@ -46,8 +46,7 @@ jobs:
           mkdir -p dist
           cp "target/${{ matrix.target }}/release/ltop" \
              "target/${{ matrix.target }}/release/ltop-bpf" dist/
-          ln -s ltop dist/loli
-          tar czf "ltop-${GITHUB_REF_NAME#v}-${{ matrix.slug }}.tar.gz" -C dist ltop ltop-bpf loli
+          tar czf "ltop-${GITHUB_REF_NAME#v}-${{ matrix.slug }}.tar.gz" -C dist ltop ltop-bpf
           sha256sum "ltop-${GITHUB_REF_NAME#v}-${{ matrix.slug }}.tar.gz" > "SHA256SUMS-${{ matrix.slug }}"
       - uses: actions/upload-artifact@v7
         with:
@@ -77,8 +76,7 @@ jobs:
         run: |
           mkdir -p dist
           cp "target/${{ matrix.target }}/release/ltop" dist/
-          ln -s ltop dist/loli
-          tar czf "ltop-${GITHUB_REF_NAME#v}-${{ matrix.slug }}.tar.gz" -C dist ltop loli
+          tar czf "ltop-${GITHUB_REF_NAME#v}-${{ matrix.slug }}.tar.gz" -C dist ltop
           shasum -a 256 "ltop-${GITHUB_REF_NAME#v}-${{ matrix.slug }}.tar.gz" > "SHA256SUMS-${{ matrix.slug }}"
       - uses: actions/upload-artifact@v7
         with:
@@ -143,7 +141,6 @@ jobs:
               on_linux do
                 bin.install "ltop-bpf"
               end
-              bin.install_symlink "ltop" => "loli"
             end
 
             test do

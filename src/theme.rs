@@ -30,7 +30,13 @@ fn lerp(a: Color, b: Color, t: f32) -> Color {
             (g1 as f32 + (g2 as f32 - g1 as f32) * t) as u8,
             (b1 as f32 + (b2 as f32 - b1 as f32) * t) as u8,
         ),
-        _ => if t < 0.5 { a } else { b },
+        _ => {
+            if t < 0.5 {
+                a
+            } else {
+                b
+            }
+        }
     }
 }
 
@@ -99,7 +105,12 @@ fn record_followed(p: &Path) {
 
 fn cells() -> &'static (RwLock<Palette>, RwLock<String>) {
     static CELLS: OnceLock<(RwLock<Palette>, RwLock<String>)> = OnceLock::new();
-    CELLS.get_or_init(|| (RwLock::new(Palette::default()), RwLock::new("dracula".into())))
+    CELLS.get_or_init(|| {
+        (
+            RwLock::new(Palette::default()),
+            RwLock::new("dracula".into()),
+        )
+    })
 }
 
 fn set(pal: Palette, name: &str) {
@@ -250,12 +261,18 @@ pub(crate) fn parse_btop_str(content: &str) -> Option<Palette> {
             continue;
         }
         let Some(kb) = line.find('[') else { continue };
-        let Some(ke) = line[kb..].find(']').map(|i| i + kb) else { continue };
+        let Some(ke) = line[kb..].find(']').map(|i| i + kb) else {
+            continue;
+        };
         let key = &line[kb + 1..ke];
-        let Some(qs) = line[ke + 1..].find('"').map(|i| i + ke + 1) else { continue };
+        let Some(qs) = line[ke + 1..].find('"').map(|i| i + ke + 1) else {
+            continue;
+        };
         let rest = &line[qs + 1..];
         let Some(qe) = rest.find('"') else { continue };
-        let Some(color) = parse_hex(&rest[..qe]) else { continue };
+        let Some(color) = parse_hex(&rest[..qe]) else {
+            continue;
+        };
         map.insert(key.to_string(), color);
     }
     if map.is_empty() {
@@ -275,11 +292,7 @@ pub(crate) fn parse_btop_str(content: &str) -> Option<Palette> {
         }
     };
     let grad = |a: &str, b: &str, c: &str| -> Option<Gradient> {
-        Some(Gradient([
-            *map.get(a)?,
-            *map.get(b)?,
-            *map.get(c)?,
-        ]))
+        Some(Gradient([*map.get(a)?, *map.get(b)?, *map.get(c)?]))
     };
 
     set(&mut pal.text, "main_fg");
@@ -425,7 +438,11 @@ mod tests {
     fn hex_and_gradient() {
         assert_eq!(parse_hex("#ff0000"), Some(Color::Rgb(255, 0, 0)));
         assert_eq!(parse_hex("0af"), Some(Color::Rgb(0, 170, 255)));
-        let g = Gradient([Color::Rgb(0, 0, 0), Color::Rgb(100, 100, 100), Color::Rgb(200, 200, 200)]);
+        let g = Gradient([
+            Color::Rgb(0, 0, 0),
+            Color::Rgb(100, 100, 100),
+            Color::Rgb(200, 200, 200),
+        ]);
         assert_eq!(g.at(0.0), Color::Rgb(0, 0, 0));
         assert_eq!(g.at(0.5), Color::Rgb(100, 100, 100));
         assert_eq!(g.at(1.0), Color::Rgb(200, 200, 200));
@@ -434,7 +451,10 @@ mod tests {
     #[test]
     fn all_builtin_themes_parse() {
         for (name, content) in theme_data::BUILTIN_THEMES {
-            assert!(parse_btop_str(content).is_some(), "theme {name} failed to parse");
+            assert!(
+                parse_btop_str(content).is_some(),
+                "theme {name} failed to parse"
+            );
         }
     }
 }

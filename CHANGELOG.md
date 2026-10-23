@@ -3,6 +3,54 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.4] - 2026-10-23
+
+### Added
+
+- **`ltop watch`** — headless capture to schema-v1 JSONL: reuses the TUI
+  sampling layer (`--interval`, default 5 s), stops on `--duration`
+  (`10s`/`5m`/`2h`), a `--stop` sentinel file (consumed on sight), or SIGINT
+  (graceful: the last snapshot lands in the file). Output defaults to
+  `~/.local/state/ltop/ltop-session-<ts>.jsonl`, separate from the TUI
+  monitoring log and exempt from its retention purge. `--proc <name>` focus
+  mode records only matching processes and their connections (tracked by
+  name, so a restart that changes the pid keeps the timeline continuous).
+  Line-by-line appends are crash-safe; no root required.
+- **`ltop report <file>`** — window summary of a watch capture or a TUI
+  monitoring log (same schema): per-process window sums (window
+  differencing across pid restarts), peak rates (UDP peaks derived from
+  row deltas), active time and last alive/exited state; per-connection
+  sums/peaks/lifetimes keyed by inode (macOS synthetic flow hash), vanished
+  connections keep their last known totals; NIC-scope global totals and the
+  peak interval. Filters: `--top N` (default 5, by traffic), `--proc`
+  (substring, or glob when it contains `*`), `--fields
+  net,udp,disk,conns`, and `--json` for a ~2 KB machine-readable summary
+  (a 10-minute watch costs ~40k tokens to poll via `--json` vs ~1k as a
+  report — about 97% fewer). Old `session-*` logs (v1, procs-only) are
+  rejected with a pointer to `--replay`; arbitrary queries stay with `jq`.
+
+### Removed
+
+- **`loli` alias retired** — the out-of-the-box `loli` symlink (a leftover
+  from the original *localist top* naming) is no longer shipped: release
+  tarballs, the Homebrew formula and the AUR package stub all drop it.
+  The invoked-name mechanism stays: `ln -s ltop <name>` gives any alias
+  version-correct `--help`. Existing installed symlinks keep working
+  (brew upgrade cleans the formula-owned one); nothing is uninstalled
+  retroactively.
+
+### Changed
+
+- Snapshot structs now derive `Deserialize` (report reads back what
+  watch/monlog wrote); `meta.version/os/arch` became `String` (same JSON).
+- **CLI messages are bilingual**: English by default; setting `lang = zh`
+  in `config.conf` switches usage text, errors, finalize messages and the
+  report/replay tables to Chinese — consistently across `watch`, `report`,
+  `--replay` and the monitoring-log notice (previously the new subcommands
+  printed Chinese-only while the TUI `--help` was English-only). The
+  privileged helper `ltop-bpf` (journal-facing) and all JSON output keys
+  stay English.
+
 ## [0.2.3] - 2026-10-23
 
 ### Added
