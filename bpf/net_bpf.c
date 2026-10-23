@@ -116,7 +116,12 @@ SEC("maps") struct bpf_map_def recv_sk = {
 	.max_entries = 16384,
 };
 
-/* sk → inode cache, so the CO-RE walk runs once per socket */
+/* sk → inode cache, so the CO-RE walk runs once per socket.
+ * Known limitation: keyed by the raw sk pointer with no invalidation hook,
+ * so after SLAB address reuse a new socket's traffic can land on the old
+ * socket's inode row until the LRU evicts naturally (low-probability
+ * mis-attribution on very long sessions). Fixing it needs a destruction
+ * probe or per-packet revalidation — tracked in the roadmap. */
 SEC("maps") struct bpf_map_def sk_ino = {
 	.type = 9,
 	.key_size = 8,

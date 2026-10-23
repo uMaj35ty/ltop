@@ -84,8 +84,9 @@ and **`ltop report`** aggregates it — exact window sums and peaks instead of
 sampled guesses:
 
 ```bash
-ltop watch --duration 10m --proc chrome   # record (crash-safe JSONL, no root)
-ltop report ~/.local/state/ltop/ltop-session-*.jsonl --json   # ~2 KB summary
+ltop watch --duration 10m --proc chrome   # record (crash-safe JSONL, no root);
+                                         # prints the output path
+ltop report <that path> --json            # ~2 KB summary (single file)
 ```
 
 Measured on a live desktop: polling `--json` over 10 minutes costs ~40k tokens;
@@ -107,10 +108,10 @@ combination. Details: [AI agents on the docs](https://umaj35ty.github.io/ltop/do
   1-second snapshot from `/run/ltop/udp.json`. LRU maps, single-instance
   lock, automatic detach — no root for the TUI, no nightly toolchain to
   build. Without the helper everything else keeps working
-- **Headless watch + report** — crash-safe JSONL capture (`--interval`,
-  `--duration`, `--stop` sentinel, `--proc` focus) and window-differenced
-  summaries; the TUI monitoring log (`L` / `--log`) shares the schema, and
-  `--replay`/`--csv` handle legacy logs
+- **Headless watch + report** — crash-safe JSONL capture (per-line appends
+  survive a process crash; `--interval`, `--duration`, `--stop` sentinel,
+  `--proc` focus) and window-differenced summaries; the TUI monitoring log (`L` / `--log`) shares the schema, and
+  `--replay`/`--csv` replay watch, monlog and legacy session logs
 - **Three layouts, focus & zoom** — `Tab` cycles classic/wide/tall; `p`/`c`/`l`
   single-focus; selection follows rows across re-sorts; `z` zooms; mouse
   scroll/click works

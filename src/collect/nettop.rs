@@ -215,6 +215,9 @@ pub struct NettopCollector {
     pub net: Vec<UdpDelta>,
     /// per-pid UDP 分项(PROCS udp 分解)
     pub udp: Vec<UdpDelta>,
+    /// 本轮 nettop 子进程失败(spawn/非零退出):数据已清空,行数与
+    /// 速率不可信;CONNS 盒降级徽标数据源
+    pub stale: bool,
 }
 
 #[cfg_attr(target_os = "linux", allow(dead_code))]
@@ -226,14 +229,24 @@ impl NettopCollector {
             flows: Vec::new(),
             net: Vec::new(),
             udp: Vec::new(),
+            stale: false,
         }
     }
 
     #[cfg(target_os = "macos")]
     pub fn sample(&mut self) {
         let Ok((procs_all, flows)) = dump_mode(&[]) else {
+            // 失败即清空,不留上一轮冻结的行(速率归零、行数照旧最误导);
+            // stale 亮徽标
+            self.flows.clear();
+            self.net.clear();
+            self.udp.clear();
+            self.prev_all.clear();
+            self.prev_udp.clear();
+            self.stale = true;
             return;
         };
+        self.stale = false;
         self.flows = flows_to_conns(&flows);
         self.net = diff_procs(&mut self.prev_all, procs_all, Instant::now());
         self.udp = match dump_mode(&["-m", "udp"]) {

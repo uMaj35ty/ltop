@@ -106,6 +106,37 @@ Run as root (systemd unit: deploy/ltop-bpf.service).",
         }
         let interval = Duration::from_millis(interval_ms.max(100));
 
+        if let Some(dir) = out.parent() {
+            fs::create_dir_all(dir)?;
+        }
+
+        // single-instance guard —— 必须在 load/attach 之前:锁在挂载后的话,
+        // 并发启动的第二个实例已经把全部探针挂完才退出(瞬态双 attach)。
+        // 锁文件按输出文件名区分:写不同快照文件的实例互不干扰
+        let lock_path = out
+            .parent()
+            .unwrap_or(std::path::Path::new("."))
+            .join(format!(
+                "{}.lock",
+                out.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("ltop-bpf")
+            ));
+        let lock = fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(&lock_path)?;
+        let rc = unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+        if rc != 0 {
+            bail!(
+                "另一个 ltop-bpf 实例已在运行(锁 {}),本实例退出",
+                lock_path.display()
+            );
+        }
+        // the fd must stay open for the process lifetime or the lock is released
+        std::mem::forget(lock);
+
         if BPF_OBJECT.is_empty() {
             bail!("构建时没有生成 eBPF 对象(需要系统 clang 带 bpf target)");
         }
@@ -141,29 +172,6 @@ Run as root (systemd unit: deploy/ltop-bpf.service).",
         for f in &failed {
             eprintln!("ltop-bpf: 跳过 {f}");
         }
-
-        if let Some(dir) = out.parent() {
-            fs::create_dir_all(dir)?;
-        }
-
-        // single-instance guard: two daemons would attach every probe twice and,
-        // worse, alternate two unrelated counter universes into the same snapshot
-        // file, which the TUI's differ would read as gigantic bogus deltas
-        let lock_path = out.parent().unwrap_or(&out).join("ltop-bpf.lock");
-        let lock = fs::OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .write(true)
-            .open(&lock_path)?;
-        let rc = unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
-        if rc != 0 {
-            bail!(
-                "另一个 ltop-bpf 实例已在运行(锁 {}),本实例退出",
-                lock_path.display()
-            );
-        }
-        // the fd must stay open for the process lifetime or the lock is released
-        std::mem::forget(lock);
 
         // identity of this attach (one kernel map = one counter universe); the
         // TUI re-baselines whenever it changes, so even a daemon restart with a

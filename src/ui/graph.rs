@@ -222,11 +222,14 @@ pub fn braille_graph(
                     // line stroke + soft area fill below it
                     let mut line = vec![vec![false; dots_h]; dw];
                     let mut prev: Option<(usize, usize)> = None;
-                    let mut last = 0usize;
+                    let mut last;
                     for (i, &f) in fills.iter().enumerate() {
                         let x = 2 * i + 1;
                         let y = trace_y(f).min(dots_h - 1);
                         if let Some((px, py)) = prev {
+                            // 首段以首样本 y 播种(对齐 Line 分支的 last=py):
+                            // 从 0 起算会把首段斜坡画丢、多画出底部一段
+                            last = py;
                             for (xx, col) in line.iter_mut().enumerate().take(x + 1).skip(px + 1) {
                                 let t = (xx - px) as f32 / (x - px) as f32;
                                 let yy = (py as f32 + (y as f32 - py as f32) * t).round() as usize;
@@ -410,7 +413,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn coupled_frac_thresholds_and_floors() {
         // below the trigger threshold: real fraction, clamped to the floor
         assert_eq!(coupled_frac(1.0, 30.0, 8, 5), 0.5); // 1/30 < 1/5 → floor
@@ -427,6 +429,7 @@ mod tests {
         assert_eq!(coupled_frac(1.0, 15.0, 8, 10), 0.5); // 1/15 < 1/10 → floor
     }
 
+    #[test]
     fn solid_full_block_at_max() {
         let data = vec![100.0; 10];
         let lines = braille_graph(
@@ -619,5 +622,34 @@ mod block_tests {
         let zero = vec![0.0; 4];
         let lines = block_graph(&zero, 4, 1, 100.0, Gradient([Color::Green; 3]));
         assert_eq!(flat(&lines[0]), "    ");
+    }
+
+    /// Hybrid 首段以首样本 y 播种:降序首样本(高→低)时首段斜坡必须
+    /// 画到首样本高度;从 0 起算会把区域轮廓削出凹口([0,100] 类旧测试
+    /// 首点恰为 0,完全掩盖)
+    #[test]
+    fn hybrid_first_segment_seeds_from_first_sample() {
+        // 900(高)→0,max_floor=1000:dots_h=4,y0=trace_y(3.6→4)=3,y1=0
+        let data = [900.0, 0.0];
+        let lines = braille_graph(
+            &data,
+            2,
+            1,
+            1000.0,
+            Gradient([Color::Green; 3]),
+            GraphMode::Hybrid,
+            1.0,
+        );
+        assert_eq!(lines.len(), 1);
+        // 中间插值列 = 第 2 个字符的左半点列(X0);区域填充后该列顶部
+        // 必须达到首样本高度 3,缺陷版从 0 起算只到插值中点 2
+        let bits = (flat(&lines[0]).chars().nth(1).unwrap() as u32) - 0x2800;
+        const X0: [u32; 4] = [0x01, 0x02, 0x04, 0x40];
+        let top = (0..4)
+            .filter(|&j| bits & X0[j] != 0)
+            .map(|j| 3 - j)
+            .max()
+            .unwrap_or(0);
+        assert_eq!(top, 3, "首段顶部应达首样本高度 3");
     }
 }

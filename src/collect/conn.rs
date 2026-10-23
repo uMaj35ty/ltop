@@ -178,6 +178,9 @@ pub struct ConnCollector {
     /// 墓碑保留时长
     pub tombstone_ttl: Duration,
     pub conns: Vec<Conn>,
+    /// linux:本轮 netlink dump 的失败原因(socket/send/recv/kernel -errno),
+    /// None = 正常;mac 恒 None。CONNS 盒降级徽标的数据源
+    pub diag_error: Option<String>,
     pub users: HashMap<u32, String>,
     pub filter: ConnFilter,
     pub sort: ConnSort,
@@ -209,6 +212,7 @@ impl ConnCollector {
             last_live: HashMap::new(),
             tombstone_ttl: Duration::from_secs(5),
             conns: Vec::new(),
+            diag_error: None,
             users: HashMap::new(),
             filter: ConnFilter::All,
             sort: ConnSort::Proc,
@@ -232,18 +236,23 @@ impl ConnCollector {
             #[cfg(target_os = "linux")]
             {
                 let mut c = Vec::new();
+                let mut err: Option<String> = None;
                 for &(family, proto) in &[
                     (AF_INET, IPPROTO_TCP),
                     (AF_INET6, IPPROTO_TCP),
                     (AF_INET, IPPROTO_UDP),
                     (AF_INET6, IPPROTO_UDP),
                 ] {
-                    dump_family(family, proto, &mut c);
+                    if let Err(e) = dump_family(family, proto, &mut c) {
+                        err.get_or_insert(e);
+                    }
                 }
+                self.diag_error = err;
                 c
             }
             #[cfg(target_os = "macos")]
             {
+                self.diag_error = None;
                 std::mem::take(&mut self.inbox)
             }
         };
@@ -463,9 +472,7 @@ pub fn sock_str(s: &(IpAddr, u16)) -> String {
     format!("{}:{}", s.0, s.1)
 }
 
-#[cfg(target_os = "linux")]
-#[cfg(target_os = "linux")]
-fn dump_family(family: libc::c_int, proto: u8, out: &mut Vec<Conn>) {
+fn dump_family(family: libc::c_int, proto: u8, out: &mut Vec<Conn>) -> Result<(), String> {
     // SAFETY: raw netlink socket, all buffers sized by the protocol's fixed
     // message layout; fd is closed on every return path below.
     unsafe {
@@ -475,7 +482,7 @@ fn dump_family(family: libc::c_int, proto: u8, out: &mut Vec<Conn>) {
             NETLINK_SOCK_DIAG,
         );
         if fd < 0 {
-            return;
+            return Err("socket".into());
         }
         let req = build_req(family as u8, proto);
         let mut sa: libc::sockaddr_nl = std::mem::zeroed();
@@ -490,17 +497,19 @@ fn dump_family(family: libc::c_int, proto: u8, out: &mut Vec<Conn>) {
         );
         if rc < 0 {
             libc::close(fd);
-            return;
+            return Err("send".into());
         }
         let mut buf = [0u8; 65536];
         loop {
             let len = libc::recv(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len(), 0);
             if len <= 0 {
-                break;
+                libc::close(fd);
+                return Err("recv".into());
             }
             let len = len as usize;
             let mut off = 0usize;
             let mut done = false;
+            let mut err: Option<String> = None;
             while off + 16 <= len {
                 let mlen = u32from(&buf[off..off + 4]) as usize;
                 let mtype = u16from(&buf[off + 4..off + 6]);
@@ -509,8 +518,28 @@ fn dump_family(family: libc::c_int, proto: u8, out: &mut Vec<Conn>) {
                     break;
                 }
                 match mtype {
-                    NLMSG_DONE | NLMSG_ERROR => {
+                    NLMSG_DONE => {
                         done = true;
+                        break;
+                    }
+                    // 内核拒绝 dump(缺 INET_DIAG/UDP_DIAG 编译、SELinux 策略)
+                    // 原样吞掉 = CONNS 静默清空,与"没有连接"不可区分:
+                    // 带出错误码给降级徽标
+                    NLMSG_ERROR => {
+                        done = true;
+                        err = Some(if mlen >= 20 {
+                            format!(
+                                "kernel -{}",
+                                i32::from_ne_bytes([
+                                    buf[off + 16],
+                                    buf[off + 17],
+                                    buf[off + 18],
+                                    buf[off + 19],
+                                ])
+                            )
+                        } else {
+                            "kernel".into()
+                        });
                         break;
                     }
                     SOCK_DIAG_BY_FAMILY => {
@@ -523,10 +552,13 @@ fn dump_family(family: libc::c_int, proto: u8, out: &mut Vec<Conn>) {
                 off += (mlen + 3) & !3;
             }
             if done {
-                break;
+                libc::close(fd);
+                return match err {
+                    Some(e) => Err(e),
+                    None => Ok(()),
+                };
             }
         }
-        libc::close(fd);
     }
 }
 

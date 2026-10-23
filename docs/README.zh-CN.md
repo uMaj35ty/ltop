@@ -78,7 +78,7 @@ JSONL,report 聚合出精确的窗口总和与峰值——不是抽样猜测:
 
 ```bash
 ltop watch --duration 10m --proc chrome   # 录制(崩溃安全,免 root)
-ltop report ~/.local/state/ltop/ltop-session-*.jsonl --json   # ~2 KB 摘要
+ltop report <watch 打印的路径> --json   # ~2 KB 摘要(单文件)
 ```
 
 实机实测:10 分钟窗口轮询 `--json` 约 4 万 token,`report --json` 约 1k

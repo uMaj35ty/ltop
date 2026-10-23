@@ -43,6 +43,15 @@ const FS_BLACKLIST: &[&str] = &[
     "smbfs",
     "9p",
     "afs",
+    // 陈旧网络挂载的 statvfs 可阻塞分钟级,冻结整个 UI tick(采样在
+    // UI 路径上)——网络 FS 一律不入盘盒
+    "afp",
+    "webdav",
+    "glusterfs",
+    "ceph",
+    "cephfs",
+    "lustre",
+    "ocfs2",
     "devfs",
 ];
 

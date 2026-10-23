@@ -386,14 +386,18 @@ impl App {
                 crate::ui::reselect(self, idx, id);
             }
         }
-        let mut snap = crate::snapshot::from_app(self);
-        if self.log_tracked_only {
-            // tracked_only:日志行的 procs 仅记录置顶进程
-            let tracked: std::collections::HashSet<u32> =
-                self.tracked.procs.iter().copied().collect();
-            snap.procs.retain(|p| tracked.contains(&p.pid));
+        // 快照序列化只在录制时做:from_app 对每条连接/进程做格式化与
+        // String 克隆,默认不开录制时每个 tick 白扔一整轮分配
+        if self.log.enabled {
+            let mut snap = crate::snapshot::from_app(self);
+            if self.log_tracked_only {
+                // tracked_only:日志行的 procs 仅记录置顶进程
+                let tracked: std::collections::HashSet<u32> =
+                    self.tracked.procs.iter().copied().collect();
+                snap.procs.retain(|p| tracked.contains(&p.pid));
+            }
+            self.log.maybe_write(&snap);
         }
-        self.log.maybe_write(&snap);
         self.ticks += 1;
     }
 

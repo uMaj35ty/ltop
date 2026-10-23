@@ -65,8 +65,9 @@ Homebrew 装的二进制相同；助手要与 TUI 出自同一个 release（见
 记住这一对命令:
 
 ```bash
-ltop watch --duration 10m --proc chrome   # 无头录制（免 root，崩溃安全）
-ltop report ~/.local/state/ltop/ltop-session-*.jsonl --json
+ltop watch --duration 10m --proc chrome   # 无头录制（免 root，崩溃安全），
+                                         # 结束时打印输出路径
+ltop report <该路径> --json               # report 只收单个文件
 ```
 
 `report` 给出精确的窗口总和与峰值，不是抽样猜测——10 分钟窗口 JSON 约 1k

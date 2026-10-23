@@ -35,8 +35,11 @@ pub struct ProcAgg {
     pub disk_written: u64,
     pub peak_disk_r: f64,
     pub peak_disk_w: f64,
-    /// 出现过的快照数(活跃时长 = samples × interval)
+    /// 出现过的快照数(每快照每名字至多计 1;活跃时长 =
+    /// (samples-1) × interval:首见快照是基线,尚未经历完整区间)
     pub samples: u32,
+    /// 上一次计入 samples 的快照时间戳(同名多进程按行去重用)
+    samples_since: u64,
     pub last_alive: bool,
 }
 
@@ -286,7 +289,13 @@ pub fn build(snaps: Vec<Snapshot>, skipped: usize, file: PathBuf) -> Report {
                     }
                 }
             }
-            agg.samples += 1;
+            // 每快照每名字至多计 1:同名多进程(chrome/nginx worker)每
+            // 快照占多行,按行计数会把活跃时长虚增进程数倍、甚至超过
+            // 窗口墙钟时长
+            if agg.samples_since != ts {
+                agg.samples_since = ts;
+                agg.samples += 1;
+            }
             agg.last_alive = p.alive;
             proc_prev.insert((p.name.clone(), p.pid), cur);
         }
@@ -701,7 +710,9 @@ fn print_human(r: &Report, top: usize, f: Fields) {
                     crate::fmt_human(p.peak_disk_r.max(p.peak_disk_w)),
                 ]);
             }
-            cells.push(crate::app::fmt_dur(p.samples as u64 * r.interval_s.max(1)));
+            cells.push(crate::app::fmt_dur(
+                p.samples.saturating_sub(1) as u64 * r.interval_s.max(1),
+            ));
             cells.push(
                 if zh {
                     if p.last_alive {
@@ -835,7 +846,7 @@ fn json_summary(r: &Report, top: usize, f: Fields) -> String {
             }
             m.insert(
                 "active_s".into(),
-                json!(p.samples as u64 * r.interval_s.max(1)),
+                json!(p.samples.saturating_sub(1) as u64 * r.interval_s.max(1)),
             );
             m.insert("alive".into(), json!(p.last_alive));
             serde_json::Value::Object(m)
@@ -951,8 +962,9 @@ mod tests {
         assert_eq!(chrome.net_recv, 600);
         // pid10: sent 50→150 (100), pid11: 10→60 (50)
         assert_eq!(chrome.net_sent, 150);
-        // t100 pid10 + t110 pid10/pid11 + t120 pid11
-        assert_eq!(chrome.samples, 4);
+        // t100 pid10 + t110 pid10/pid11 + t120 pid11:每快照每名字至多
+        // 计 1(旧口径按行计 4,同名双进程把活跃时长虚增一倍)
+        assert_eq!(chrome.samples, 3);
         assert!(chrome.last_alive);
         // 峰值取逐行速率最大(500 来自 t=120 行)
         assert_eq!(chrome.peak_rx, 500.0);

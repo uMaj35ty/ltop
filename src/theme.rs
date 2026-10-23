@@ -320,6 +320,11 @@ pub(crate) fn parse_btop_str(content: &str) -> Option<Palette> {
 
 fn parse_hex(s: &str) -> Option<Color> {
     let s = s.trim().trim_start_matches('#');
+    // 主题文件是用户可编辑的:非 ASCII 值按字节 len() 匹配后再定界切片
+    // 会落在 char boundary 中间直接 panic(启动早期,panic 钩子尚未安装)
+    if !s.is_ascii() {
+        return None;
+    }
     match s.len() {
         6 => {
             let r = u8::from_str_radix(&s[0..2], 16).ok()?;
@@ -438,6 +443,10 @@ mod tests {
     fn hex_and_gradient() {
         assert_eq!(parse_hex("#ff0000"), Some(Color::Rgb(255, 0, 0)));
         assert_eq!(parse_hex("0af"), Some(Color::Rgb(0, 170, 255)));
+        // 非 ASCII 字节值必须拒绝而非 panic(文件里可有任意字节;
+        // 第二例走 8 位长递归分支)
+        assert_eq!(parse_hex("红fff"), None);
+        assert_eq!(parse_hex("红ff000"), None);
         let g = Gradient([
             Color::Rgb(0, 0, 0),
             Color::Rgb(100, 100, 100),

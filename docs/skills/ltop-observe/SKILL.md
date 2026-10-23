@@ -78,7 +78,8 @@ ltop report <file.jsonl> --json             # ~2 KB window summary
 
   Sums are window differencing (last cumulative − first, segmented across
   pid restarts); peaks are the max per-row rate; `active_s` =
-  snapshots-seen × interval. `--top N` (default 5), `--proc` filter
+  (snapshots-seen − 1) × interval (first snapshot is the baseline; a name
+  is counted once per snapshot even when several pids share it). `--top N` (default 5), `--proc` filter
   (substring or `*` glob), `--fields net,udp,disk,conns` select groups.
   Totals are NIC-scope — larger than process payload sums by design.
 - Arbitrary queries: the file is plain JSONL, use `jq`. TUI monitoring

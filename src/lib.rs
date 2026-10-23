@@ -57,6 +57,7 @@ fn early_exit(args: &[String]) -> Option<Result<()>> {
         "--log",
         "--log-interval",
         "--follow-theme",
+        "--theme",
         "--replay",
         "--top",
         "--csv",
@@ -95,6 +96,7 @@ USAGE:
     --log                   start the TUI with the monitoring log enabled
     --log-interval <MS>     monitoring log interval in ms (with --log; default from settings)
     --follow-theme          live-follow Omarchy theme changes while running (default off)
+    --theme <FILE>          load a btop/Omarchy theme file for this session (fixed, not followed)
     --replay [FILE]         replay/analyse the latest session log (or a given JSONL file)
     --top <N>               replay: report the top N processes (default 15)
     --csv <OUT>             replay: also export per-process deltas as CSV
@@ -108,9 +110,8 @@ Data scopes differ by design (PROCS = payload, NET box = NIC bytes) — see in-a
     )
 }
 
-/// 本发行版仅支持 x86_64:eBPF 探针的 PT_REGS 寄存器映射与各数据源都按
-/// 探针寄存器映射覆盖 x86_64 与 aarch64;其他架构启动即明确报错,
-/// 而不是静默产出错账
+/// eBPF 探针的 PT_REGS 寄存器映射与各数据源都按 x86_64 与 aarch64 双架构
+/// 覆盖;其他架构启动即明确报错,而不是静默产出错账
 pub fn arch_guard() -> Result<()> {
     let ok = match std::env::consts::OS {
         "linux" => matches!(std::env::consts::ARCH, "x86_64" | "aarch64"),
@@ -160,9 +161,11 @@ pub fn cli_main() -> Result<()> {
         return replay::run_replay(&args);
     }
     let theme_src = theme::init();
-    // 恢复上次选定的内嵌主题(非 omarchy 跟随)
+    // 恢复上次选定的内嵌主题(非 omarchy 跟随);--theme 直载时固定
+    // 用户指定的文件,不被启动恢复覆盖
     let boot_cfg = config::Config::load();
-    if boot_cfg.theme != "omarchy" {
+    let theme_fixed_by_cli = args.iter().any(|a| a == "--theme");
+    if !theme_fixed_by_cli && boot_cfg.theme != "omarchy" {
         let _ = theme::apply_by_name(&boot_cfg.theme);
     }
     if args.iter().any(|a| a == "--json") {
@@ -524,10 +527,15 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
                 }
             }
             KeyCode::Char('k') => {
-                let b = app.last_focus;
-                if app.focus[b] {
-                    if let Some(pid) = ui::selected_pid(app, b) {
-                        kill_pid(pid);
+                // 全局即杀键:受设置里的 allow_global_kill(默认关)约束,
+                // 关闭时不生效(底栏提示也随开关隐藏);要杀走详情页
+                // k → 确认的路径
+                if app.allow_global_kill {
+                    let b = app.last_focus;
+                    if app.focus[b] {
+                        if let Some(pid) = ui::selected_pid(app, b) {
+                            kill_pid(pid);
+                        }
                     }
                 }
             }
@@ -988,8 +996,16 @@ fn handle_mouse(app: &mut App, m: &crossterm::event::MouseEvent) {
                     app.last_click = None;
                     let idx = ui::hit_box(m.column, m.row);
                     if let Some(b) = idx {
-                        if let Some(id) = ui::selected_id(app, b) {
-                            app.menu = crate::app::MenuState::Detail(b, id);
+                        // 仅 procs/conns 的普通行开详情:聚合父行(首击已切换
+                        // 展开,id 是 hash,弹详情只会得到 "is gone")与 lan 行
+                        // (无 detail 分支,弹空窗)不开;游标归零防残留
+                        if matches!(b, app::BOX_PROCS | app::BOX_CONNS)
+                            && !ui::selected_is_agg(app, b)
+                        {
+                            app.detail_sel = 0;
+                            if let Some(id) = ui::selected_id(app, b) {
+                                app.menu = crate::app::MenuState::Detail(b, id);
+                            }
                         }
                     }
                     return;
@@ -1424,13 +1440,11 @@ mod tests {
         app.menu = crate::app::MenuState::Detail(app::BOX_PROCS, 0);
         let mut term = Terminal::new(TestBackend::new(120, 40)).unwrap();
         term.draw(|f| ui::draw(f, &app)).unwrap(); // smoke: empty-data path renders
-        let area = ratatui::layout::Rect::new(0, 0, 120, 40);
         assert!(matches!(
             ui::detail_hit_test(&app, app::BOX_PROCS, 0, 39),
             ui::DetailHit::Outside
         ));
     }
-    use super::*;
 
     /// the build-time eBPF object must parse and carry all four probes plus
     /// the LRU map, so a broken clang output fails tests instead of at runtime
@@ -1839,7 +1853,7 @@ mod tests {
         assert!(!app.focus[app::BOX_CONNS], "单焦点:conns 熄灭");
     }
 
-    /// 本发行版仅 x86_64:钉住 arch_guard 的通过路径(测试进程即 x86_64;
+    /// 钉住 arch_guard 的通过路径(测试进程即 x86_64;
     /// 非 x86_64 分支是纯字符串比较,无法在测试内模拟)
     #[test]
     fn arch_guard_passes_on_x86_64() {
@@ -1863,6 +1877,7 @@ mod tests {
             "--log",
             "--log-interval",
             "--follow-theme",
+            "--theme",
             "--replay",
             "--top",
             "--csv",
@@ -1879,6 +1894,19 @@ mod tests {
             usage_text("myalias").contains("myalias [OPTIONS]"),
             "自建软链别名同版帮助(调用名跟随机制保留)"
         );
+    }
+
+    /// --theme 已进白名单:带文件参数不再被 early_exit 拒绝
+    /// (0.2.6 及之前旗标直接报 unknown option,theme::init 的直载分支不可达)
+    #[test]
+    fn theme_flag_passes_early_exit() {
+        assert!(early_exit(&[
+            "ltop".to_string(),
+            "--theme".to_string(),
+            "/tmp/x.theme".to_string()
+        ])
+        .is_none());
+        assert!(early_exit(&["ltop".to_string(), "--typo".to_string()]).is_some());
     }
 
     /// update() 必须把 LAN 选中纳入每 tick 锚定:数据驱动的重排只发生

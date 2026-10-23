@@ -26,7 +26,7 @@ token）。录一次，摘要一次:
 
 ```bash
 ltop watch --duration 10m --proc chrome    # 无头、崩溃安全、免 root
-ltop report ~/.local/state/ltop/ltop-session-*.jsonl --json
+ltop report <watch 打印的路径> --json    # report 只收单个文件
 ```
 
 `report --json` 返回约 2 KB 的精确数字——窗口总和（末快照累计 − 首快照
