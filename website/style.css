@@ -40,7 +40,7 @@
   }
   .nav-inner {
     display: flex; align-items: center; gap: 20px;
-    height: 52px;
+    min-height: 52px; flex-wrap: wrap; padding: 4px 0;
   }
   .logo { font-weight: 700; font-size: 17px; color: var(--fg); letter-spacing: 0.5px; }
   .logo b { color: var(--green); }
@@ -159,7 +159,7 @@
   .sec-sub code { color: var(--yellow); font-size: 0.93em; }
 
   /* features */
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(290px, 100%), 1fr)); gap: 16px; }
   .card {
     background: var(--panel); border: 1px solid var(--border);
     border-radius: 10px; padding: 20px 22px;
@@ -172,7 +172,7 @@
   .card code { color: var(--yellow); font-size: 0.92em; }
 
   /* quick start */
-  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; }
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr)); gap: 16px; }
   .step { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 20px 22px; }
   .step .n {
     display: inline-block; width: 24px; height: 24px; line-height: 24px; text-align: center;
@@ -228,7 +228,13 @@
   @media (max-width: 640px) {
     header { padding-top: 48px; }
     section { padding: 48px 0; }
-    nav .links a:not(.gh):not(.docsy):not(.lang) { display: none; }
+    nav .links { gap: 14px; }
+    nav .links a { display: none; }
+    nav .links a.gh, nav .links a.lang,
+    nav .links a[href$="docs/"], nav .links a[href$="docs/zh/"] {
+      display: inline-block;
+    }
+    .install code { white-space: pre-wrap; word-break: break-all; }
   }
 
   /* copyable code blocks (quick start steps) */
