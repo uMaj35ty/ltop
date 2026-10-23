@@ -103,3 +103,5 @@ settings panel (`m` → settings) and safe to hand-edit (applies on restart):
 | `proc_exit_retention_min` | 30 | evict exited-process ledgers after N minutes (0 = forever) |
 | `conn_filter` / `conn_sort` / `proc_sort` / `lan_sort` | all / proc / net-sum / ip | default list modes |
 | `allow_global_kill` | false | allow killing other users' processes |
+| `net_graph_coupled` | false | coupled NET chart scaling: when one direction dwarfs the other, the small side renders at its true fraction of the chart height instead of auto-scaling to full height |
+| `net_graph_scale_ratio` | 5 | trigger threshold for the above, in×(2–20); ratios below it keep normal auto-scaling |

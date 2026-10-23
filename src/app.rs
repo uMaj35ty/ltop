@@ -229,6 +229,8 @@ pub struct App {
     pub disks_expanded: bool,
     /// braille graph style, settable per scope (menu graphs / global `g`)
     pub graph_net: GraphMode,
+    pub net_graph_coupled: bool,
+    pub net_graph_scale_ratio: u32,
     pub graph_disk: GraphMode,
 }
 
@@ -238,6 +240,8 @@ impl App {
         let hostname = host_name();
         let log_interval = cli_log_interval.unwrap_or(Duration::from_millis(cfg.log_interval_ms));
         let mut app = Self {
+            net_graph_coupled: cfg.net_graph_coupled,
+            net_graph_scale_ratio: cfg.net_graph_scale_ratio,
             net: NetCollector::new(),
             lan: LanCollector::new(),
             disk: DiskCollector::new(),
@@ -335,6 +339,8 @@ impl App {
             } else {
                 self.proc.exit_retention.as_secs() / 60
             },
+            net_graph_coupled: self.net_graph_coupled,
+            net_graph_scale_ratio: self.net_graph_scale_ratio,
         }
         .save();
     }

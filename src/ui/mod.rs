@@ -1183,6 +1183,18 @@ fn draw_net(f: &mut Frame, area: Rect, app: &App, focused: bool) {
 
     let rates = app.net.selected_rates();
     let (hrx, htx) = app.net.selected_hist();
+    // coupled scaling (opt-in): when one direction dwarfs the other, draw the
+    // small side at its true fraction of the chart height instead of letting
+    // auto-scale blow a tiny waveform up to full height
+    let rows = chunks[2].height;
+    let (rx_frac, tx_frac) = if app.net_graph_coupled {
+        let rx_peak = hrx.iter().copied().fold(0.0f64, f64::max);
+        let tx_peak = htx.iter().copied().fold(0.0f64, f64::max);
+        let f = graph::coupled_frac(tx_peak, rx_peak, rows, app.net_graph_scale_ratio);
+        if tx_peak < rx_peak { (1.0, f) } else { (f, 1.0) }
+    } else {
+        (1.0, 1.0)
+    };
 
     // 头行标签随列宽分级:≥52 全称,≥40 缩写,≥30 紧凑(Σa 无留白),
     // 更窄只留 session——alive Σ 是头行主指标,能塞下就不静默消失
@@ -1250,6 +1262,16 @@ fn draw_net(f: &mut Frame, area: Rect, app: &App, focused: bool) {
             dim(),
         ),
     ]);
+    let tx_head = if tx_frac < 1.0 {
+        let mut spans = tx_head.spans;
+        spans.push(Span::styled(
+            format!("  ×{tx_frac:.2}"),
+            dim(),
+        ));
+        Line::from(spans)
+    } else {
+        tx_head
+    };
     f.render_widget(Paragraph::new(rx_head), chunks[1]);
     f.render_widget(
         Paragraph::new(braille_graph(
@@ -1259,6 +1281,7 @@ fn draw_net(f: &mut Frame, area: Rect, app: &App, focused: bool) {
             GRAPH_FLOOR,
             download(),
             app.graph_net,
+            rx_frac,
         )),
         chunks[2],
     );
@@ -1271,6 +1294,7 @@ fn draw_net(f: &mut Frame, area: Rect, app: &App, focused: bool) {
             GRAPH_FLOOR,
             upload(),
             app.graph_net,
+            tx_frac,
         )),
         chunks[4],
     );
@@ -1511,6 +1535,7 @@ fn graph_section(
             GRAPH_FLOOR,
             grad,
             mode,
+            1.0,
         )),
         g[1],
     );
@@ -2722,7 +2747,22 @@ pub fn detail_selected_value(app: &App, box_idx: usize, id: u64) -> Option<Strin
     flat.nth(app.detail_sel)
 }
 
-fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u64) {
+pub struct DetailLayout {
+    pub popup: Rect,
+    pub inner: Rect,
+    pub fields_h: u16,
+    pub hints_y: u16,
+    pub hint_lines: Vec<String>,
+    pub scroll: usize,
+    pub sel: usize,
+    /// 每个字段的行区间(起始行, 行数)——渲染高亮与鼠标命中共用
+    pub field_rows: Vec<(usize, usize)>,
+    /// 每个字段的完整值(复制用)
+    pub values: Vec<String>,
+}
+
+/// detail 弹窗的几何与字段行映射——渲染与鼠标命中测试的单一事实源
+fn detail_layout(app: &App, box_idx: usize, id: u64, area: Rect, sel: usize) -> DetailLayout {
     let DetailData {
         groups,
         pid,
@@ -2754,7 +2794,6 @@ fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u
         .map(|((l, _), _)| l.chars().count())
         .max()
         .unwrap_or(0);
-    // values longer than the column wrap onto continuation lines
     let inner_w = w.saturating_sub(2) as usize;
     let chunk_w = inner_w.saturating_sub(lbl_w + 4).max(10);
     let n_lines: usize = gone.len().min(1)
@@ -2768,23 +2807,103 @@ fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u
                     .sum::<usize>()
             })
             .sum::<usize>();
-    // +2 borders +1 blank +1 hint row; the hint row is pinned to the bottom
-    // line of the box so the key bindings stay visible even when the fields
-    // overflow a small terminal
     let h = (n_lines as u16 + 4).min(area.height);
     let popup = centered(area, w, h);
-    f.render_widget(Clear, popup);
+    let inner = Rect {
+        x: popup.x + 1,
+        y: popup.y + 1,
+        width: popup.width.saturating_sub(2),
+        height: popup.height.saturating_sub(2),
+    };
+
+    let mut lines = 0usize;
+    let mut field_rows: Vec<(usize, usize)> = Vec::new();
+    let mut values: Vec<String> = Vec::new();
+    if !gone.is_empty() {
+        lines += 1;
+    }
+    for (title, fields) in &groups {
+        if !title.is_empty() {
+            lines += 2; // 空行 + 组标题(不计入字段游标)
+        }
+        for ((_, value), _) in fields {
+            let start = lines;
+            let count = wrap_chunks(value, chunk_w).len();
+            lines += count;
+            field_rows.push((start, count));
+            values.push(value.clone());
+        }
+    }
+    let hint_lines = pack_rows(&hints, inner.width.saturating_sub(1) as usize);
+    let hints_h = hint_lines.len() as u16;
+    let hints_y = inner.bottom().saturating_sub(hints_h);
+    let fields_h = hints_y.saturating_sub(inner.y);
+    let sel = sel.min(field_rows.len().saturating_sub(1));
+    let (s0, n0) = field_rows.get(sel).copied().unwrap_or((0, 1));
+    let vis = fields_h as usize;
+    let scroll = (s0 + n0).saturating_sub(vis);
+
+    DetailLayout {
+        popup,
+        inner,
+        fields_h,
+        hints_y,
+        hint_lines,
+        scroll,
+        sel,
+        field_rows,
+        values,
+    }
+}
+
+/// 鼠标命中:弹窗某行对应什么。col 不参与(字段行整行可点)。
+pub enum DetailHit {
+    /// 字段行:(游标索引, 字段完整值)
+    Field(usize, String),
+    /// 弹窗内的非字段行(组标题/空行)
+    Heading,
+    /// 弹窗外
+    Outside,
+}
+
+pub fn detail_hit_test(app: &App, box_idx: usize, id: u64, area: Rect, row: u16) -> DetailHit {
+    let l = detail_layout(app, box_idx, id, area, app.detail_sel);
+    if row < l.inner.y || row >= l.inner.y + l.fields_h {
+        return DetailHit::Outside;
+    }
+    let all_y = (row - l.inner.y) as usize + l.scroll;
+    for (i, (start, count)) in l.field_rows.iter().enumerate() {
+        if all_y >= *start && all_y < start + count {
+            return DetailHit::Field(i, l.values[i].clone());
+        }
+    }
+    DetailHit::Heading
+}
+
+fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u64) {
+    let DetailData { groups, gone, .. } = detail_data(app, box_idx, id);
+    let l = detail_layout(app, box_idx, id, area, app.detail_sel);
+
+    f.render_widget(Clear, l.popup);
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
         .style(Style::new().bg(bg().unwrap_or(Color::Reset)))
         .border_style(Style::new().fg(hi()))
         .title(title_line(0, "detail", '\0', vec![], hi(), true));
-    let inner = block.inner(popup);
-    f.render_widget(block, popup);
+    let inner = block.inner(l.popup);
+    f.render_widget(block, l.popup);
 
+    // rows re-rendered with the shared layout's metrics (label width + wrap)
+    let lbl_w = groups
+        .iter()
+        .flat_map(|(_, fs)| fs.iter())
+        .map(|((l, _), _)| l.chars().count())
+        .max()
+        .unwrap_or(0);
+    let chunk_w = (l.popup.width.saturating_sub(2) as usize)
+        .saturating_sub(lbl_w + 4)
+        .max(10);
     let mut all: Vec<Line> = Vec::new();
-    // 每个字段的行区间(游标定位与滚动推导;组标题/空行不计入字段游标)
-    let mut field_rows: Vec<(usize, usize)> = Vec::new();
     if !gone.is_empty() {
         all.push(Line::from(Span::styled(format!(" {gone}"), dim())));
     }
@@ -2797,7 +2916,6 @@ fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u
             )));
         }
         for ((label, value), st) in fields {
-            let start = all.len();
             for (i, chunk) in wrap_chunks(value, chunk_w).into_iter().enumerate() {
                 let indent = if i == 0 {
                     format!(" {:<lbl_w$}  ", label)
@@ -2811,34 +2929,20 @@ fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u
                 };
                 all.push(Line::from(vec![Span::styled(indent, dim()), vspan]));
             }
-            field_rows.push((start, all.len() - start));
         }
     }
-    // pin the hint row(s) to the bottom line of the box so the key bindings
-    // stay visible even when the fields overflow a small terminal; on narrow
-    // popups the segments repack onto extra rows instead of being cut
-    let hint_lines = pack_rows(&hints, inner.width.saturating_sub(1) as usize);
-    let hints_h = hint_lines.len() as u16;
-    let hints_y = inner.bottom().saturating_sub(hints_h);
-    let fields_h = hints_y.saturating_sub(inner.y);
-    // 字段游标:高亮选中字段行(行首 ▸ + 弱底)并推导滚动保证其可见
-    let sel = app.detail_sel.min(field_rows.len().saturating_sub(1));
-    let (s0, n0) = field_rows.get(sel).copied().unwrap_or((0, 1));
-    let vis = fields_h as usize;
-    // 无状态滚动推导:选中行不可见时,让其贴可见区底部(上方留 3 行)
-    let scroll = (s0 + n0).saturating_sub(vis);
     let hl_bg = download().at(0.12);
     let lines_with_cursor: Vec<Line> = all
         .into_iter()
         .enumerate()
         .map(|(li, line)| {
-            let in_field = field_rows
-                .get(sel)
-                .is_some_and(|(start, count)| li >= *start && li < start + count);
+            let in_field = l.field_rows.get(l.sel).is_some_and(|(start, count)| {
+                li >= *start && li < start + count
+            });
             if !in_field {
                 return line;
             }
-            let bar = if li == s0 { "▸" } else { " " };
+            let bar = if li == l.field_rows[l.sel].0 { "▸" } else { " " };
             let mut spans = vec![Span::styled(bar, Style::new().fg(accent()).bg(hl_bg))];
             spans.extend(line.spans.into_iter().map(|mut sp| {
                 sp.style = sp.style.bg(hl_bg);
@@ -2849,8 +2953,8 @@ fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u
         .collect();
     let skipped: Vec<Line> = lines_with_cursor
         .iter()
-        .skip(scroll)
-        .take(fields_h as usize)
+        .skip(l.scroll)
+        .take(l.fields_h as usize)
         .cloned()
         .collect();
     f.render_widget(
@@ -2859,21 +2963,21 @@ fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u
             x: inner.x,
             y: inner.y,
             width: inner.width,
-            height: fields_h,
+            height: l.fields_h,
         },
     );
     f.render_widget(
         Paragraph::new(
-            hint_lines
+            l.hint_lines
                 .into_iter()
-                .map(|l| Line::from(Span::styled(l, bold(hi()))))
+                .map(|x| Line::from(Span::styled(x, bold(hi()))))
                 .collect::<Vec<_>>(),
         ),
         Rect {
             x: inner.x,
-            y: hints_y,
+            y: l.hints_y,
             width: inner.width,
-            height: hints_h,
+            height: l.popup.bottom().saturating_sub(1).saturating_sub(l.hints_y),
         },
     );
 }
