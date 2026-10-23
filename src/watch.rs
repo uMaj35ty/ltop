@@ -1,0 +1,376 @@
+//! headless 采集:`ltop watch` — 复用 TUI 采样层(App update / schema v1),
+//! JSONL 逐行追加(写到一半的行可跳过,崩溃安全)。输出与 TUI monlog
+//! (ltop-log-*)分文件:默认 ltop-session-<ts>.jsonl,不会被 TUI 的保留期
+//! 清理(ltop-log-*/session-* 前缀)碰到。
+
+use std::io::Write;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+use anyhow::{bail, Context, Result};
+
+use crate::app::App;
+
+static STOP: AtomicBool = AtomicBool::new(false);
+
+extern "C" fn on_signal(_: libc::c_int) {
+    STOP.store(true, Ordering::SeqCst);
+}
+
+pub struct WatchOpts {
+    pub interval: Duration,
+    pub duration: Option<Duration>,
+    pub out: Option<PathBuf>,
+    pub stop: Option<PathBuf>,
+    /// 聚焦:仅写名称匹配(子串,不区分大小写)的进程及其连接行
+    pub proc: Option<String>,
+}
+
+/// `10s` / `5m` / `2h`;纯数字按秒
+pub fn parse_duration(s: &str) -> Option<Duration> {
+    let s = s.trim();
+    let (num, unit) = s.split_at(s.find(|c: char| c.is_ascii_alphabetic()).unwrap_or(s.len()));
+    let n: u64 = num.parse().ok()?;
+    let secs = match unit {
+        "" | "s" => n,
+        "m" => n * 60,
+        "h" => n * 3600,
+        _ => return None,
+    };
+    Some(Duration::from_secs(secs))
+}
+
+pub fn run(args: &[String]) -> Result<()> {
+    let zh = crate::cli_lang_zh();
+    let p = |en: &str, c: &str| crate::pick_s(zh, en, c);
+    let mut opts = WatchOpts {
+        interval: Duration::from_secs(5),
+        duration: None,
+        out: None,
+        stop: None,
+        proc: None,
+    };
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "-h" | "--help" => {
+                println!("{}", watch_usage(zh));
+                return Ok(());
+            }
+            "--interval" => {
+                let v = args
+                    .get(i + 1)
+                    .context(p("--interval needs a value (seconds)", "--interval 需要一个秒数"))?;
+                let n: u64 = v.parse().map_err(|_| {
+                    anyhow::anyhow!(p(
+                        &format!("--interval {v:?} is not a number"),
+                        &format!("--interval {v:?} 不是秒数")
+                    ))
+                })?;
+                opts.interval = Duration::from_secs(n.max(1));
+                i += 1;
+            }
+            "--duration" => {
+                let v = args.get(i + 1).context(p(
+                    "--duration needs a value (e.g. 30s/5m/2h)",
+                    "--duration 需要一个时长(如 30s/5m/2h)",
+                ))?;
+                opts.duration = Some(parse_duration(v).ok_or_else(|| {
+                    anyhow::anyhow!(p(
+                        &format!("--duration {v:?} is not parseable"),
+                        &format!("--duration {v:?} 无法解析")
+                    ))
+                })?);
+                i += 1;
+            }
+            "--out" | "--stop" | "--proc" => {
+                let v = args.get(i + 1).context(format!(
+                    "{},{}",
+                    args[i],
+                    p("needs a value", "需要一个值")
+                ))?;
+                match args[i].as_str() {
+                    "--out" => opts.out = Some(PathBuf::from(v)),
+                    "--stop" => opts.stop = Some(PathBuf::from(v)),
+                    _ => opts.proc = Some(v.clone()),
+                }
+                i += 1;
+            }
+            a if a.starts_with("--") => bail!("ltop watch: unknown option {a} (try --help)"),
+            a => bail!(
+                "{}",
+                p(
+                    &format!("ltop watch: unexpected argument {a:?} (subcommand takes options only; try --help)"),
+                    &format!("ltop watch: 意外参数 {a:?}(子命令只收选项,try --help)")
+                )
+            ),
+        }
+        i += 1;
+    }
+    execute(opts, zh)?;
+    Ok(())
+}
+
+fn watch_usage(zh: bool) -> String {
+    if zh {
+        format!(
+            "ltop watch v{} — headless 采集,schema v1 JSONL(AI/ltop report 的输入)
+
+USAGE:
+    ltop watch [OPTIONS]
+
+    --interval <S>   采样间隔,秒(默认 5)
+    --duration <T>   总时长,如 30s / 5m / 2h(缺省 = 采到 --stop 或 Ctrl-C)
+    --out <FILE>     输出 JSONL(默认 ~/.local/state/ltop/ltop-session-<ts>.jsonl)
+    --stop <FILE>    哨兵文件:文件出现即停止(停止后删除该文件)
+    --proc <NAME>    聚焦:只写名称匹配(子串)的进程及其连接;按名追踪,
+                     进程重启换 pid 不丢线
+    -h, --help       本帮助
+
+消费:ltop report <file>(摘要)/ jq(任意查询);TUI monlog(ltop-log-*)
+同 schema,report 也能读。",
+            env!("CARGO_PKG_VERSION")
+        )
+    } else {
+        format!(
+            "ltop watch v{} — headless capture to schema-v1 JSONL (input for ltop report / AI)
+
+USAGE:
+    ltop watch [OPTIONS]
+
+    --interval <S>   sampling interval, seconds (default 5)
+    --duration <T>   total duration, e.g. 30s / 5m / 2h (default: run until --stop or Ctrl-C)
+    --out <FILE>     output JSONL (default ~/.local/state/ltop/ltop-session-<ts>.jsonl)
+    --stop <FILE>    sentinel file: stop as soon as it appears (consumed on stop)
+    --proc <NAME>    focus: record only processes matching NAME (substring) and their
+                     connections; tracked by name — survives pid changes on restart
+    -h, --help       this help
+
+Consume: ltop report <file> (summary) / jq (arbitrary queries); TUI monitoring
+logs (ltop-log-*) share the same schema — report reads them too.",
+            env!("CARGO_PKG_VERSION")
+        )
+    }
+}
+
+fn default_out() -> PathBuf {
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    crate::log::log_dir().join(format!("ltop-session-{secs}.jsonl"))
+}
+
+fn proc_matches(filter: &Option<String>, name: &str) -> bool {
+    match filter {
+        None => true,
+        Some(f) => name.to_lowercase().contains(&f.to_lowercase()),
+    }
+}
+
+/// 采样直到停止条件;返回写出的行数。sleep 切小片以便信号及时生效。
+fn execute(opts: WatchOpts, zh: bool) -> Result<usize> {
+    let p = |en: &str, c: &str| crate::pick_s(zh, en, c);
+    unsafe {
+        // SIGINT/SIGTERM 优雅收尾:置位即停,最后一条快照完整落盘
+        libc::signal(
+            libc::SIGINT,
+            on_signal as extern "C" fn(libc::c_int) as libc::sighandler_t,
+        );
+        libc::signal(
+            libc::SIGTERM,
+            on_signal as extern "C" fn(libc::c_int) as libc::sighandler_t,
+        );
+    }
+    let mut app = App::new(None);
+    // 两个样本起步:首个无速率,第二个起 rates 就绪(与 TUI / --json 同);
+    // 计时从 warm-up 后开始,duration 全程有快照覆盖
+    app.update();
+    std::thread::sleep(opts.interval.min(Duration::from_millis(1200)));
+    app.update();
+    let start = Instant::now();
+
+    let path = opts.out.clone().unwrap_or_else(default_out);
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).with_context(|| {
+            p(
+                &format!("cannot create output directory {}", dir.display()),
+                &format!("建输出目录失败 {}", dir.display()),
+            )
+        })?;
+    }
+    let mut f = std::fs::File::create(&path).with_context(|| {
+        p(
+            &format!("cannot create {}", path.display()),
+            &format!("创建 {} 失败", path.display()),
+        )
+    })?;
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let proc_js = opts
+        .proc
+        .as_deref()
+        .map(|p| format!("\"{}\"", crate::log::json_str(p)))
+        .unwrap_or_else(|| "null".into());
+    let dur_js = opts
+        .duration
+        .map(|d| d.as_secs().to_string())
+        .unwrap_or_else(|| "null".into());
+    writeln!(
+        f,
+        "{{\"watch_start\":{secs},\"host\":\"{}\",\"interval_s\":{},\"proc\":{proc_js},\"duration_s\":{dur_js}}}",
+        crate::log::json_str(&app.hostname),
+        opts.interval.as_secs(),
+    )?;
+
+    let mut lines = 0usize;
+    let mut reason = p("duration reached", "duration 到点");
+    loop {
+        // 先落盘再睡:warm-up 第二个样本即窗口基线;信号/duration 到点时
+        // 最后一个快照已在文件里,窗口不缺头尾
+        let mut snap = crate::snapshot::from_app(&app);
+        if opts.proc.is_some() {
+            let f = &opts.proc;
+            snap.procs.retain(|p| proc_matches(f, &p.name));
+            snap.conns
+                .retain(|c| c.process.as_deref().is_some_and(|pn| proc_matches(f, pn)));
+        }
+        writeln!(f, "{}", serde_json::to_string(&snap).unwrap_or_default())?;
+        lines += 1;
+        if STOP.load(Ordering::SeqCst) {
+            reason = p("SIGINT/SIGTERM received", "收到 SIGINT/SIGTERM");
+            break;
+        }
+        if let Some(sf) = &opts.stop {
+            if sf.exists() {
+                // 哨兵即消费:删掉避免下次启动立即停
+                let _ = std::fs::remove_file(sf);
+                reason = p("stop file seen", "哨兵文件出现");
+                break;
+            }
+        }
+        if let Some(d) = opts.duration {
+            if start.elapsed() >= d {
+                break;
+            }
+        }
+        // 本片睡眠 = min(interval, duration 余量);切片睡以便信号及时醒来
+        let budget = opts
+            .duration
+            .map(|d| d.saturating_sub(start.elapsed()))
+            .unwrap_or(opts.interval)
+            .min(opts.interval);
+        let mut left = budget;
+        while left > Duration::ZERO && !STOP.load(Ordering::SeqCst) {
+            let slice = left.min(Duration::from_millis(200));
+            std::thread::sleep(slice);
+            left = left.saturating_sub(slice);
+        }
+        app.update();
+    }
+    f.flush()?;
+    eprintln!(
+        "{}",
+        p(
+            &format!(
+                "ltop watch: {} ({reason}), {lines} snapshots → {}",
+                crate::app::fmt_dur(start.elapsed().as_secs()),
+                path.display()
+            ),
+            &format!(
+                "ltop watch: {}({reason}),{lines} 行快照 → {}",
+                crate::app::fmt_dur(start.elapsed().as_secs()),
+                path.display()
+            )
+        )
+    );
+    Ok(lines)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_durations() {
+        assert_eq!(parse_duration("10s"), Some(Duration::from_secs(10)));
+        assert_eq!(parse_duration("90"), Some(Duration::from_secs(90)));
+        assert_eq!(parse_duration("5m"), Some(Duration::from_secs(300)));
+        assert_eq!(parse_duration("2h"), Some(Duration::from_secs(7200)));
+        assert_eq!(parse_duration("abc"), None);
+        assert_eq!(parse_duration("5x"), None);
+        assert_eq!(parse_duration(""), None);
+    }
+
+    /// 端到端:短 duration 产出 表头 + ≥2 快照行,末行 schema v1 可反序列化
+    #[test]
+    fn short_duration_writes_valid_jsonl() {
+        let dir = std::env::temp_dir().join(format!("ltop-watch-e2e-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let out = dir.join("w.jsonl");
+        let lines = execute(
+            WatchOpts {
+            interval: Duration::from_secs(1),
+            duration: Some(Duration::from_secs(2)),
+            out: Some(out.clone()),
+            stop: None,
+            proc: None,
+        }, true)
+        .unwrap();
+        assert!(lines >= 2, "2s@1s 至少 2 行,实测 {lines}");
+        let content = std::fs::read_to_string(&out).unwrap();
+        let mut rows = content.lines();
+        let header = rows.next().unwrap();
+        assert!(header.contains("\"watch_start\""), "首行是表头:{header}");
+        let last = content.lines().last().unwrap();
+        let v: serde_json::Value = serde_json::from_str(last).unwrap();
+        assert_eq!(v["schema"], 1, "末行是 schema v1 快照");
+        // 主机名随机器不同(开发机/Air/CI),只断言非空
+        assert!(
+            v["meta"]["hostname"]
+                .as_str()
+                .is_some_and(|h| !h.is_empty()),
+            "meta.hostname 非空"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// 聚焦模式:文件里只留匹配进程的行(测试环境无同名进程时 procs 为空,
+    /// 但 schema 行仍在 —— 断言过滤路径不炸、行数正常)
+    #[test]
+    fn proc_focus_writes_schema_rows() {
+        let dir = std::env::temp_dir().join(format!("ltop-watch-focus-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let out = dir.join("w.jsonl");
+        let lines = execute(
+            WatchOpts {
+            interval: Duration::from_secs(1),
+            duration: Some(Duration::from_secs(2)),
+            out: Some(out.clone()),
+            stop: None,
+            proc: Some("zzz-no-such-proc".into()),
+        }, true)
+        .unwrap();
+        assert!(lines >= 2);
+        let content = std::fs::read_to_string(&out).unwrap();
+        for row in content.lines().skip(1) {
+            let v: serde_json::Value = serde_json::from_str(row).unwrap();
+            assert!(
+                v["procs"].as_array().unwrap().iter().all(|p| {
+                    p["name"]
+                        .as_str()
+                        .unwrap()
+                        .to_lowercase()
+                        .contains("zzz-no-such-proc")
+                }),
+                "聚焦模式下不应有未匹配进程"
+            );
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}

@@ -6,7 +6,6 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-
 pub struct MonLog {
     pub enabled: bool,
     pub interval: Duration,
@@ -103,7 +102,14 @@ impl MonLog {
     pub fn finalize(&mut self) {
         if let Some((path, mut f)) = self.file.take() {
             let _ = f.flush();
-            eprintln!("ltop: 监控日志已保存到 {}", path.display());
+            eprintln!(
+                "{}",
+                crate::pick_s(
+                    crate::cli_lang_zh(),
+                    &format!("ltop: monitoring log saved to {}", path.display()),
+                    &format!("ltop: 监控日志已保存到 {}", path.display())
+                )
+            );
         }
         self.enabled = false;
     }
@@ -118,7 +124,7 @@ impl MonLog {
     }
 }
 
-fn log_dir() -> PathBuf {
+pub(crate) fn log_dir() -> PathBuf {
     if let Ok(x) = std::env::var("XDG_STATE_HOME") {
         if !x.is_empty() {
             return PathBuf::from(x).join("ltop");
@@ -140,7 +146,7 @@ fn session_ts(name: &str) -> Option<u64> {
     name.parse::<u64>().ok()
 }
 
-fn json_str(s: &str) -> String {
+pub(crate) fn json_str(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
         match c {

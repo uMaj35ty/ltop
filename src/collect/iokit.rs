@@ -134,11 +134,7 @@ fn names_contains(names: &[String], name: &str) -> bool {
 
 /// whole-disk medias (no `s<N>` suffix) — tree roots
 pub fn whole_disks(names: &[String]) -> Vec<String> {
-    let mut roots: Vec<String> = names
-        .iter()
-        .filter(|n| !is_slice(n))
-        .cloned()
-        .collect();
+    let mut roots: Vec<String> = names.iter().filter(|n| !is_slice(n)).cloned().collect();
     roots.sort();
     roots.dedup();
     roots
@@ -175,9 +171,10 @@ fn is_slice(name: &str) -> bool {
     }
     let tail = &rest[digits..];
     tail.contains('s')
-        && tail.split('s').skip(1).all(|p| {
-            !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit())
-        })
+        && tail
+            .split('s')
+            .skip(1)
+            .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
 }
 
 unsafe fn string_prop(obj: IoObject, key: &str) -> Option<String> {
@@ -285,8 +282,12 @@ extern "C" {
         c_str: *const c_char,
         encoding: u32,
     ) -> *mut c_void;
-    fn CFStringGetCString(s: *mut c_void, buffer: *mut c_char, buffer_size: usize, encoding: u32)
-        -> bool;
+    fn CFStringGetCString(
+        s: *mut c_void,
+        buffer: *mut c_char,
+        buffer_size: usize,
+        encoding: u32,
+    ) -> bool;
     fn CFBooleanGetValue(boolean: *mut c_void) -> bool;
     fn CFDictionaryGetValue(dict: *mut c_void, key: *const c_void) -> *const c_void;
     fn CFNumberGetValue(number: *const c_void, the_type: usize, value_ptr: *mut c_void) -> bool;

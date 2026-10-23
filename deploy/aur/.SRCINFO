@@ -11,7 +11,6 @@ pkgbase = ltop-bin
 	optdepends = sudo: deploy the ltop-bpf helper service
 	provides = ltop
 	provides = ltop-bpf
-	provides = loli
 	conflicts = localist-top
 	conflicts = localist-top-bin
 	source = ltop-0.2.3-x86_64-linux.tar.gz::https://github.com/uMaj35ty/ltop/releases/download/v0.2.3/ltop-0.2.3-x86_64-linux.tar.gz

@@ -5,10 +5,12 @@ pub mod collect;
 pub mod config;
 pub mod log;
 pub mod replay;
+pub mod report;
 pub mod snapshot;
 pub mod theme;
 pub mod theme_data;
 pub mod ui;
+pub mod watch;
 
 use std::io::{self, stdout, Write};
 use std::time::{Duration, Instant};
@@ -16,8 +18,8 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use crossterm::{
     event::{
-        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind,
-        KeyModifiers, KeyboardEnhancementFlags, MouseEventKind, PopKeyboardEnhancementFlags,
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers,
+        KeyboardEnhancementFlags, MouseEventKind, PopKeyboardEnhancementFlags,
         PushKeyboardEnhancementFlags,
     },
     execute,
@@ -32,7 +34,8 @@ type Tui = Terminal<CrosstermBackend<io::Stdout>>;
 /// `--help`/`-h`、`--version`/`-V` 在任何副作用(目录迁移/主题初始化/开终端)之前短路
 fn early_exit(args: &[String]) -> Option<Result<()>> {
     if args.iter().any(|a| a == "--help" || a == "-h") {
-        // argv[0] 的文件名即调用名(ltop 或软链别名 loli),取不到回落 ltop
+        // argv[0] 的文件名即调用名(官方只发 ltop;用户自建软链别名同效),
+        // 取不到回落 ltop
         let prog = args
             .first()
             .and_then(|a| std::path::Path::new(a).file_name())
@@ -48,10 +51,25 @@ fn early_exit(args: &[String]) -> Option<Result<()>> {
     // 未知旗标明确报错:静默忽略会让 typo 直接落进 TUI(--json 打错时
     // 用户以为拿到了 JSON)
     let known = [
-        "--json", "--schema", "--dump", "--log", "--log-interval", "--follow-theme",
-        "--replay", "--top", "--csv", "--help", "-h", "--version", "-V",
+        "--json",
+        "--schema",
+        "--dump",
+        "--log",
+        "--log-interval",
+        "--follow-theme",
+        "--replay",
+        "--top",
+        "--csv",
+        "--help",
+        "-h",
+        "--version",
+        "-V",
     ];
-    if let Some(bad) = args.iter().skip(1).find(|a| a.starts_with("--") && !known.contains(&a.as_str())) {
+    if let Some(bad) = args
+        .iter()
+        .skip(1)
+        .find(|a| a.starts_with("--") && !known.contains(&a.as_str()))
+    {
         eprintln!("ltop: unknown option {bad} (try --help)");
         return Some(Err(anyhow::anyhow!("unknown option")));
     }
@@ -59,8 +77,8 @@ fn early_exit(args: &[String]) -> Option<Result<()>> {
 }
 
 /// 与 `--dump`/`--replay`/`--log` 的实际处理一一对应;改参数先改这里。
-/// USAGE 行按调用名显示:loli 是安装后软链出来的别名(`ln -s ltop loli`),
-/// 不随仓库分发;软链指向同一程序,-h 自然跟随调用名
+/// USAGE 行按调用名显示:用户可自建软链别名(`ln -s ltop <名>`),
+/// 软链指向同一程序,-h 自然跟随调用名
 fn usage_text(prog: &str) -> String {
     format!(
         "ltop v{} — btop-styled TUI monitoring for local network, LAN neighbours and disk I/O
@@ -69,6 +87,8 @@ USAGE:
     {prog} [OPTIONS]
 
     (no options)            run the TUI
+    watch [OPTIONS]         headless capture to a schema-v1 JSONL file
+    report <FILE> [OPTIONS] window summary of a watch/monlog JSONL (--json for AI)
     --json                  AI-friendly structured snapshot (JSON, schema v1)
     --schema                field reference for --json (machine-readable)
     --dump                  one-shot diagnostic dump to stdout, then exit
@@ -117,6 +137,19 @@ pub fn cli_main() -> Result<()> {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }
     let args: Vec<String> = std::env::args().collect();
+    // 子命令最先分派:各自的 --help/参数校验在各自模块(help/version
+    // 通用短路在下方,只管 TUI 路径的旗标)
+    match args.get(1).map(String::as_str) {
+        Some("watch") => return watch::run(&args[2..]),
+        Some("report") => return report::run(&args[2..]),
+        // 子命令打错字不能掉进 TUI(此前 repor 会静默开界面);
+        // 旗标(含 --json 等)照旧走原路径
+        Some(cmd) if !cmd.starts_with('-') => {
+            eprintln!("ltop: unknown command {cmd:?} (subcommands: watch, report; try --help)");
+            return Err(anyhow::anyhow!("unknown command"));
+        }
+        _ => {}
+    }
     // help/version 最先短路:不依赖 tty,也不受 arch 限制(arm64 上也要能看帮助)
     if let Some(res) = early_exit(&args) {
         return res;
@@ -143,8 +176,7 @@ pub fn cli_main() -> Result<()> {
     }
     let auto_log = args.iter().any(|a| a == "--log");
     // 实时跟随:CLI 旗标或配置开启;默认关(非 omarchy 系统无意义,省每 tick 一次 stat)
-    let follow_theme =
-        args.iter().any(|a| a == "--follow-theme") || boot_cfg.theme_live_follow;
+    let follow_theme = args.iter().any(|a| a == "--follow-theme") || boot_cfg.theme_live_follow;
     let log_interval: Option<Duration> = args
         .iter()
         .position(|a| a == "--log-interval")
@@ -247,8 +279,16 @@ fn osc52_copy(text: &str) {
         let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
         b64.push(T[(n >> 18) as usize & 63] as char);
         b64.push(T[(n >> 12) as usize & 63] as char);
-        b64.push(if chunk.len() > 1 { T[(n >> 6) as usize & 63] as char } else { '=' });
-        b64.push(if chunk.len() > 2 { T[n as usize & 63] as char } else { '=' });
+        b64.push(if chunk.len() > 1 {
+            T[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        b64.push(if chunk.len() > 2 {
+            T[n as usize & 63] as char
+        } else {
+            '='
+        });
     }
     let _ = write!(stdout(), "\x1b]52;c;{b64}\x07");
     let _ = stdout().flush();
@@ -266,12 +306,20 @@ fn cycle_setting(app: &mut App, sel: usize, forward: bool) -> bool {
     fn step_in(list: &[u64], cur: u64, forward: bool) -> u64 {
         let i = list.iter().position(|&v| v == cur).unwrap_or(0);
         let n = list.len();
-        list[if forward { (i + 1) % n } else { (i + n - 1) % n }]
+        list[if forward {
+            (i + 1) % n
+        } else {
+            (i + n - 1) % n
+        }]
     }
     fn step_u32(list: &[u32], cur: u32, forward: bool) -> u32 {
         let i = list.iter().position(|&v| v == cur).unwrap_or(0);
         let n = list.len();
-        list[if forward { (i + 1) % n } else { (i + n - 1) % n }]
+        list[if forward {
+            (i + 1) % n
+        } else {
+            (i + n - 1) % n
+        }]
     }
     let _ = ROWS;
     match sel {
@@ -285,7 +333,11 @@ fn cycle_setting(app: &mut App, sel: usize, forward: bool) -> bool {
             true
         }
         2 => {
-            app.layout = if forward { app.layout.next() } else { app.layout.prev() };
+            app.layout = if forward {
+                app.layout.next()
+            } else {
+                app.layout.prev()
+            };
             true
         }
         3 => {
@@ -334,10 +386,13 @@ fn cycle_setting(app: &mut App, sel: usize, forward: bool) -> bool {
         }
         11 => {
             let cur = app.conn.tombstone_ttl.as_millis() as u64;
-            let i = TOMBS
-                .iter()
-                .position(|&v| v == cur)
-                .map_or(0, |i| if forward { (i + 1) % TOMBS.len() } else { (i + TOMBS.len() - 1) % TOMBS.len() });
+            let i = TOMBS.iter().position(|&v| v == cur).map_or(0, |i| {
+                if forward {
+                    (i + 1) % TOMBS.len()
+                } else {
+                    (i + TOMBS.len() - 1) % TOMBS.len()
+                }
+            });
             app.conn.tombstone_ttl = std::time::Duration::from_millis(TOMBS[i]);
             true
         }
@@ -354,7 +409,11 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
     // 按键序列串扰,如 esc 触发盒子 hide)
     if let Ok(path) = std::env::var("LTOP_KEY_LOG") {
         use std::io::Write;
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
             let _ = writeln!(f, "{code:?} {modifiers:?}");
         }
     }
@@ -370,8 +429,10 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
             KeyCode::Char('z') => {
                 if app.zoom.is_some() {
                     app.zoom = None;
-                } else if matches!(app.last_focus, crate::app::BOX_LAN | crate::app::BOX_CONNS | crate::app::BOX_PROCS)
-                    && app.visible[app.last_focus]
+                } else if matches!(
+                    app.last_focus,
+                    crate::app::BOX_LAN | crate::app::BOX_CONNS | crate::app::BOX_PROCS
+                ) && app.visible[app.last_focus]
                 {
                     app.zoom = Some(app.last_focus);
                 }
@@ -454,10 +515,7 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
             KeyCode::Left | KeyCode::Right => {
                 // 聚合父行上:← 折叠、→ 展开;其余场景不占用
                 let b = app.last_focus;
-                if b == app::BOX_CONNS
-                    && app.focus[b]
-                    && ui::selected_is_agg(app, b)
-                {
+                if b == app::BOX_CONNS && app.focus[b] && ui::selected_is_agg(app, b) {
                     if let Some(key) = ui::selected_agg_key(app, b) {
                         // ← 折叠、→ 展开(相对设置中的默认态取反亦可)
                         let open = code == KeyCode::Right;
@@ -645,18 +703,12 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
                     app.save_config();
                 }
             }
-            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('m') => {
-                app.menu = MenuState::None
-            }
+            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('m') => app.menu = MenuState::None,
             _ => {}
         },
         MenuState::Reset(sel) => match code {
-            KeyCode::Up | KeyCode::Char('k') => {
-                app.menu = MenuState::Reset(sel.saturating_sub(1))
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                app.menu = MenuState::Reset((sel + 1).min(2))
-            }
+            KeyCode::Up | KeyCode::Char('k') => app.menu = MenuState::Reset(sel.saturating_sub(1)),
+            KeyCode::Down | KeyCode::Char('j') => app.menu = MenuState::Reset((sel + 1).min(2)),
             KeyCode::Enter => {
                 match sel {
                     0 => app.reset_net(),
@@ -677,18 +729,12 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
                 app.reset_all();
                 app.menu = MenuState::None;
             }
-            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('m') => {
-                app.menu = MenuState::None
-            }
+            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('m') => app.menu = MenuState::None,
             _ => {}
         },
         MenuState::Graphs(sel) => match code {
-            KeyCode::Up | KeyCode::Char('k') => {
-                app.menu = MenuState::Graphs(sel.saturating_sub(1))
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                app.menu = MenuState::Graphs((sel + 1).min(2))
-            }
+            KeyCode::Up | KeyCode::Char('k') => app.menu = MenuState::Graphs(sel.saturating_sub(1)),
+            KeyCode::Down | KeyCode::Char('j') => app.menu = MenuState::Graphs((sel + 1).min(2)),
             // 行改值:Right/l=下一模式,Left/h=上一模式(Block 仅在此可达)
             KeyCode::Right | KeyCode::Char('l') => match sel {
                 0 => app.graph_net = app.graph_net.next_with_block(),
@@ -725,9 +771,7 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
                 app.graph_net = s;
                 app.graph_disk = s;
             }
-            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('m') => {
-                app.menu = MenuState::None
-            }
+            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('m') => app.menu = MenuState::None,
             _ => {}
         },
         MenuState::Search => match code {
@@ -802,9 +846,7 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
                     app.menu = MenuState::ConfirmKill(pid);
                 }
             }
-            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('m') => {
-                app.menu = MenuState::None
-            }
+            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('m') => app.menu = MenuState::None,
             _ => {}
         },
         MenuState::ConfirmKill(pid) => match code {
@@ -888,9 +930,7 @@ fn handle_mouse(app: &mut App, m: &crossterm::event::MouseEvent) {
             // clicking a procs/conns data row selects (and focuses) it;
             // clicking anywhere else cancels every focus
             let hit = ui::hit_box(m.column, m.row)
-                .filter(|&idx| {
-                    matches!(idx, app::BOX_PROCS | app::BOX_CONNS | app::BOX_LAN)
-                })
+                .filter(|&idx| matches!(idx, app::BOX_PROCS | app::BOX_CONNS | app::BOX_LAN))
                 .and_then(|idx| ui::box_rect(idx).map(|r| (idx, r)));
             let mut on_row = false;
             if let Some((idx, rect)) = hit {
@@ -978,36 +1018,112 @@ pub fn json_snapshot() -> Result<()> {
 /// field reference for `--json` consumers (machine-parseable, versioned)
 pub fn print_schema() -> Result<()> {
     let fields: &[(&str, &str, &str)] = &[
-        ("schema", "u32", "snapshot schema version (additive-only within a version)"),
+        (
+            "schema",
+            "u32",
+            "snapshot schema version (additive-only within a version)",
+        ),
         ("meta.hostname", "string", "host name"),
         ("meta.ts", "u64", "unix timestamp (seconds)"),
         ("meta.version", "string", "ltop version"),
         ("meta.os / meta.arch", "string", "platform"),
-        ("meta.udp_helper", "bool", "eBPF helper snapshot fresh (Linux only)"),
+        (
+            "meta.udp_helper",
+            "bool",
+            "eBPF helper snapshot fresh (Linux only)",
+        ),
         ("net.selected", "string", "interface shown in the TUI"),
-        ("net.interfaces[].name/operstate/mac", "string", "interface identity"),
-        ("net.interfaces[].speed_mbps", "u64?", "link speed (None on Wi-Fi)"),
+        (
+            "net.interfaces[].name/operstate/mac",
+            "string",
+            "interface identity",
+        ),
+        (
+            "net.interfaces[].speed_mbps",
+            "u64?",
+            "link speed (None on Wi-Fi)",
+        ),
         ("net.interfaces[].addresses[]", "string", "CIDR addresses"),
-        ("net.interfaces[].rx_bps/tx_bps", "f64", "instantaneous bytes/s"),
-        ("net.interfaces[].session_rx/session_tx", "u64", "bytes since ltop start"),
-        ("net.interfaces[].alive_rx/alive_tx", "u64", "bytes since interface up"),
+        (
+            "net.interfaces[].rx_bps/tx_bps",
+            "f64",
+            "instantaneous bytes/s",
+        ),
+        (
+            "net.interfaces[].session_rx/session_tx",
+            "u64",
+            "bytes since ltop start",
+        ),
+        (
+            "net.interfaces[].alive_rx/alive_tx",
+            "u64",
+            "bytes since interface up",
+        ),
         ("lan.subnets[]", "string", "observed subnets (CIDR)"),
         ("lan.gateways[]", "string", "default gateways"),
-        ("lan.neighbours[].ip/mac/hostname/iface", "string", "neighbour identity; mac is null on macOS (system sanitizes)"),
-        ("lan.neighbours[].is_gateway/is_self/tracked", "bool", "role flags"),
-        ("disk.devices[].name/mounts[]/fstype", "string", "device identity"),
+        (
+            "lan.neighbours[].ip/mac/hostname/iface",
+            "string",
+            "neighbour identity; mac is null on macOS (system sanitizes)",
+        ),
+        (
+            "lan.neighbours[].is_gateway/is_self/tracked",
+            "bool",
+            "role flags",
+        ),
+        (
+            "disk.devices[].name/mounts[]/fstype",
+            "string",
+            "device identity",
+        ),
         ("disk.devices[].total/used", "u64", "capacity (bytes)"),
-        ("disk.devices[].read_bps/write_bps/iops", "f64", "throughput"),
-        ("disk.session_read/session_write", "u64", "bytes since ltop start"),
-        ("conns[].proto/local/remote/state", "string", "connection identity (state: LISTEN/ESTAB/UDP)"),
-        ("conns[].process/pid/user", "string|u32|null", "owner (null when not owned by you)"),
+        (
+            "disk.devices[].read_bps/write_bps/iops",
+            "f64",
+            "throughput",
+        ),
+        (
+            "disk.session_read/session_write",
+            "u64",
+            "bytes since ltop start",
+        ),
+        (
+            "conns[].proto/local/remote/state",
+            "string",
+            "connection identity (state: LISTEN/ESTAB/UDP)",
+        ),
+        (
+            "conns[].process/pid/user",
+            "string|u32|null",
+            "owner (null when not owned by you)",
+        ),
         ("conns[].inode", "u64", "stable row key"),
-        ("conns[].bytes_recv/bytes_sent", "u64", "cumulative per-socket bytes"),
+        (
+            "conns[].bytes_recv/bytes_sent",
+            "u64",
+            "cumulative per-socket bytes",
+        ),
         ("conns[].bps_recv/bps_sent", "f64", "instantaneous bytes/s"),
-        ("procs[].pid/name/alive", "u32|string|bool", "process identity"),
-        ("procs[].net_recv/net_sent/udp_recv/udp_sent", "u64", "session Σ bytes"),
-        ("procs[].net_bps_recv/net_bps_sent", "f64", "network bytes/s"),
-        ("procs[].disk_read/disk_written/disk_bps_read/disk_bps_written", "u64|f64", "disk I/O (own-uid processes)"),
+        (
+            "procs[].pid/name/alive",
+            "u32|string|bool",
+            "process identity",
+        ),
+        (
+            "procs[].net_recv/net_sent/udp_recv/udp_sent",
+            "u64",
+            "session Σ bytes",
+        ),
+        (
+            "procs[].net_bps_recv/net_bps_sent",
+            "f64",
+            "network bytes/s",
+        ),
+        (
+            "procs[].disk_read/disk_written/disk_bps_read/disk_bps_written",
+            "u64|f64",
+            "disk I/O (own-uid processes)",
+        ),
     ];
     let out = serde_json::json!({
         "schema": snapshot::SCHEMA,
@@ -1038,7 +1154,13 @@ pub fn dump(theme_src: &str) -> Result<()> {
         };
         println!(
             "{:<12} {:<8} speed {:<8} mac {:<18} rx {:<12} tx {:<12} addrs {:?}",
-            name, info.operstate, info.speed_mbps.unwrap_or(0), info.mac, rx, tx, info.addrs
+            name,
+            info.operstate,
+            info.speed_mbps.unwrap_or(0),
+            info.mac,
+            rx,
+            tx,
+            info.addrs
         );
     }
 
@@ -1112,7 +1234,13 @@ pub fn dump(theme_src: &str) -> Result<()> {
             .conns
             .iter()
             .find(|c| c.inode == d.inode)
-            .map(|c| format!("{} -> {}", collect::conn::sock_str(&c.local), collect::conn::sock_str(&c.remote)))
+            .map(|c| {
+                format!(
+                    "{} -> {}",
+                    collect::conn::sock_str(&c.local),
+                    collect::conn::sock_str(&c.remote)
+                )
+            })
             .unwrap_or_else(|| "(socket 已关闭)".into());
         println!(
             "  inode {:<8} {}  delta r {}/ w {}",
@@ -1141,7 +1269,12 @@ pub fn dump(theme_src: &str) -> Result<()> {
 
     println!("== DISK ==");
     let mut tree_lines: Vec<String> = Vec::new();
-    fn emit(nodes: &[collect::disk::TreeNode], prefix: String, depth: usize, out: &mut Vec<String>) {
+    fn emit(
+        nodes: &[collect::disk::TreeNode],
+        prefix: String,
+        depth: usize,
+        out: &mut Vec<String>,
+    ) {
         let n = nodes.len();
         for (i, node) in nodes.iter().enumerate() {
             let last = i + 1 == n;
@@ -1189,6 +1322,25 @@ pub(crate) fn fmt_human(v: f64) -> String {
         u += 1;
     }
     format!("{v:.1}{}", UNITS[u])
+}
+
+/// CLI 消息语言:默认英文,config.conf 的 lang=zh 切中文(headless 路径
+/// 不建 App,轻量直读配置;cfg(test) 下按测试隔离约定返回默认 En)
+pub fn cli_lang_zh() -> bool {
+    matches!(config::Config::load().lang, config::Lang::Zh)
+}
+
+/// EN/ZH 字面量二选一(配合 cli_lang_zh 使用;返回 String 规避闭包寿命)
+pub fn pick<'a>(zh: bool, en: &'a str, c: &'a str) -> &'a str {
+    if zh {
+        c
+    } else {
+        en
+    }
+}
+
+pub fn pick_s(zh: bool, en: &str, c: &str) -> String {
+    pick(zh, en, c).to_string()
 }
 
 #[cfg(test)]
@@ -1278,10 +1430,7 @@ mod tests {
         app.sel[app::BOX_CONNS] = Some(0); // 聚合父行
         app.focus[app::BOX_CONNS] = true;
         handle_key(&mut app, KeyCode::Enter, KeyModifiers::empty());
-        assert!(
-            app.expanded.contains("web"),
-            "聚合行 enter 应展开组"
-        );
+        assert!(app.expanded.contains("web"), "聚合行 enter 应展开组");
         handle_key(&mut app, KeyCode::Enter, KeyModifiers::empty());
         assert!(!app.expanded.contains("web"), "再按应折叠");
         // ← 折叠 / → 展开
@@ -1299,17 +1448,20 @@ mod tests {
         let mut app = App::new(None);
         for k in 1..=3u32 {
             let ip = Ipv4Addr::new(10, 0, 0, k as u8);
-            app.lan.neighbors.insert(ip, crate::collect::lan::Neighbor {
+            app.lan.neighbors.insert(
                 ip,
-                mac: None,
-mac_hidden: false,
-                iface: "eth0".into(),
-                complete: true,
-                hostname: None,
-                is_gateway: false,
-                is_self: false,
-                last_seen: std::time::Instant::now(),
-            });
+                crate::collect::lan::Neighbor {
+                    ip,
+                    mac: None,
+                    mac_hidden: false,
+                    iface: "eth0".into(),
+                    complete: true,
+                    hostname: None,
+                    is_gateway: false,
+                    is_self: false,
+                    last_seen: std::time::Instant::now(),
+                },
+            );
         }
         // 选中第 2 台(排序后位置 1),聚焦 lan
         app.conn.sort = crate::collect::conn::ConnSort::Name;
@@ -1323,10 +1475,7 @@ mac_hidden: false,
         assert_eq!(app.lan.tracked.len(), 1, "置顶应只有一个");
         assert_eq!(app.conn.peer_filter, Some(ip2), "应联动 conns 对端过滤");
         // 置顶组提前:选中的邻居现在在位置 0
-        assert_eq!(
-            app.lan.sorted_neighbors()[0].ip, ip2,
-            "置顶后应排第一"
-        );
+        assert_eq!(app.lan.sorted_neighbors()[0].ip, ip2, "置顶后应排第一");
 
         // 再按:取消置顶 + 解除联动
         handle_key(&mut app, KeyCode::Enter, KeyModifiers::empty());
@@ -1361,11 +1510,7 @@ mac_hidden: false,
         app.search = "fire".into();
         app.search_buf = "fire".into();
         app.menu = MenuState::Search;
-        handle_key(
-            &mut app,
-            KeyCode::Char('x'),
-            KeyModifiers::NONE,
-        );
+        handle_key(&mut app, KeyCode::Char('x'), KeyModifiers::NONE);
         assert_eq!(app.search_buf, "firex");
         assert_eq!(app.search, "fire", "输入中不影响已应用过滤");
         handle_key(&mut app, KeyCode::Enter, KeyModifiers::NONE);
@@ -1440,8 +1585,8 @@ mac_hidden: false,
     #[test]
     fn start_cmd_launches_detached() {
         let before = all_pids();
-        let new_pid = start_cmd(&["sleep".to_string(), "30".to_string()])
-            .expect("spawn detached sleep");
+        let new_pid =
+            start_cmd(&["sleep".to_string(), "30".to_string()]).expect("spawn detached sleep");
         std::thread::sleep(std::time::Duration::from_millis(150));
         assert!(
             pid_runs(new_pid, "sleep"),
@@ -1497,7 +1642,8 @@ mac_hidden: false,
             disk_w: 0,
             disk_rr: 0.0,
             disk_wr: 0.0,
-            uptime_s: None,            alive: true,
+            uptime_s: None,
+            alive: true,
             cmdline: None,
         });
         app.proc.procs.shrink_to_fit();
@@ -1515,11 +1661,17 @@ mac_hidden: false,
         app.focus[app::BOX_PROCS] = true;
         let mut term = Terminal::new(TestBackend::new(120, 40)).unwrap();
         term.draw(|f| ui::draw(f, &app)).unwrap();
-        assert!(buf_text(&term).contains("(pid "), "overlay renders while focused");
+        assert!(
+            buf_text(&term).contains("(pid "),
+            "overlay renders while focused"
+        );
         app.focus[app::BOX_PROCS] = false;
         let mut term = Terminal::new(TestBackend::new(120, 40)).unwrap();
         term.draw(|f| ui::draw(f, &app)).unwrap();
-        assert!(!buf_text(&term).contains("(pid "), "overlay gone after unfocus");
+        assert!(
+            !buf_text(&term).contains("(pid "),
+            "overlay gone after unfocus"
+        );
     }
 
     /// Esc on the main page clears all focus/selection; it must NOT open the
@@ -1545,8 +1697,8 @@ mac_hidden: false,
     /// LAN 行会出现双焦点,绕过 p/c/l 键的单焦点不变量
     #[test]
     fn mouse_click_enforces_single_focus() {
-        use crossterm::event::{KeyCode, MouseButton, MouseEvent, MouseEventKind};
         use crate::collect::proc::ProcRow;
+        use crossterm::event::{KeyCode, MouseButton, MouseEvent, MouseEventKind};
         use ratatui::backend::TestBackend;
         use ratatui::Terminal;
 
@@ -1617,7 +1769,7 @@ mac_hidden: false,
     }
 
     /// --help 文本必须覆盖全部入口参数与助手提示:改参数先改 usage_text,
-    /// 这里防的是"加了参数忘了写帮助"。loli 是别名:USAGE 行跟随调用名
+    /// 这里防的是"加了参数忘了写帮助"。USAGE 行跟随调用名(自建软链别名同效)
     #[test]
     fn usage_covers_all_flags() {
         let u = usage_text("ltop");
@@ -1632,11 +1784,16 @@ mac_hidden: false,
             "-h, --help",
             "-V, --version",
             "ltop-bpf",
+            "watch",
+            "report",
         ] {
             assert!(u.contains(flag), "usage 缺 {flag}");
         }
         assert!(u.contains("ltop [OPTIONS]"), "USAGE 用调用名");
-        assert!(usage_text("loli").contains("loli [OPTIONS]"), "loli 别名同版帮助");
+        assert!(
+            usage_text("myalias").contains("myalias [OPTIONS]"),
+            "自建软链别名同版帮助(调用名跟随机制保留)"
+        );
     }
 
     /// update() 必须把 LAN 选中纳入每 tick 锚定:数据驱动的重排只发生
@@ -1652,7 +1809,7 @@ mac_hidden: false,
         let mk = |ip: Ipv4Addr, host: &str| Neighbor {
             ip,
             mac: None,
-mac_hidden: false,
+            mac_hidden: false,
             iface: "eth0".into(),
             complete: true,
             hostname: Some(host.into()),
@@ -1685,8 +1842,8 @@ mac_hidden: false,
 
     #[test]
     fn s_restarts_a_running_process_after_confirmation() {
-        use crossterm::event::KeyCode;
         use crate::collect::proc::ProcRow;
+        use crossterm::event::KeyCode;
 
         let mut child = std::process::Command::new("sleep")
             .arg("31")
@@ -1709,7 +1866,8 @@ mac_hidden: false,
             disk_w: 0,
             disk_rr: 0.0,
             disk_wr: 0.0,
-            uptime_s: None,            alive: true,
+            uptime_s: None,
+            alive: true,
             cmdline: Some(vec!["sleep".into(), "31".into()]),
         });
         app.menu = MenuState::Detail(app::BOX_PROCS, u64::from(pid));

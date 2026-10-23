@@ -96,14 +96,16 @@ impl Tracked {
 
     pub fn toggle_conn(&mut self, inode: u64) {
         Self::toggle_vec(&mut self.conns, inode);
-    }    /// colour slot (0/1) when tracked, so rows alternate
+    }
+    /// colour slot (0/1) when tracked, so rows alternate
     pub fn proc_slot(&self, pid: u32) -> Option<usize> {
         self.procs.iter().position(|&p| p == pid).map(|i| i % 2)
     }
 
     pub fn conn_slot(&self, inode: u64) -> Option<usize> {
         self.conns.iter().position(|&i| i == inode).map(|i| i % 2)
-    }}
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum LayoutMode {
@@ -234,8 +236,7 @@ impl App {
     pub fn new(cli_log_interval: Option<Duration>) -> Self {
         let cfg = Config::load();
         let hostname = host_name();
-        let log_interval =
-            cli_log_interval.unwrap_or(Duration::from_millis(cfg.log_interval_ms));
+        let log_interval = cli_log_interval.unwrap_or(Duration::from_millis(cfg.log_interval_ms));
         let mut app = Self {
             net: NetCollector::new(),
             lan: LanCollector::new(),
@@ -334,8 +335,10 @@ impl App {
         }
         // capture what is selected before the samples re-sort the lists, so
         // the highlight can follow the same process/connection/neighbour afterwards
-        self.sel_anchor[crate::app::BOX_PROCS] = crate::ui::selected_id(self, crate::app::BOX_PROCS);
-        self.sel_anchor[crate::app::BOX_CONNS] = crate::ui::selected_id(self, crate::app::BOX_CONNS);
+        self.sel_anchor[crate::app::BOX_PROCS] =
+            crate::ui::selected_id(self, crate::app::BOX_PROCS);
+        self.sel_anchor[crate::app::BOX_CONNS] =
+            crate::ui::selected_id(self, crate::app::BOX_CONNS);
         self.sel_anchor[crate::app::BOX_LAN] = crate::ui::selected_id(self, crate::app::BOX_LAN);
         self.net.sample();
         self.lan.sample();
@@ -358,7 +361,11 @@ impl App {
             let udp = std::mem::take(&mut self.nettop.udp);
             self.proc.sample(&net, &udp);
         }
-        for idx in [crate::app::BOX_PROCS, crate::app::BOX_CONNS, crate::app::BOX_LAN] {
+        for idx in [
+            crate::app::BOX_PROCS,
+            crate::app::BOX_CONNS,
+            crate::app::BOX_LAN,
+        ] {
             if let Some(id) = self.sel_anchor[idx] {
                 crate::ui::reselect(self, idx, id);
             }

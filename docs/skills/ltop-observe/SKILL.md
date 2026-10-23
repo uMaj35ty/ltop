@@ -1,6 +1,6 @@
 ---
 name: ltop-observe
-description: Observe system state (network, disk, processes, LAN neighbours) via ltop's structured JSON snapshot. Use when diagnosing "why is the network slow", "what is writing the disk", "which process eats bandwidth", or "what devices are on this LAN".
+description: Observe system state (network, disk, processes, LAN neighbours) via ltop's structured JSON snapshot; watch a system over a time window with ltop watch + report. Use when diagnosing "why is the network slow", "what is writing the disk", "which process eats bandwidth", "what devices are on this LAN", or "watch chrome for 10 minutes and report traffic".
 ---
 
 # ltop system observation
@@ -26,11 +26,64 @@ capacity/throughput, and LAN neighbours.
 ltop --json      # structured snapshot (schema v1; takes ~1.2s: two
                  # sampling rounds so rate fields are populated)
 ltop --schema    # machine-readable field reference for --json
+ltop watch ...   # headless capture to schema-v1 JSONL (see below)
+ltop report <f>  # window summary of a capture/monlog file (see below)
 ```
 
 Always prefer `--json` over `--dump` (the human-readable dump truncates and
 misaligns values). `--schema` is the authoritative field list — it is
 versioned with the binary and never drifts from it.
+
+Command-surface behavior worth knowing:
+
+- Subcommands and flags validate strictly: unknown options and typos
+  (e.g. `ltop repor`) exit 1 with a clear message — nothing ever falls
+  into the interactive TUI by accident.
+- Human-readable output (help text, errors, the report table) follows the
+  config language: English by default, Chinese when `lang = zh` in
+  `~/.config/ltop/config.conf`. **JSON output keys are always English** —
+  parse `--json` / `report --json` programmatically, never scrape the
+  human tables.
+- `ltop-bpf` is the separate privileged collector (Linux only, runs as
+  root via systemd; `--once` is its smoke test). `--replay` analyses
+  legacy v1 session logs only.
+
+## Time-window monitoring (watch + report)
+
+For "watch this for N minutes and report" tasks do **not** poll `--json`
+(~40k tokens for 10 minutes at 5 s cadence). Record once, summarize once:
+
+```bash
+ltop watch --duration 10m --proc chrome     # record; --out/--stop optional
+ltop report <file.jsonl> --json             # ~2 KB window summary
+```
+
+- `watch` appends full schema-v1 snapshots as JSONL lines (crash-safe,
+  no root); `--interval <s>` sets the cadence, `--duration`/a `--stop`
+  sentinel file/SIGINT end it. `--proc <name>` keeps only matching
+  processes (by name — survives pid changes) and their connections.
+  The capture file starts with a `{"watch_start":…}` header line; skip it.
+- `report` prints a human table; `--json` gives this shape:
+
+```json
+{"schema":1,"file":"…","host":"…",
+ "window":{"start":…,"end":…,"snapshots":N,"interval_s":S},
+ "totals":{"scope":"nic","nic_rx":…,"nic_tx":…,"peak_ts":…,"peak_rx_bps":…,"peak_tx_bps":…},
+ "procs":[{"name":"chrome","net_recv":…,"net_sent":…,"peak_rx_bps":…,"peak_tx_bps":…,
+           "udp_recv":…,"udp_sent":…,"peak_udp_bps":…,"disk_read":…,"disk_written":…,
+           "peak_disk_bps":…,"active_s":…,"alive":true}],
+ "conns":[{"remote":"1.2.3.4:443","proto":"tcp","recv":…,"sent":…,"peak_rx_bps":…,
+           "peak_tx_bps":…,"duration_s":…,"state":"ESTAB","process":"chrome"}]}
+```
+
+  Sums are window differencing (last cumulative − first, segmented across
+  pid restarts); peaks are the max per-row rate; `active_s` =
+  snapshots-seen × interval. `--top N` (default 5), `--proc` filter
+  (substring or `*` glob), `--fields net,udp,disk,conns` select groups.
+  Totals are NIC-scope — larger than process payload sums by design.
+- Arbitrary queries: the file is plain JSONL, use `jq`. TUI monitoring
+  logs (`ltop-log-*.jsonl`) share the schema — `report` reads them too;
+  old `session-*` files (v1) belong to `--replay`.
 
 ## Reading the snapshot
 

@@ -271,12 +271,8 @@ pub fn socket_map() -> HashMap<u64, (u32, String)> {
             }
             if let Some((proto, local, remote)) = socket_tuple(&buf) {
                 let ino = flow_inode(proto, &local, &remote);
-                out.entry(ino).or_insert_with(|| {
-                    (
-                        pid as u32,
-                        comm.clone().unwrap_or_else(|| "?".into()),
-                    )
-                });
+                out.entry(ino)
+                    .or_insert_with(|| (pid as u32, comm.clone().unwrap_or_else(|| "?".into())));
             }
         }
     }
@@ -535,7 +531,10 @@ mod tests {
             eprintln!("fd {fd} rc={rc} tuple={:?}", socket_tuple(&buf));
         }
         // 跨进程:同 uid 的 syncthing(全 fd 投影 + nettop 键对照)
-        if let Some(m) = list_pids().into_iter().find(|m| m.comm.starts_with("syncthing")) {
+        if let Some(m) = list_pids()
+            .into_iter()
+            .find(|m| m.comm.starts_with("syncthing"))
+        {
             let fds = socket_fds(m.pid).unwrap_or_default();
             eprintln!("syncthing pid={} fds={:?} ({} 个)", m.pid, fds, fds.len());
             for fd in fds {
@@ -570,9 +569,6 @@ mod live_tests {
     #[test]
     #[ignore = "diagnostic"]
     fn proc_cwd_live_debug() {
-        eprintln!(
-            "own cwd: {:?}",
-            super::proc_cwd(std::process::id())
-        );
+        eprintln!("own cwd: {:?}", super::proc_cwd(std::process::id()));
     }
 }

@@ -9,8 +9,8 @@ use ratatui::widgets::{Block, BorderType, Cell, Clear, Paragraph, Row, Table};
 use ratatui::Frame;
 
 use crate::app::{
-    fmt_dur, fmt_interval, local_time_str, App, BOX_CONNS, BOX_DISKIO, BOX_DISKS, BOX_LAN, BOX_NET,
-    BOX_PROCS, IoGraphMode, LayoutMode, MenuState,
+    fmt_dur, fmt_interval, local_time_str, App, IoGraphMode, LayoutMode, MenuState, BOX_CONNS,
+    BOX_DISKIO, BOX_DISKS, BOX_LAN, BOX_NET, BOX_PROCS,
 };
 use crate::collect::conn::{sock_str, Conn, ConnFilter, ConnSort};
 use crate::collect::disk::TreeNode;
@@ -18,8 +18,8 @@ use crate::collect::lan::Neighbor;
 use crate::config::{Config, Lang};
 use crate::theme::*;
 
-use graph::{braille_bar, braille_graph};
 pub use graph::GraphMode;
+use graph::{braille_bar, braille_graph};
 
 const GRAPH_FLOOR: f64 = 64.0 * 1024.0; // keep idle graphs from being pure noise
 pub(crate) const THEME_VISIBLE: usize = 14;
@@ -56,12 +56,12 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     let outer = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(area);
 
-    let zoom_active = app
-        .zoom
-        .is_some_and(|b| {
-            matches!(b, crate::app::BOX_LAN | crate::app::BOX_CONNS | crate::app::BOX_PROCS)
-                && app.visible[b]
-        });
+    let zoom_active = app.zoom.is_some_and(|b| {
+        matches!(
+            b,
+            crate::app::BOX_LAN | crate::app::BOX_CONNS | crate::app::BOX_PROCS
+        ) && app.visible[b]
+    });
 
     if zoom_active {
         // zoom:焦点盒独占主区;footer 与 popup(MenuState 分派)照常渲染
@@ -69,61 +69,63 @@ pub fn draw(f: &mut Frame, app: &App) {
             draw_box(f, outer[0], app, b);
         }
     } else {
-    let graph_ids: Vec<usize> = [BOX_NET, BOX_DISKIO]
-        .into_iter()
-        .filter(|&i| app.visible[i])
-        .collect();
-    let table_ids: Vec<usize> = [BOX_LAN, BOX_CONNS, BOX_PROCS, BOX_DISKS]
-        .into_iter()
-        .filter(|&i| app.visible[i])
-        .collect();
+        let graph_ids: Vec<usize> = [BOX_NET, BOX_DISKIO]
+            .into_iter()
+            .filter(|&i| app.visible[i])
+            .collect();
+        let table_ids: Vec<usize> = [BOX_LAN, BOX_CONNS, BOX_PROCS, BOX_DISKS]
+            .into_iter()
+            .filter(|&i| app.visible[i])
+            .collect();
 
-    match (graph_ids.is_empty(), table_ids.is_empty()) {
-        (false, false) => match app.layout {
-            LayoutMode::Classic => {
-                // tables first: they need ~76 columns for full rates/addresses;
-                // the graphs give up width down to 40 columns
-                let (graphs_w, _) = split_horizontal(outer[0].width, 76, 40);
-                let main = Layout::horizontal([
-                    Constraint::Length(graphs_w),
-                    Constraint::Fill(1),
-                ])
-                .split(outer[0]);
-                draw_stack(f, main[0], app, &graph_ids, true);
-                // 右列在中线分组:LAN+CONNS 的底边与左列 NET|DISK 分界对齐
-                draw_list_stack(f, main[1], app, &table_ids, true);
-            }
-            LayoutMode::Wide | LayoutMode::Tall => {
-                // lists keep their ideal height; graphs absorb the remainder
-                // and only shrink to GRAPH_MIN_ROWS (each) before lists scroll
-                let stacked_graphs = app.layout == LayoutMode::Tall;
-                let graph_min = GRAPH_MIN_ROWS * if stacked_graphs { graph_ids.len() as u16 } else { 1 };
-                let ideal = tables_ideal_h(app, &table_ids, outer[0].width);
-                let (g_desired, t_desired) = split_vertical(outer[0].height, graph_min, ideal);
-                let hs = VERT_ALLOC.lock().unwrap().update(
-                    vec![g_desired, t_desired],
-                    outer[0].height,
-                    std::time::Instant::now(),
-                );
-                let graphs_h = hs.first().copied().unwrap_or(g_desired);
-                let main = Layout::vertical([
-                    Constraint::Length(graphs_h),
-                    Constraint::Fill(1),
-                ])
-                .split(outer[0]);
-                if stacked_graphs {
+        match (graph_ids.is_empty(), table_ids.is_empty()) {
+            (false, false) => match app.layout {
+                LayoutMode::Classic => {
+                    // tables first: they need ~76 columns for full rates/addresses;
+                    // the graphs give up width down to 40 columns
+                    let (graphs_w, _) = split_horizontal(outer[0].width, 76, 40);
+                    let main =
+                        Layout::horizontal([Constraint::Length(graphs_w), Constraint::Fill(1)])
+                            .split(outer[0]);
                     draw_stack(f, main[0], app, &graph_ids, true);
-                } else {
-                    draw_row(f, main[0], app, &graph_ids);
+                    // 右列在中线分组:LAN+CONNS 的底边与左列 NET|DISK 分界对齐
+                    draw_list_stack(f, main[1], app, &table_ids, true);
                 }
-                draw_table_grid(f, main[1], app, &table_ids);
+                LayoutMode::Wide | LayoutMode::Tall => {
+                    // lists keep their ideal height; graphs absorb the remainder
+                    // and only shrink to GRAPH_MIN_ROWS (each) before lists scroll
+                    let stacked_graphs = app.layout == LayoutMode::Tall;
+                    let graph_min = GRAPH_MIN_ROWS
+                        * if stacked_graphs {
+                            graph_ids.len() as u16
+                        } else {
+                            1
+                        };
+                    let ideal = tables_ideal_h(app, &table_ids, outer[0].width);
+                    let (g_desired, t_desired) = split_vertical(outer[0].height, graph_min, ideal);
+                    let hs = VERT_ALLOC.lock().unwrap().update(
+                        vec![g_desired, t_desired],
+                        outer[0].height,
+                        std::time::Instant::now(),
+                    );
+                    let graphs_h = hs.first().copied().unwrap_or(g_desired);
+                    let main =
+                        Layout::vertical([Constraint::Length(graphs_h), Constraint::Fill(1)])
+                            .split(outer[0]);
+                    if stacked_graphs {
+                        draw_stack(f, main[0], app, &graph_ids, true);
+                    } else {
+                        draw_row(f, main[0], app, &graph_ids);
+                    }
+                    draw_table_grid(f, main[1], app, &table_ids);
+                }
+            },
+            (false, true) => {
+                draw_stack(f, outer[0], app, &graph_ids, app.layout == LayoutMode::Tall)
             }
-        },
-        (false, true) => draw_stack(f, outer[0], app, &graph_ids, app.layout == LayoutMode::Tall),
-        (true, false) => draw_table_grid(f, outer[0], app, &table_ids),
-        (true, true) => {}
-    }
-
+            (true, false) => draw_table_grid(f, outer[0], app, &table_ids),
+            (true, true) => {}
+        }
     }
 
     match app.menu {
@@ -380,7 +382,10 @@ fn alloc_heights(ideals: &[u16], total: u16, spare_to: &[usize]) -> Vec<u16> {
         return vec![(total / n as u16).max(1); n];
     }
     let usable = total - min_each * n as u16;
-    let flex: u32 = ideals.iter().map(|h| h.saturating_sub(min_each) as u32).sum();
+    let flex: u32 = ideals
+        .iter()
+        .map(|h| h.saturating_sub(min_each) as u32)
+        .sum();
     let mut out = vec![min_each; n];
     if flex > 0 {
         let mut assigned = 0u16;
@@ -457,7 +462,12 @@ fn tables_ideal_h(app: &App, ids: &[usize], width: u16) -> u16 {
         return ids.iter().map(|&i| box_ideal_rows(app, i)).sum();
     }
     ids.chunks(2)
-        .map(|pair| pair.iter().map(|&i| box_ideal_rows(app, i)).max().unwrap_or(0))
+        .map(|pair| {
+            pair.iter()
+                .map(|&i| box_ideal_rows(app, i))
+                .max()
+                .unwrap_or(0)
+        })
         .sum()
 }
 
@@ -539,7 +549,12 @@ fn draw_table_grid(f: &mut Frame, area: Rect, app: &App, ids: &[usize]) {
     }
     let row_ideals: Vec<u16> = ids
         .chunks(2)
-        .map(|pair| pair.iter().map(|&i| box_ideal_rows(app, i)).max().unwrap_or(4))
+        .map(|pair| {
+            pair.iter()
+                .map(|&i| box_ideal_rows(app, i))
+                .max()
+                .unwrap_or(4)
+        })
         .collect();
     // in each grid row the process table (conns/procs) gets the spare height
     let spare_rows: Vec<usize> = row_ideals
@@ -563,8 +578,7 @@ fn draw_table_grid(f: &mut Frame, area: Rect, app: &App, ids: &[usize]) {
         if pair.len() == 1 {
             draw_box(f, *r, app, pair[0]);
         } else {
-            let cols =
-                Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).split(*r);
+            let cols = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)]).split(*r);
             draw_box(f, cols[0], app, pair[0]);
             draw_box(f, cols[1], app, pair[1]);
         }
@@ -584,20 +598,17 @@ fn draw_list_stack(f: &mut Frame, area: Rect, app: &App, ids: &[usize], snap_mid
         if bi > 0 && bi < ids.len() {
             // 与左列 NET|DISK 相同的 Fill(1)+Fill(1) 分法,奇数高度时余行
             // 给上半,两侧分界线逐行重合
-            let parts =
-                Layout::vertical([Constraint::Fill(1), Constraint::Fill(1)]).split(area);
+            let parts = Layout::vertical([Constraint::Fill(1), Constraint::Fill(1)]).split(area);
             // 上半组里 LAN 单独算:钉一个矮个头上限(滚动可见全量),
             // 剩余全部让给信息量最大的 CONNS
             // LAN 钉矮个头的前提是 CONNS 可见(矮个头是为给 CONNS 让位);
             // CONNS hide 后上组只剩 LAN,应占满上半而非留空
             if ids[0] == BOX_LAN && ids.contains(&BOX_CONNS) && ids.len() > 2 {
                 // 内层 clamp 的上界恒 ≥ 下界(1≤6),迷你终端不会 panic
-                let lan_h = box_ideal_rows(app, BOX_LAN)
-                    .min(LAN_BOX_MAX_ROWS)
-                    .clamp(
-                        1,
-                        (parts[0].height.saturating_sub(3)).clamp(1, LAN_BOX_MAX_ROWS),
-                    );
+                let lan_h = box_ideal_rows(app, BOX_LAN).min(LAN_BOX_MAX_ROWS).clamp(
+                    1,
+                    (parts[0].height.saturating_sub(3)).clamp(1, LAN_BOX_MAX_ROWS),
+                );
                 let sub = Layout::vertical([Constraint::Length(lan_h), Constraint::Fill(1)])
                     .split(parts[0]);
                 draw_box(f, sub[0], app, ids[0]);
@@ -694,14 +705,26 @@ fn fword(key: char, word: &str, value: &str) -> Vec<Span<'static>> {
         Some(pos) => {
             let (head, tail) = word.split_at(pos);
             let (k, tail) = tail.split_at(1);
-            v.push(Span::styled(head.to_string(), Style::new().fg(palette().title)));
+            v.push(Span::styled(
+                head.to_string(),
+                Style::new().fg(palette().title),
+            ));
             v.push(Span::styled(k.to_string(), bold(hi())));
-            v.push(Span::styled(tail.to_string(), Style::new().fg(palette().title)));
+            v.push(Span::styled(
+                tail.to_string(),
+                Style::new().fg(palette().title),
+            ));
         }
-        None => v.push(Span::styled(word.to_string(), Style::new().fg(palette().title))),
+        None => v.push(Span::styled(
+            word.to_string(),
+            Style::new().fg(palette().title),
+        )),
     }
     if !value.is_empty() {
-        v.push(Span::styled(format!(": {value}"), Style::new().fg(palette().title)));
+        v.push(Span::styled(
+            format!(": {value}"),
+            Style::new().fg(palette().title),
+        ));
     }
     v
 }
@@ -824,10 +847,7 @@ pub enum ConnItem<'a> {
         info: GroupInfo,
     },
     /// `child`:展开组的子行(渲染时树形缩进)
-    Row {
-        c: &'a Conn,
-        child: bool,
-    },
+    Row { c: &'a Conn, child: bool },
 }
 
 impl ConnItem<'_> {
@@ -868,9 +888,7 @@ pub fn conn_items(app: &App) -> Vec<ConnItem<'_>> {
     }
     // 搜索时全部展开:命中不可见的折叠组等于没搜到
     let expand_all = !app.search.is_empty();
-    let group_open = |key: &str| -> bool {
-        app.proc_expand_default != app.expanded.contains(key)
-    };
+    let group_open = |key: &str| -> bool { app.proc_expand_default != app.expanded.contains(key) };
     let mut out: Vec<ConnItem> = Vec::new();
     let mut i = 0;
     while i < list.len() {
@@ -903,10 +921,7 @@ pub fn conn_items(app: &App) -> Vec<ConnItem<'_>> {
             info,
         });
         if expanded {
-            out.extend(group.iter().map(|c| ConnItem::Row {
-                c,
-                child: true,
-            }));
+            out.extend(group.iter().map(|c| ConnItem::Row { c, child: true }));
         }
         i += n;
     }
@@ -930,7 +945,6 @@ pub fn selected_is_agg(app: &App, idx: usize) -> bool {
             .is_some_and(|i| i.is_agg())
 }
 
-
 /// 组当前是否展开
 pub fn group_is_open(app: &App, key: &str) -> bool {
     app.proc_expand_default != app.expanded.contains(key)
@@ -950,7 +964,6 @@ pub fn toggle_group(app: &mut App, key: &str) {
     let open = group_is_open(app, key);
     set_group_open(app, key, !open);
 }
-
 
 pub fn procs_display(app: &App) -> Vec<&crate::collect::proc::ProcRow> {
     let mut out = Vec::new();
@@ -997,13 +1010,7 @@ pub fn conns_display(app: &App) -> Vec<&Conn> {
     // `/` 搜索:仅作用于目标盒(非目标盒直通显示)
     if app.search_box == BOX_CONNS && !app.search.is_empty() {
         let q = app.search.to_lowercase();
-        out.retain(|c| {
-            c.proc
-                .as_deref()
-                .unwrap_or("")
-                .to_lowercase()
-                .contains(&q)
-        });
+        out.retain(|c| c.proc.as_deref().unwrap_or("").to_lowercase().contains(&q));
     }
     out
 }
@@ -1016,15 +1023,15 @@ pub fn conn_list(app: &App) -> Vec<&Conn> {
 /// stable id of the selected row of a list box
 pub fn selected_id(app: &App, idx: usize) -> Option<u64> {
     match idx {
-        BOX_PROCS => procs_display(app).get(app.sel[BOX_PROCS]?).map(|p| p.pid as u64),
+        BOX_PROCS => procs_display(app)
+            .get(app.sel[BOX_PROCS]?)
+            .map(|p| p.pid as u64),
         BOX_LAN => app
             .lan
             .sorted_neighbors()
             .get(app.sel[BOX_LAN]?)
             .map(|n| u32::from(n.ip) as u64),
-        BOX_CONNS => conn_items(app)
-            .get(app.sel[BOX_CONNS]?)
-            .map(|i| i.id()),
+        BOX_CONNS => conn_items(app).get(app.sel[BOX_CONNS]?).map(|i| i.id()),
         _ => None,
     }
 }
@@ -1111,11 +1118,7 @@ pub fn move_selection(app: &mut App, idx: usize, delta: i32) {
 }
 
 fn draw_net(f: &mut Frame, area: Rect, app: &App, focused: bool) {
-    let name = app
-        .net
-        .selected
-        .clone()
-        .unwrap_or_else(|| "-".to_string());
+    let name = app.net.selected.clone().unwrap_or_else(|| "-".to_string());
     // hostname and refresh interval live in the title (no separate top bar)
     let rest = vec![
         vec![text_s(app.hostname.clone())],
@@ -1183,7 +1186,11 @@ fn draw_net(f: &mut Frame, area: Rect, app: &App, focused: bool) {
 
     // 头行标签随列宽分级:≥52 全称,≥40 缩写,更窄只留 session
     let head_w = chunks[1].width as usize;
-    let sess_lbl = if head_w >= 52 { "  session Σ " } else { " Σs " };
+    let sess_lbl = if head_w >= 52 {
+        "  session Σ "
+    } else {
+        " Σs "
+    };
     let (alive_lbl, _show_alive) = if head_w >= 52 {
         ("  alive Σ ", true)
     } else if head_w >= 40 {
@@ -1202,7 +1209,9 @@ fn draw_net(f: &mut Frame, area: Rect, app: &App, focused: bool) {
         ),
         Span::styled(sess_lbl, dim()),
         Span::styled(
-            rates.map(|r| fmt_bytes(r.rx_total as f64)).unwrap_or_default(),
+            rates
+                .map(|r| fmt_bytes(r.rx_total as f64))
+                .unwrap_or_default(),
             text(),
         ),
         Span::styled(alive_lbl, dim()),
@@ -1223,7 +1232,9 @@ fn draw_net(f: &mut Frame, area: Rect, app: &App, focused: bool) {
         ),
         Span::styled(sess_lbl, dim()),
         Span::styled(
-            rates.map(|r| fmt_bytes(r.tx_total as f64)).unwrap_or_default(),
+            rates
+                .map(|r| fmt_bytes(r.tx_total as f64))
+                .unwrap_or_default(),
             text(),
         ),
         Span::styled(alive_lbl, dim()),
@@ -1314,7 +1325,10 @@ fn draw_lan(f: &mut Frame, area: Rect, app: &App, focused: bool) {
         } else {
             "macOS privacy: neighbour MACs are hidden (code-signing gate); scan covers the current subnet only"
         };
-        f.render_widget(Paragraph::new(vec![Line::from(vec![Span::styled(tip, dim())])]), inner);
+        f.render_widget(
+            Paragraph::new(vec![Line::from(vec![Span::styled(tip, dim())])]),
+            inner,
+        );
         return;
     }
     let rows: Vec<Row> = list
@@ -1369,7 +1383,10 @@ fn neighbor_row(
     let (bg, base_fg) = if pinned {
         (Some(track_bg(0)), contrast_fg(track_bg(0)))
     } else if selected {
-        (Some(track_bg(alt as usize)), contrast_fg(track_bg(alt as usize)))
+        (
+            Some(track_bg(alt as usize)),
+            contrast_fg(track_bg(alt as usize)),
+        )
     } else {
         (None, palette().text)
     };
@@ -1423,7 +1440,14 @@ fn draw_diskio(f: &mut Frame, area: Rect, app: &App, focused: bool) {
     let inner = boxed(
         f,
         area,
-        title_line(BOX_DISKIO + 1, "disk i/o", 'i', rest, border_disk(), focused),
+        title_line(
+            BOX_DISKIO + 1,
+            "disk i/o",
+            'i',
+            rest,
+            border_disk(),
+            focused,
+        ),
         border_disk(),
         BOX_DISKIO + 1,
         focused,
@@ -1439,8 +1463,19 @@ fn draw_diskio(f: &mut Frame, area: Rect, app: &App, focused: bool) {
             graph_section(f, g[0], " ▼ READ ", download(), &hr, tr, sr, app.graph_disk);
             graph_section(f, g[1], " ▲ WRITE ", upload(), &hw, tw, sw, app.graph_disk);
         }
-        IoGraphMode::Read => graph_section(f, inner, " ▼ READ ", download(), &hr, tr, sr, app.graph_disk),
-        IoGraphMode::Write => graph_section(f, inner, " ▲ WRITE ", upload(), &hw, tw, sw, app.graph_disk),
+        IoGraphMode::Read => graph_section(
+            f,
+            inner,
+            " ▼ READ ",
+            download(),
+            &hr,
+            tr,
+            sr,
+            app.graph_disk,
+        ),
+        IoGraphMode::Write => {
+            graph_section(f, inner, " ▲ WRITE ", upload(), &hw, tw, sw, app.graph_disk)
+        }
     }
 }
 
@@ -1506,7 +1541,10 @@ fn draw_disks(f: &mut Frame, area: Rect, app: &App, focused: bool) {
     }
     // 表头之下的可视行数封顶:旧写法 min(len-1) 滚到底后从最后一行起渲染
     // (只剩单行/空白),与 LAN/CONNS/PROCS 的 clamped_offset 同语义
-    let off = off.min(flat.len().saturating_sub((inner.height - 1).max(1) as usize));
+    let off = off.min(
+        flat.len()
+            .saturating_sub((inner.height - 1).max(1) as usize),
+    );
 
     let rows: Vec<Row> = flat
         .into_iter()
@@ -1620,9 +1658,7 @@ fn conn_row_aggregate(
             Some(sl) => track_bg(sl % 2),
             None => track_bg(0),
         };
-        let cell = |s: String| {
-            Cell::from(Span::styled(s, Style::new().fg(palette().text).bg(bg)))
-        };
+        let cell = |s: String| Cell::from(Span::styled(s, Style::new().fg(palette().text).bg(bg)));
         Row::new([
             cell(format!("\u{25be}{name} ×{n} Σ")),
             cell("-".into()),
@@ -1643,14 +1679,8 @@ fn conn_row_aggregate(
                 ),
                 Span::styled(" Σ", Style::new().fg(paint(palette().dim))),
             ])),
-            Cell::from(Span::styled(
-                "-",
-                Style::new().fg(paint(palette().dim)),
-            )),
-            Cell::from(Span::styled(
-                "-",
-                Style::new().fg(paint(palette().dim)),
-            )),
+            Cell::from(Span::styled("-", Style::new().fg(paint(palette().dim)))),
+            Cell::from(Span::styled("-", Style::new().fg(paint(palette().dim)))),
             Cell::from(Span::styled(
                 format!("{n} conns"),
                 Style::new().fg(paint(accent())),
@@ -1740,9 +1770,7 @@ fn draw_conns(f: &mut Frame, area: Rect, app: &App, focused: bool) {
                 // 选中聚合父行:详情显示进程组摘要(Σ + 速率小计),
                 // 子行细节展开后自见;选中普通行仍是该连接详情
                 let lines = match item {
-                    ConnItem::Agg { name, info, .. } => {
-                        proc_group_detail(name, *info)
-                    }
+                    ConnItem::Agg { name, info, .. } => proc_group_detail(name, *info),
                     ConnItem::Row { c, .. } => conn_detail(c, app),
                 };
                 draw_selected(f, rect, lines);
@@ -1786,7 +1814,12 @@ fn draw_selected(f: &mut Frame, rect: Rect, lines: Vec<Line<'static>>) {
     f.render_widget(
         Paragraph::new(vec![Line::from("▌"), Line::from("▌")])
             .style(Style::new().fg(accent()).bg(bgc)),
-        Rect { x: rect.x, y: rect.y, width: bar_w, height: rect.height },
+        Rect {
+            x: rect.x,
+            y: rect.y,
+            width: bar_w,
+            height: rect.height,
+        },
     );
     let rest = Rect {
         x: rect.x + bar_w,
@@ -1847,21 +1880,22 @@ fn conn_detail(c: &Conn, app: &App) -> Vec<Line<'static>> {
             Span::styled("→ ".to_string(), k),
             Span::styled(format!("{}   ", remote_s), text()),
             Span::styled("↓ ", Style::new().fg(dl)),
-            Span::styled(format!("{} ", fmt_bytes(c.bytes_recv as f64)), Style::new().fg(dl)),
+            Span::styled(
+                format!("{} ", fmt_bytes(c.bytes_recv as f64)),
+                Style::new().fg(dl),
+            ),
             Span::styled(format!("({})   ", fmt_speed(c.rate_recv)), dim()),
             Span::styled("↑ ", Style::new().fg(up)),
-            Span::styled(format!("{} ", fmt_bytes(c.bytes_sent as f64)), Style::new().fg(up)),
+            Span::styled(
+                format!("{} ", fmt_bytes(c.bytes_sent as f64)),
+                Style::new().fg(up),
+            ),
             Span::styled(format!("({})", fmt_speed(c.rate_sent)), dim()),
         ]),
     ]
 }
 
-fn conn_row(
-    c: &Conn,
-    app: &App,
-    slot: Option<usize>,
-    child: bool,
-) -> Row<'static> {
+fn conn_row(c: &Conn, app: &App, slot: Option<usize>, child: bool) -> Row<'static> {
     // 墓碑行整体压暗(协议标签/远端一并),语义是"已关闭的余像"
     let dim_all = c.dead;
     let paint = |col: Color| {
@@ -1913,15 +1947,21 @@ fn conn_row(
     let indent = if child { "  " } else { "" };
     Row::new([
         Cell::from(Line::from(vec![
-            Span::styled(format!("{indent}{proc_str}"), Style::new().fg(paint(proc_color))),
             Span::styled(
-                format!(" {label}"),
-                Style::new().fg(paint(palette().dim)),
+                format!("{indent}{proc_str}"),
+                Style::new().fg(paint(proc_color)),
             ),
+            Span::styled(format!(" {label}"), Style::new().fg(paint(palette().dim))),
         ])),
         Cell::from(Span::styled(pid_str, Style::new().fg(paint(palette().dim)))),
-        Cell::from(Span::styled(local_s, Style::new().fg(paint(palette().text)))),
-        Cell::from(Span::styled(remote_s, Style::new().fg(paint(palette().text)))),
+        Cell::from(Span::styled(
+            local_s,
+            Style::new().fg(paint(palette().text)),
+        )),
+        Cell::from(Span::styled(
+            remote_s,
+            Style::new().fg(paint(palette().text)),
+        )),
         Cell::from(Span::styled(rx, Style::new().fg(paint(download().at(0.5))))),
         Cell::from(Span::styled(tx, Style::new().fg(paint(upload().at(0.5))))),
     ])
@@ -1970,7 +2010,14 @@ fn draw_procs(f: &mut Frame, area: Rect, app: &App, focused: bool) {
     }
 
     let headers = [
-        "NAME", "PID", "Σ NET↓", "Σ NET↑", "↓/s", "↑/s", "DISK ΣR", "DISK ΣW",
+        "NAME",
+        "PID",
+        "Σ NET↓",
+        "Σ NET↑",
+        "↓/s",
+        "↑/s",
+        "DISK ΣR",
+        "DISK ΣW",
     ];
     let mut rows: Vec<Row> = Vec::new();
     let mut sel_y = None;
@@ -1981,14 +2028,16 @@ fn draw_procs(f: &mut Frame, area: Rect, app: &App, focused: bool) {
     for (i, p) in list.iter().enumerate().skip(off).take(visible) {
         let slot = app.tracked.proc_slot(p.pid);
         let paint = |col: Color| slot.map(track_fg).unwrap_or(col);
-        let cells = [p.name.clone(),
+        let cells = [
+            p.name.clone(),
             p.pid.to_string(),
             fmt_bytes(p.net_recv as f64),
             fmt_bytes(p.net_sent as f64),
             fmt_speed(p.net_rr),
             fmt_speed(p.net_sr),
             fmt_bytes(p.disk_r as f64),
-            fmt_bytes(p.disk_w as f64)];
+            fmt_bytes(p.disk_w as f64),
+        ];
         let mut row = Row::new([
             Cell::from(Span::styled(
                 cells[0].clone(),
@@ -1998,13 +2047,34 @@ fn draw_procs(f: &mut Frame, area: Rect, app: &App, focused: bool) {
                     palette().dim
                 })),
             )),
-            Cell::from(Span::styled(cells[1].clone(), Style::new().fg(paint(palette().text)))),
-            Cell::from(Span::styled(cells[2].clone(), Style::new().fg(paint(download().at(0.5))))),
-            Cell::from(Span::styled(cells[3].clone(), Style::new().fg(paint(upload().at(0.5))))),
-            Cell::from(Span::styled(cells[4].clone(), Style::new().fg(paint(download().at(0.5))))),
-            Cell::from(Span::styled(cells[5].clone(), Style::new().fg(paint(upload().at(0.5))))),
-            Cell::from(Span::styled(cells[6].clone(), Style::new().fg(paint(download().at(1.0))))),
-            Cell::from(Span::styled(cells[7].clone(), Style::new().fg(paint(upload().at(1.0))))),
+            Cell::from(Span::styled(
+                cells[1].clone(),
+                Style::new().fg(paint(palette().text)),
+            )),
+            Cell::from(Span::styled(
+                cells[2].clone(),
+                Style::new().fg(paint(download().at(0.5))),
+            )),
+            Cell::from(Span::styled(
+                cells[3].clone(),
+                Style::new().fg(paint(upload().at(0.5))),
+            )),
+            Cell::from(Span::styled(
+                cells[4].clone(),
+                Style::new().fg(paint(download().at(0.5))),
+            )),
+            Cell::from(Span::styled(
+                cells[5].clone(),
+                Style::new().fg(paint(upload().at(0.5))),
+            )),
+            Cell::from(Span::styled(
+                cells[6].clone(),
+                Style::new().fg(paint(download().at(1.0))),
+            )),
+            Cell::from(Span::styled(
+                cells[7].clone(),
+                Style::new().fg(paint(upload().at(1.0))),
+            )),
         ])
         .style(match slot {
             Some(sl) => Style::new().bg(track_bg(sl)),
@@ -2031,10 +2101,7 @@ fn draw_procs(f: &mut Frame, area: Rect, app: &App, focused: bool) {
 }
 
 /// two overlay lines for a selected process
-fn proc_detail(
-    p: &crate::collect::proc::ProcRow,
-    lang: crate::config::Lang,
-) -> Vec<Line<'static>> {
+fn proc_detail(p: &crate::collect::proc::ProcRow, lang: crate::config::Lang) -> Vec<Line<'static>> {
     let cmd = std::fs::read(format!("/proc/{}/cmdline", p.pid))
         .ok()
         .map(|b| {
@@ -2114,14 +2181,8 @@ fn proc_detail(
                 Style::new().fg(up),
             ),
             Span::styled("rate ", k),
-            Span::styled(
-                format!("R{} ", fmt_speed(p.disk_rr)),
-                Style::new().fg(dl),
-            ),
-            Span::styled(
-                format!("W{}", fmt_speed(p.disk_wr)),
-                Style::new().fg(up),
-            ),
+            Span::styled(format!("R{} ", fmt_speed(p.disk_rr)), Style::new().fg(dl)),
+            Span::styled(format!("W{}", fmt_speed(p.disk_wr)), Style::new().fg(up)),
             Span::styled("   cmd ", k),
             Span::styled(cmd, text()),
         ]),
@@ -2181,7 +2242,10 @@ fn draw_footer(f: &mut Frame, area: Rect, app: &App) {
     spans.extend(key("m", "menu"));
     spans.extend(key("space", lang.tr("pause")));
     spans.extend(key("/", lang.tr("search")));
-    spans.extend(key("Tab", &format!("{}:{}", lang.tr("layout"), app.layout.label())));
+    spans.extend(key(
+        "Tab",
+        &format!("{}:{}", lang.tr("layout"), app.layout.label()),
+    ));
     spans.extend(key("1-6", "boxes"));
     spans.extend(key("z", "zoom"));
     if app.allow_global_kill {
@@ -2199,7 +2263,9 @@ fn draw_footer(f: &mut Frame, area: Rect, app: &App) {
 
 /// btop-style bottom menu bar: [ themes ] [ reset ] [ graphs ] [ about ] [ quit ] [ close ]
 fn draw_menu_footer(f: &mut Frame, area: Rect, sel: usize, lang: Lang) {
-    let labels = ["themes", "settings", "reset", "graphs", "help", "quit", "close"];
+    let labels = [
+        "themes", "settings", "reset", "graphs", "help", "quit", "close",
+    ];
     let mut spans: Vec<Span> = vec![Span::styled(" ", dim())];
     for (i, l) in labels.iter().enumerate() {
         let style = if i == sel {
@@ -2239,8 +2305,10 @@ fn draw_graphs_popup(f: &mut Frame, area: Rect, app: &App, sel: usize) {
         .iter()
         .enumerate()
         .map(|(i, (k, word, value))| {
-            let sel_style =
-                Style::new().fg(bg().unwrap_or(Color::Reset)).bg(hi()).add_modifier(Modifier::BOLD);
+            let sel_style = Style::new()
+                .fg(bg().unwrap_or(Color::Reset))
+                .bg(hi())
+                .add_modifier(Modifier::BOLD);
             let (ks, ls, vs) = if i == sel {
                 (sel_style, sel_style, sel_style)
             } else {
@@ -2292,7 +2360,14 @@ fn draw_reset_popup(f: &mut Frame, area: Rect, sel: usize, lang: Lang) {
             };
             Line::from(vec![
                 Span::styled(" [", dim()),
-                Span::styled(k.to_string(), Style::new().fg(if i == sel { bg().unwrap_or(Color::Reset) } else { hi() })),
+                Span::styled(
+                    k.to_string(),
+                    Style::new().fg(if i == sel {
+                        bg().unwrap_or(Color::Reset)
+                    } else {
+                        hi()
+                    }),
+                ),
                 Span::styled(format!("] {word}"), style),
                 Span::styled(format!("  {desc}"), dim()),
             ])
@@ -2316,18 +2391,24 @@ fn draw_settings_popup(f: &mut Frame, area: Rect, app: &App, sel: usize) {
         (lang.tr("disk"), app.graph_disk.label().to_string()),
         (lang.tr("log_interval"), fmt_interval(app.log.interval)),
         (lang.tr("log_retention"), retention),
-        (lang.tr("sweep_interval"), fmt_interval(app.lan.sweep_interval)),
+        (
+            lang.tr("sweep_interval"),
+            fmt_interval(app.lan.sweep_interval),
+        ),
         (
             lang.tr("sweep"),
-            lang.tr(if app.lan.sweep_enabled { "on" } else { "off" }).to_string(),
+            lang.tr(if app.lan.sweep_enabled { "on" } else { "off" })
+                .to_string(),
         ),
         (
             lang.tr("tracked_only"),
-            lang.tr(if app.log_tracked_only { "on" } else { "off" }).to_string(),
+            lang.tr(if app.log_tracked_only { "on" } else { "off" })
+                .to_string(),
         ),
         (
             lang.tr("global_kill"),
-            lang.tr(if app.allow_global_kill { "on" } else { "off" }).to_string(),
+            lang.tr(if app.allow_global_kill { "on" } else { "off" })
+                .to_string(),
         ),
         (
             lang.tr("tombstone"),
@@ -2339,13 +2420,12 @@ fn draw_settings_popup(f: &mut Frame, area: Rect, app: &App, sel: usize) {
         ),
         (
             lang.tr("proc_groups"),
-            lang
-                .tr(if app.proc_expand_default {
-                    "expanded"
-                } else {
-                    "collapsed"
-                })
-                .to_string(),
+            lang.tr(if app.proc_expand_default {
+                "expanded"
+            } else {
+                "collapsed"
+            })
+            .to_string(),
         ),
     ];
     let (w, h) = (60.min(area.width), 19.min(area.height));
@@ -2388,7 +2468,12 @@ fn draw_settings_popup(f: &mut Frame, area: Rect, app: &App, sel: usize) {
         let prefix = format!(" {}: ", lang.tr("config_path"));
         let room = inner.width.saturating_sub(prefix.chars().count() as u16) as usize;
         if path.chars().count() > room {
-            path = format!("…{}", path.chars().skip(path.chars().count() - room.saturating_sub(1)).collect::<String>());
+            path = format!(
+                "…{}",
+                path.chars()
+                    .skip(path.chars().count() - room.saturating_sub(1))
+                    .collect::<String>()
+            );
         }
         lines.push(Line::from(Span::styled(format!("{prefix}{path}"), dim())));
     }
@@ -2429,7 +2514,11 @@ fn proc_status_fields(p: &crate::collect::proc::ProcRow) -> Vec<Field> {
     // explicit running/exited banner first — the whole point of the field
     out.push((
         "state",
-        if p.alive { "running".into() } else { "exited".into() },
+        if p.alive {
+            "running".into()
+        } else {
+            "exited".into()
+        },
     ));
     if !p.alive {
         // the ledger keeps exited processes; say so instead of showing empty
@@ -2514,18 +2603,36 @@ fn detail_data(app: &App, box_idx: usize, id: u64) -> DetailData {
                 tracked = app.tracked.proc_slot(p.pid).is_some();
                 // resident hint: s starts an exited process, restarts a live one
                 start_hint = p.cmdline.is_some();
-                let mut identity: Vec<(Field, ValStyle)> =
-                    vec![(("name", p.name.clone()), ValStyle::Accent), (("pid", p.pid.to_string()), ValStyle::Text)];
-                identity.extend(proc_status_fields(p).into_iter().map(|f| (f, ValStyle::Text)));
+                let mut identity: Vec<(Field, ValStyle)> = vec![
+                    (("name", p.name.clone()), ValStyle::Accent),
+                    (("pid", p.pid.to_string()), ValStyle::Text),
+                ];
+                identity.extend(
+                    proc_status_fields(p)
+                        .into_iter()
+                        .map(|f| (f, ValStyle::Text)),
+                );
                 let traffic = vec![
-                    (("net \u{3a3}\u{2193}", fmt_bytes(p.net_recv as f64)), ValStyle::Dl),
-                    (("net \u{3a3}\u{2191}", fmt_bytes(p.net_sent as f64)), ValStyle::Up),
+                    (
+                        ("net \u{3a3}\u{2193}", fmt_bytes(p.net_recv as f64)),
+                        ValStyle::Dl,
+                    ),
+                    (
+                        ("net \u{3a3}\u{2191}", fmt_bytes(p.net_sent as f64)),
+                        ValStyle::Up,
+                    ),
                     (("net \u{2193}/s", fmt_speed(p.net_rr)), ValStyle::Dl),
                     (("net \u{2191}/s", fmt_speed(p.net_sr)), ValStyle::Up),
                 ];
                 let disk = vec![
-                    (("disk \u{3a3}R", fmt_bytes(p.disk_r as f64)), ValStyle::Text),
-                    (("disk \u{3a3}W", fmt_bytes(p.disk_w as f64)), ValStyle::Text),
+                    (
+                        ("disk \u{3a3}R", fmt_bytes(p.disk_r as f64)),
+                        ValStyle::Text,
+                    ),
+                    (
+                        ("disk \u{3a3}W", fmt_bytes(p.disk_w as f64)),
+                        ValStyle::Text,
+                    ),
                     (("disk R/s", fmt_speed(p.disk_rr)), ValStyle::Text),
                     (("disk W/s", fmt_speed(p.disk_wr)), ValStyle::Text),
                 ];
@@ -2547,7 +2654,10 @@ fn detail_data(app: &App, box_idx: usize, id: u64) -> DetailData {
                 };
                 let proto = if c.is_tcp() { "tcp" } else { "udp" };
                 let mut identity: Vec<(Field, ValStyle)> = vec![(
-                    ("name", c.proc.clone().unwrap_or_else(|| app.conn.user_name(c.uid))),
+                    (
+                        "name",
+                        c.proc.clone().unwrap_or_else(|| app.conn.user_name(c.uid)),
+                    ),
                     ValStyle::Accent,
                 )];
                 if let Some(p) = c.pid {
@@ -2562,8 +2672,14 @@ fn detail_data(app: &App, box_idx: usize, id: u64) -> DetailData {
                     (("inode", c.inode.to_string()), ValStyle::Text),
                 ];
                 let traffic = vec![
-                    (("net \u{2193}", fmt_bytes(c.bytes_recv as f64)), ValStyle::Dl),
-                    (("net \u{2191}", fmt_bytes(c.bytes_sent as f64)), ValStyle::Up),
+                    (
+                        ("net \u{2193}", fmt_bytes(c.bytes_recv as f64)),
+                        ValStyle::Dl,
+                    ),
+                    (
+                        ("net \u{2191}", fmt_bytes(c.bytes_sent as f64)),
+                        ValStyle::Up,
+                    ),
                     (("net \u{2193}/s", fmt_speed(c.rate_recv)), ValStyle::Dl),
                     (("net \u{2191}/s", fmt_speed(c.rate_sent)), ValStyle::Up),
                 ];
@@ -2616,7 +2732,11 @@ fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u
     } else {
         "[space] [ ] track"
     };
-    let mut hints = vec![track_hint.to_string(), "[y] copy".to_string(), "[esc] close".to_string()];
+    let mut hints = vec![
+        track_hint.to_string(),
+        "[y] copy".to_string(),
+        "[esc] close".to_string(),
+    ];
     if let Some(p) = pid {
         hints.insert(2, format!("[k] kill pid {p}"));
     }
@@ -2639,7 +2759,10 @@ fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u
             .iter()
             .map(|(title, fs)| {
                 let head = if title.is_empty() { 0 } else { 2 };
-                head + fs.iter().map(|((_, v), _)| wrap_chunks(v, chunk_w).len()).sum::<usize>()
+                head + fs
+                    .iter()
+                    .map(|((_, v), _)| wrap_chunks(v, chunk_w).len())
+                    .sum::<usize>()
             })
             .sum::<usize>();
     // +2 borders +1 blank +1 hint row; the hint row is pinned to the bottom
@@ -2729,7 +2852,12 @@ fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u
         .collect();
     f.render_widget(
         Paragraph::new(skipped),
-        Rect { x: inner.x, y: inner.y, width: inner.width, height: fields_h },
+        Rect {
+            x: inner.x,
+            y: inner.y,
+            width: inner.width,
+            height: fields_h,
+        },
     );
     f.render_widget(
         Paragraph::new(
@@ -2738,7 +2866,12 @@ fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u
                 .map(|l| Line::from(Span::styled(l, bold(hi()))))
                 .collect::<Vec<_>>(),
         ),
-        Rect { x: inner.x, y: hints_y, width: inner.width, height: hints_h },
+        Rect {
+            x: inner.x,
+            y: hints_y,
+            width: inner.width,
+            height: hints_h,
+        },
     );
 }
 
@@ -2771,10 +2904,7 @@ fn wrap_chunks(s: &str, w: usize) -> Vec<String> {
     if chars.len() <= w {
         return vec![s.to_string()];
     }
-    chars
-        .chunks(w)
-        .map(|c| c.iter().collect())
-        .collect()
+    chars.chunks(w).map(|c| c.iter().collect()).collect()
 }
 
 fn draw_confirm_popup(f: &mut Frame, area: Rect, app: &App, pid: u32, restart: bool) {
@@ -2792,7 +2922,14 @@ fn draw_confirm_popup(f: &mut Frame, area: Rect, app: &App, pid: u32, restart: b
         .border_type(BorderType::Rounded)
         .style(Style::new().bg(bg().unwrap_or(Color::Reset)))
         .border_style(Style::new().fg(alert_end()))
-        .title(title_line(0, if restart { "restart" } else { "kill" }, '\0', vec![], alert_end(), true));
+        .title(title_line(
+            0,
+            if restart { "restart" } else { "kill" },
+            '\0',
+            vec![],
+            alert_end(),
+            true,
+        ));
     let inner = block.inner(popup);
     f.render_widget(block, popup);
     let question = if restart {
@@ -2817,7 +2954,10 @@ fn draw_confirm_popup(f: &mut Frame, area: Rect, app: &App, pid: u32, restart: b
 fn help_rows(lang: Lang) -> Vec<(String, String)> {
     let t = |k: &str| lang.tr(k);
     vec![
-        ("1-6".into(), format!("{} / {}", t("boxes"), t("hint_close_short"))),
+        (
+            "1-6".into(),
+            format!("{} / {}", t("boxes"), t("hint_close_short")),
+        ),
         ("Tab".into(), t("layout").to_string()),
         ("enter".into(), t("detail_desc").to_string()),
         ("p / c / l".into(), t("focus_desc").to_string()),
@@ -2832,7 +2972,10 @@ fn help_rows(lang: Lang) -> Vec<(String, String)> {
         ("L".into(), t("log_desc").to_string()),
         ("s".into(), t("sweep_desc").to_string()),
         ("+ / -".into(), t("refresh_desc").to_string()),
-        ("\u{2191}\u{2193} / wheel".into(), t("sel_scroll_desc").to_string()),
+        (
+            "\u{2191}\u{2193} / wheel".into(),
+            t("sel_scroll_desc").to_string(),
+        ),
         ("z".into(), t("zoom_desc").to_string()),
         ("q / esc / m".into(), t("quit_menu_desc").to_string()),
     ]
@@ -2844,10 +2987,13 @@ fn draw_help_popup(f: &mut Frame, area: Rect, app: &App) {
     // 双列键位把总高从 ~33 行压到 ~23 行:旧版 h 估算 (+8) 低估头部开销
     // 且撞终端高度封顶后无滚动,底部(数据口径段/press any)固定被裁。
     // 宽度按内容精确计算:双列放不下(横向截断)自动回退单列
-    let kw = rows.iter().map(|(k, _)| k.chars().count()).max().unwrap_or(0);
-    let desc_w = |rs: &[(String, String)]| {
-        rs.iter().map(|(_, d)| d.chars().count()).max().unwrap_or(0)
-    };
+    let kw = rows
+        .iter()
+        .map(|(k, _)| k.chars().count())
+        .max()
+        .unwrap_or(0);
+    let desc_w =
+        |rs: &[(String, String)]| rs.iter().map(|(_, d)| d.chars().count()).max().unwrap_or(0);
     let dw_all = desc_w(&rows);
     let col_w = 3 + kw + 2 + dw_all + 3;
     let w_two = (2 + 2 * col_w) as u16;
@@ -2856,7 +3002,10 @@ fn draw_help_popup(f: &mut Frame, area: Rect, app: &App) {
     let half = rows.len().div_ceil(2);
     let mut lines: Vec<Line> = Vec::new();
     lines.push(Line::from(vec![
-        Span::styled(format!(" ltop v{}", env!("CARGO_PKG_VERSION")), bold(accent())),
+        Span::styled(
+            format!(" ltop v{}", env!("CARGO_PKG_VERSION")),
+            bold(accent()),
+        ),
         Span::styled("  by uMaj35ty", dim()),
     ]));
     lines.push(Line::from(Span::styled(
@@ -2867,7 +3016,8 @@ fn draw_help_popup(f: &mut Frame, area: Rect, app: &App) {
         format!(
             " theme: {} \u{b7} {}",
             theme_name(),
-            app.lang.tr(if app.udp.fresh { "udp_on" } else { "udp_off" })
+            app.lang
+                .tr(if app.udp.fresh { "udp_on" } else { "udp_off" })
         ),
         dim(),
     )));
@@ -2883,13 +3033,12 @@ fn draw_help_popup(f: &mut Frame, area: Rect, app: &App) {
         " \u{2500}\u{2500} keys \u{2500}\u{2500}",
         bold(hi()),
     )));
-    let col_spans =
-        |(k, d): &(String, String), dw: usize| -> Vec<Span<'static>> {
-            vec![
-                Span::styled(format!(" {:<kw$}  ", k), bold(hi())),
-                Span::styled(format!("{:<dw$}   ", d), text()),
-            ]
-        };
+    let col_spans = |(k, d): &(String, String), dw: usize| -> Vec<Span<'static>> {
+        vec![
+            Span::styled(format!(" {:<kw$}  ", k), bold(hi())),
+            Span::styled(format!("{:<dw$}   ", d), text()),
+        ]
+    };
     if two_col {
         let (left, right) = rows.split_at(half);
         let dw_l = desc_w(left);
@@ -2913,7 +3062,11 @@ fn draw_help_popup(f: &mut Frame, area: Rect, app: &App) {
     }
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(app.lang.tr("press_any"), dim())));
-    let w = if two_col { w_two } else { w_one.min(area.width) };
+    let w = if two_col {
+        w_two
+    } else {
+        w_one.min(area.width)
+    };
     let h = (lines.len() as u16 + 2).min(area.height);
     let popup = centered(area, w, h);
     f.render_widget(Clear, popup);
@@ -2939,7 +3092,7 @@ fn centered(area: Rect, w: u16, h: u16) -> Rect {
 
 fn draw_theme_popup(f: &mut Frame, area: Rect, sel: usize, scroll: usize) {
     let count = builtin_count() + 1; // + omarchy
-    // popup hugs its content: at most THEME_VISIBLE rows, never a half-empty box
+                                     // popup hugs its content: at most THEME_VISIBLE rows, never a half-empty box
     let visible = THEME_VISIBLE.min(area.height.saturating_sub(4).max(1) as usize);
     let height = visible as u16 + 2;
     let width = 30.min(area.width);
@@ -2966,7 +3119,12 @@ fn draw_theme_popup(f: &mut Frame, area: Rect, sel: usize, scroll: usize) {
         } else {
             builtin_name(i - 1).to_string()
         };
-        let is_current = current == if i == 0 { "omarchy" } else { builtin_name(i - 1) };
+        let is_current = current
+            == if i == 0 {
+                "omarchy"
+            } else {
+                builtin_name(i - 1)
+            };
         let style = if i == sel {
             Style::new()
                 .fg(bg().unwrap_or(Color::Reset))
@@ -3027,7 +3185,16 @@ mod tests {
         // 73 wide: no slack, name gets exactly the remainder
         assert_eq!(
             lens(&fit_columns(&base, 0, 8, 24, 73, 1)),
-            vec![Some(13), Some(7), Some(7), Some(7), Some(9), Some(9), Some(7), Some(7)]
+            vec![
+                Some(13),
+                Some(7),
+                Some(7),
+                Some(7),
+                Some(9),
+                Some(9),
+                Some(7),
+                Some(7)
+            ]
         );
         // very wide: the name column is capped at 24, growth is capped too,
         // and the rest stays as trailing blank
@@ -3041,7 +3208,16 @@ mod tests {
         use ratatui::backend::TestBackend;
         use ratatui::Terminal;
 
-        let headers = ["NAME", "PID", "Σ NET↓", "Σ NET↑", "↓/s", "↑/s", "DISK ΣR", "DISK ΣW"];
+        let headers = [
+            "NAME",
+            "PID",
+            "Σ NET↓",
+            "Σ NET↑",
+            "↓/s",
+            "↑/s",
+            "DISK ΣR",
+            "DISK ΣW",
+        ];
         let data = [vec![
             "zcode-host-local".to_string(),
             "546829".to_string(),
@@ -3076,7 +3252,16 @@ mod tests {
         // this particular row
         assert_eq!(
             fields,
-            vec!["zcode-host-lo", "546829", "0B", "0B", "0B/s", "0B/s", "20.0KiB", "0B"]
+            vec![
+                "zcode-host-lo",
+                "546829",
+                "0B",
+                "0B",
+                "0B/s",
+                "0B/s",
+                "20.0KiB",
+                "0B"
+            ]
         );
     }
 
@@ -3131,7 +3316,8 @@ mod tests {
                 disk_w: 0,
                 disk_rr: 0.0,
                 disk_wr: 0.0,
-                uptime_s: None,                alive: true,
+                uptime_s: None,
+                alive: true,
                 cmdline: None,
             });
         }
@@ -3173,7 +3359,8 @@ mod tests {
             disk_w: 0,
             disk_rr: 0.0,
             disk_wr: 0.0,
-            uptime_s: None,            alive: false,
+            uptime_s: None,
+            alive: false,
             cmdline: Some(vec!["/usr/bin/deadproc".into(), "--flag".into()]),
         };
         app.proc.procs.push(row.clone());
@@ -3220,7 +3407,11 @@ mod tests {
         let mut app = crate::app::App::new(None);
         app.update();
         let tail = "and-a-long-tail-marker".to_string();
-        let long_cmd = format!("/usr/bin/deadproc --very-long-option={} {}", "x".repeat(120), tail);
+        let long_cmd = format!(
+            "/usr/bin/deadproc --very-long-option={} {}",
+            "x".repeat(120),
+            tail
+        );
         app.proc.procs.push(crate::collect::proc::ProcRow {
             pid: 4242,
             name: "deadproc".into(),
@@ -3236,7 +3427,8 @@ mod tests {
             disk_w: 0,
             disk_rr: 0.0,
             disk_wr: 0.0,
-            uptime_s: None,            alive: false,
+            uptime_s: None,
+            alive: false,
             cmdline: Some(vec![long_cmd]),
         });
         app.menu = crate::app::MenuState::Detail(BOX_PROCS, 4242);
@@ -3293,14 +3485,15 @@ mod tests {
                 disk_w: 0,
                 disk_rr: 0.0,
                 disk_wr: 0.0,
-                uptime_s: None,                alive: true,
+                uptime_s: None,
+                alive: true,
                 cmdline: None,
             });
         }
         app.tracked.toggle_proc(200); // bbb pinned → display [bbb, aaa]
-        // PROCS alone in the table column: parallel tests share the global
-        // height allocator, so a stacked layout could squeeze this box until
-        // the selected row falls outside the viewport and renders no overlay
+                                      // PROCS alone in the table column: parallel tests share the global
+                                      // height allocator, so a stacked layout could squeeze this box until
+                                      // the selected row falls outside the viewport and renders no overlay
         for i in [BOX_LAN, BOX_CONNS, BOX_DISKS] {
             app.visible[i] = false;
         }
@@ -3316,8 +3509,14 @@ mod tests {
                     .collect::<String>()
             })
             .collect();
-        assert!(text.contains("(pid 100"), "overlay shows the selected row's process");
-        assert!(!text.contains("(pid 200"), "overlay must not show the pre-pin occupant");
+        assert!(
+            text.contains("(pid 100"),
+            "overlay shows the selected row's process"
+        );
+        assert!(
+            !text.contains("(pid 200"),
+            "overlay must not show the pre-pin occupant"
+        );
     }
 
     /// The selection follows the entity it names (pid / inode) through
@@ -3343,7 +3542,8 @@ mod tests {
                 disk_w: 0,
                 disk_rr: 0.0,
                 disk_wr: 0.0,
-                uptime_s: None,                alive: true,
+                uptime_s: None,
+                alive: true,
                 cmdline: None,
             });
         }
@@ -3428,18 +3628,21 @@ mod tests {
         term.draw(|f| draw(f, &app)).unwrap();
         let buf = term.backend().buffer();
         let rows: Vec<String> = (0..buf.area.height)
-            .map(|y| {
-                (0..buf.area.width)
-                    .map(|x| buf[(x, y)].symbol())
-                    .collect()
-            })
+            .map(|y| (0..buf.area.width).map(|x| buf[(x, y)].symbol()).collect())
             .collect();
         let shown: Vec<&String> = rows.iter().filter(|r| r.contains("c019")).collect();
         assert!(!shown.is_empty(), "最后一页应包含尾段连接");
         // 尾页应是多行(旧 bug 只渲染 1 行)
-        assert!(shown.len() >= 5, "尾页行数 {} < 5,像是只剩单行", shown.len());
+        assert!(
+            shown.len() >= 5,
+            "尾页行数 {} < 5,像是只剩单行",
+            shown.len()
+        );
         // 首屏的行不应再出现
-        assert!(!rows.iter().any(|r| r.contains("c0000")), "越界滚动后仍显示首行");
+        assert!(
+            !rows.iter().any(|r| r.contains("c0000")),
+            "越界滚动后仍显示首行"
+        );
     }
 
     /// DISKS 滚到底:off 封顶应是最后一页(可视行数)而非最后一行。
@@ -3489,7 +3692,10 @@ mod tests {
             .filter(|r| ["sd4p", "sd4"].iter().any(|t| r.contains(t)))
             .count();
         assert!(tail_rows >= 5, "尾页行数 {tail_rows} < 5,像是只剩单行");
-        assert!(!rows.iter().any(|r| r.contains("sd0p1")), "越界滚动后仍显示首行");
+        assert!(
+            !rows.iter().any(|r| r.contains("sd0p1")),
+            "越界滚动后仍显示首行"
+        );
     }
 
     /// proc 排序:同名进程成组,组首行带 ×N 标识
@@ -3539,7 +3745,10 @@ mod tests {
         assert!(buf.contains("firefox ×3"), "组摘要缺失");
         assert!(buf.contains("1.0KiB"), "组 Σ 缺失");
         // 单行摘要:不再罗列成员 IP(子行本身就在聚合行下方展开)
-        assert!(!rows_containing(&buf, "127.0.0.1:1001", 3), "成员 IP 不应出现在摘要里");
+        assert!(
+            !rows_containing(&buf, "127.0.0.1:1001", 3),
+            "成员 IP 不应出现在摘要里"
+        );
     }
 
     #[test]
@@ -3582,7 +3791,11 @@ mod tests {
         eprintln!("BUF:\n{}", {
             let b = term.backend().buffer();
             (0..b.area.height)
-                .map(|y| (0..b.area.width).map(|x| b[(x, y)].symbol()).collect::<String>())
+                .map(|y| {
+                    (0..b.area.width)
+                        .map(|x| b[(x, y)].symbol())
+                        .collect::<String>()
+                })
                 .collect::<Vec<_>>()
                 .join("\n")
         });
@@ -3600,7 +3813,10 @@ mod tests {
             .iter()
             .map(|c| c.symbol())
             .collect();
-        assert!(buf.contains("900B") && buf.contains("100B") && buf.contains("50B"), "展开后子行缺失");
+        assert!(
+            buf.contains("900B") && buf.contains("100B") && buf.contains("50B"),
+            "展开后子行缺失"
+        );
         // 组按合计降序:最大字节连接(900)是组首且排最前
         assert!(buf.contains("c"), "应有连接行");
     }
@@ -3622,7 +3838,7 @@ mod tests {
                 crate::collect::lan::Neighbor {
                     ip: format!("10.0.0.{}", k + 1).parse().unwrap(),
                     mac: None,
-mac_hidden: false,
+                    mac_hidden: false,
                     iface: "eth0".into(),
                     complete: true,
                     hostname: None,
@@ -3636,11 +3852,7 @@ mac_hidden: false,
         term.draw(|f| draw(f, &app)).unwrap();
         let buf = term.backend().buffer();
         let rows: Vec<String> = (0..buf.area.height)
-            .map(|y| {
-                (0..buf.area.width)
-                    .map(|x| buf[(x, y)].symbol())
-                    .collect()
-            })
+            .map(|y| (0..buf.area.width).map(|x| buf[(x, y)].symbol()).collect())
             .collect();
 
         // 盒标题自带唯一的上标编号(btop 角标样式),按它定位最稳:
@@ -3665,10 +3877,19 @@ mac_hidden: false,
             "CONNS 底边框(行 {conns_bottom})未对齐 NET 底边框(行 {net_bottom})"
         );
         // 上组相邻:LAN 底边框 = CONNS 顶边框 - 1,且 LAN 至少有标题+一行内容
-        assert!(y_conns - 1 > y_lan + 1, "LAN 与 CONNS 应相邻且 LAN 有内容区");
+        assert!(
+            y_conns - 1 > y_lan + 1,
+            "LAN 与 CONNS 应相邻且 LAN 有内容区"
+        );
         // 盒高 6 → 内容 3 行:设备 1-3 可见,4-5 不见(曾因表头重复扣行只剩 2 台)
-        assert!(rows.iter().any(|r| r.contains("10.0.0.3")), "第 3 台设备应可见");
-        assert!(!rows.iter().any(|r| r.contains("10.0.0.4")), "第 4 台设备应被滚动窗口裁掉");
+        assert!(
+            rows.iter().any(|r| r.contains("10.0.0.3")),
+            "第 3 台设备应可见"
+        );
+        assert!(
+            !rows.iter().any(|r| r.contains("10.0.0.4")),
+            "第 4 台设备应被滚动窗口裁掉"
+        );
     }
 
     #[test]
@@ -3690,7 +3911,8 @@ mac_hidden: false,
             disk_w: 0,
             disk_rr: 0.0,
             disk_wr: 0.0,
-            uptime_s: None,            alive: true,
+            uptime_s: None,
+            alive: true,
             cmdline: None,
         });
         app.proc.procs.push(crate::collect::proc::ProcRow {
@@ -3733,24 +3955,22 @@ mac_hidden: false,
     fn conn_filter_cycles_all_lan_tcp_udp() {
         use crate::collect::conn::{ConnFilter, IPPROTO_TCP, IPPROTO_UDP};
         let mut app = crate::app::App::new(None);
-        let mk = |inode: u64, proto: u8, remote: std::net::IpAddr| {
-            crate::collect::conn::Conn {
-                proto,
-                local: ("127.0.0.1".parse().unwrap(), 1000 + inode as u16),
-                remote: (remote, 443),
-                state: 1,
-                uid: 0,
-                inode,
-                bytes_recv: 0,
-                bytes_sent: 0,
-                rate_recv: 0.0,
-                rate_sent: 0.0,
-                pid: None,
-                proc: None,
-                dead: false,
-                first_seen: None,
-                dead_at: None,
-            }
+        let mk = |inode: u64, proto: u8, remote: std::net::IpAddr| crate::collect::conn::Conn {
+            proto,
+            local: ("127.0.0.1".parse().unwrap(), 1000 + inode as u16),
+            remote: (remote, 443),
+            state: 1,
+            uid: 0,
+            inode,
+            bytes_recv: 0,
+            bytes_sent: 0,
+            rate_recv: 0.0,
+            rate_sent: 0.0,
+            pid: None,
+            proc: None,
+            dead: false,
+            first_seen: None,
+            dead_at: None,
         };
         let lan = std::net::IpAddr::V4("192.168.1.9".parse().unwrap());
         app.conn.conns = vec![
@@ -3788,7 +4008,7 @@ mac_hidden: false,
                 crate::collect::lan::Neighbor {
                     ip: format!("10.0.0.{}", k + 1).parse().unwrap(),
                     mac: None,
-mac_hidden: false,
+                    mac_hidden: false,
                     iface: "eth0".into(),
                     complete: true,
                     hostname: None,
@@ -3848,30 +4068,38 @@ mac_hidden: false,
         for i in [BOX_NET, BOX_DISKIO, BOX_DISKS, BOX_LAN] {
             app.visible[i] = false;
         }
-        let mk = |inode: u64, name: &str, proto: u8, state: u8| {
-            crate::collect::conn::Conn {
-                proto,
-                local: ("127.0.0.1".parse().unwrap(), 1000 + inode as u16),
-                remote: ("127.0.0.1".parse().unwrap(), 443),
-                state,
-                uid: 0,
-                inode,
-                bytes_recv: 0,
-                bytes_sent: 0,
-                rate_recv: 0.0,
-                rate_sent: 0.0,
-                pid: Some(7),
-                proc: Some(name.to_string()),
-                dead: false,
-                first_seen: None,
-                dead_at: None,
-            }
+        let mk = |inode: u64, name: &str, proto: u8, state: u8| crate::collect::conn::Conn {
+            proto,
+            local: ("127.0.0.1".parse().unwrap(), 1000 + inode as u16),
+            remote: ("127.0.0.1".parse().unwrap(), 443),
+            state,
+            uid: 0,
+            inode,
+            bytes_recv: 0,
+            bytes_sent: 0,
+            rate_recv: 0.0,
+            rate_sent: 0.0,
+            pid: Some(7),
+            proc: Some(name.to_string()),
+            dead: false,
+            first_seen: None,
+            dead_at: None,
         };
         // 三个不同名字:proc 排序下各自成组(×1),不触发 ×N 标记
         app.conn.conns = vec![
-            mk(1, "demo", crate::collect::conn::IPPROTO_TCP, crate::collect::conn::TCP_ESTABLISHED),
+            mk(
+                1,
+                "demo",
+                crate::collect::conn::IPPROTO_TCP,
+                crate::collect::conn::TCP_ESTABLISHED,
+            ),
             mk(2, "demo2", crate::collect::conn::IPPROTO_UDP, 7),
-            mk(3, "demo3", crate::collect::conn::IPPROTO_TCP, crate::collect::conn::TCP_LISTEN),
+            mk(
+                3,
+                "demo3",
+                crate::collect::conn::IPPROTO_TCP,
+                crate::collect::conn::TCP_LISTEN,
+            ),
         ];
         let mut term = Terminal::new(TestBackend::new(160, 30)).unwrap();
         // 表头随排序模式切换:sum 显示 Σ 合计量,rate 显示速率
@@ -3908,7 +4136,21 @@ mac_hidden: false,
             .map(|c| c.symbol())
             .collect();
         assert!(buf.contains("Σ RX"), "proc 档应显示合计表头");
-        eprintln!("DEMO-HITS: {}", ["demo tcp","demo2 udp","◦demo3 tcp","demo","demo2","demo3"].iter().map(|t| format!("{t}={}", buf.contains(t))).collect::<Vec<_>>().join(" "));
+        eprintln!(
+            "DEMO-HITS: {}",
+            [
+                "demo tcp",
+                "demo2 udp",
+                "◦demo3 tcp",
+                "demo",
+                "demo2",
+                "demo3"
+            ]
+            .iter()
+            .map(|t| format!("{t}={}", buf.contains(t)))
+            .collect::<Vec<_>>()
+            .join(" ")
+        );
         eprintln!("FULL: {}", buf.replace("\n", "|"));
         assert!(buf.contains("demo tcp"), "tcp 标签缺失");
         assert!(buf.contains("demo2 udp"), "udp 标签缺失");
@@ -3924,8 +4166,8 @@ mac_hidden: false,
         assert_eq!(split_horizontal(150, 76, 40), (74, 76));
         assert_eq!(split_horizontal(100, 76, 40), (40, 60)); // graphs at their floor
         assert_eq!(split_horizontal(60, 76, 40), (30, 30)); // both cramped, split evenly
-        // wide/tall: lists take their ideal height, graphs absorb the surplus
-        // but are capped at half the height — full-screen surplus goes to lists
+                                                            // wide/tall: lists take their ideal height, graphs absorb the surplus
+                                                            // but are capped at half the height — full-screen surplus goes to lists
         assert_eq!(split_vertical(100, 4, 30), (50, 50));
         assert_eq!(split_vertical(40, 4, 30), (10, 30));
         // when short, graphs hit graph_min before the lists shrink
@@ -4024,6 +4266,4 @@ mac_hidden: false,
         // degenerate terminal still yields usable rows
         assert!(alloc_heights(&[8, 8, 8], 5, &[]).iter().all(|&h| h >= 1));
     }
-
 }
-

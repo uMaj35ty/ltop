@@ -13,10 +13,37 @@ const SECTOR: f64 = 1.0;
 
 /// Filesystems that are virtual, read-only images, or may block statvfs on stalls
 const FS_BLACKLIST: &[&str] = &[
-    "proc", "sysfs", "devtmpfs", "devpts", "securityfs", "cgroup", "cgroup2", "pstore", "bpf",
-    "autofs", "mqueue", "hugetlbfs", "debugfs", "tracefs", "configfs", "fusectl", "efivarfs",
-    "ramfs", "nsfs", "rpc_pipefs", "overlay", "squashfs", "iso9660", "tmpfs", "nfs", "nfs4",
-    "cifs", "smbfs", "9p", "afs", "devfs",
+    "proc",
+    "sysfs",
+    "devtmpfs",
+    "devpts",
+    "securityfs",
+    "cgroup",
+    "cgroup2",
+    "pstore",
+    "bpf",
+    "autofs",
+    "mqueue",
+    "hugetlbfs",
+    "debugfs",
+    "tracefs",
+    "configfs",
+    "fusectl",
+    "efivarfs",
+    "ramfs",
+    "nsfs",
+    "rpc_pipefs",
+    "overlay",
+    "squashfs",
+    "iso9660",
+    "tmpfs",
+    "nfs",
+    "nfs4",
+    "cifs",
+    "smbfs",
+    "9p",
+    "afs",
+    "devfs",
 ];
 
 /// Virtual/ephemeral block devices kept out of the device tree
@@ -92,7 +119,13 @@ impl DiskCollector {
             // 计数在物理叶子(disk0s*)——反向 join:设备 = 全部带计数的
             // 叶子(速率图的数据面),挂载只作行标注,容量仅挂载行有
             for name in stats.keys() {
-                agg.insert(name.clone(), DiskDev { name: name.clone(), ..Default::default() });
+                agg.insert(
+                    name.clone(),
+                    DiskDev {
+                        name: name.clone(),
+                        ..Default::default()
+                    },
+                );
             }
             for (_, mount, source, fstype) in mounts {
                 let base = source.rsplit('/').next().unwrap_or("").to_string();
@@ -132,7 +165,10 @@ impl DiskCollector {
             // prefer kernel name, then mapper alias, then major:minor —
             // the name is what device-tree nodes are keyed by
             let mut key: Option<String> = None;
-            for c in [Some(base.clone()), dm_key, Some(majmin.clone())].into_iter().flatten() {
+            for c in [Some(base.clone()), dm_key, Some(majmin.clone())]
+                .into_iter()
+                .flatten()
+            {
                 if stats.contains_key(&c) {
                     key = Some(c);
                     break;
@@ -486,8 +522,7 @@ fn parse_mountinfo() -> Vec<Mount> {
         return Vec::new();
     }
     // SAFETY: buffer sized by the getfsstat size probe above
-    let mut buf: Vec<libc::statfs> =
-        vec![unsafe { std::mem::zeroed() }; n as usize];
+    let mut buf: Vec<libc::statfs> = vec![unsafe { std::mem::zeroed() }; n as usize];
     let got = unsafe {
         libc::getfsstat(
             buf.as_mut_ptr(),
@@ -555,8 +590,7 @@ fn parse_mountinfo() -> Vec<Mount> {
         let source = unescape_octal(fields[sep + 2]);
 
         if FS_BLACKLIST.iter().any(|b| fstype == *b)
-            || fstype.starts_with("fuse.")
-            && fstype != "fuseblk"
+            || fstype.starts_with("fuse.") && fstype != "fuseblk"
             || !(mount.starts_with("/mnt")
                 || mount.starts_with("/media")
                 || mount.starts_with("/run/media")
