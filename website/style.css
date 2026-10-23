@@ -231,9 +231,12 @@
     nav .links {
       flex: 1 1 100%;
       justify-content: flex-end;
-      gap: 2px 12px;
+      gap: 2px 6px;
     }
-    nav .links a { padding: 7px 8px; }
+    nav .links a { padding: 5px 6px; font-size: 13px; }
+    /* homepage anchors are reachable by scrolling — collapse to one entry */
+    nav .links a[href*="#quickstart"],
+    nav .links a[href*="#roadmap"] { display: none; }
     .install code { white-space: pre-wrap; word-break: break-all; }
   }
 
