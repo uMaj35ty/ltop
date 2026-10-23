@@ -3,6 +3,21 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.6] - 2026-10-23
+
+### Added
+
+- **detail 面板鼠标交互** — 单击字段行移动字段游标(与 ↑↓ 等价),双击字段行
+  复制该字段值(OSC 52,ssh 下直达本地剪贴板),滚轮逐字段步进,点击弹窗外
+  关闭面板
+- **NET 图表比例耦合**(opt-in,默认关)— `net_graph_coupled = true` 后,
+  上下行差距达 `net_graph_scale_ratio` 倍(默认 5,可配 2–20)时,小方向的
+  图表按真实比例占图表高度(小窗保底 1/2,高图 1/3),头部显示缩放徽标,
+  不再把微小的反向流量放大成与主方向相同的波形
+- macOS:CONNS 归属名回退链补 kinfo p_comm——proc_pidpath 对 launchd
+  常驻进程(如 brew services 的 syncthing)返回 0 时,该进程的连接分组
+  不再显示 "?",正确显示进程名
+
 ## [0.2.5] - 2026-10-23
 
 ### Added

@@ -93,3 +93,5 @@ ltop report <file.jsonl> [--json]
 | `proc_exit_retention_min` | 30 | 退出进程账本 N 分钟后清除（0 = 永久） |
 | `conn_filter` / `conn_sort` / `proc_sort` / `lan_sort` | all / proc / net-sum / ip | 默认列表模式 |
 | `allow_global_kill` | false | 允许终止其他用户的进程 |
+| `net_graph_coupled` | false | NET 图表比例耦合:上下行悬殊时,小方向图按真实比例占图表高度,不再满幅放大 |
+| `net_graph_scale_ratio` | 5 | 上面的触发阈值,单位倍(2–20);低于阈值保持普通自动缩放 |

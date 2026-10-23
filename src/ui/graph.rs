@@ -123,6 +123,7 @@ pub fn braille_graph(
     max_floor: f64,
     grad: Gradient,
     mode: GraphMode,
+    scale_frac: f64,
 ) -> Vec<Line<'static>> {
     let width = width.max(1);
     let height = height.max(1);
@@ -141,7 +142,10 @@ pub fn braille_graph(
         padded.extend_from_slice(&series);
         series = padded;
     }
-    let max = series.iter().copied().fold(0.0f64, f64::max).max(max_floor);
+    // coupled scaling: divide the auto peak by frac (≤1) so the small side
+    // of a lopsided link renders at its true fraction of the chart height
+    let max = series.iter().copied().fold(0.0f64, f64::max).max(max_floor)
+        / scale_frac.max(0.05);
     if mode == GraphMode::Block {
         return block_graph(&series, width, height, max, grad);
     }
@@ -336,6 +340,28 @@ pub fn braille_graph(
 /// Half-block bar graph (GraphMode::Block): one character per sample per
 /// row, 8 height levels via the vertical block set. No braille glyphs —
 /// immune to the per-glyph gaps that terminal fonts render around braille.
+/// coupled net-graph scaling: when one direction is `threshold`× or more
+/// smaller than the other, the small side renders at its true fraction of
+/// the chart height (clamped to a readable floor that loosens on taller
+/// charts) instead of auto-scaling to full height. 1.0 = normal behavior.
+pub fn coupled_frac(small: f64, large: f64, rows: u16, threshold: u32) -> f64 {
+    if threshold == 0 || !large.is_finite() || !small.is_finite() || large <= 0.0 || small <= 0.0 {
+        return 1.0;
+    }
+    let ratio = small / large;
+    if ratio >= 1.0 || ratio * threshold as f64 >= 1.0 {
+        return 1.0;
+    }
+    let floor = if rows < 12 {
+        0.5
+    } else if rows <= 24 {
+        0.4
+    } else {
+        0.3
+    };
+    ratio.max(floor)
+}
+
 fn block_graph(
     series: &[f64],
     width: usize,
@@ -384,6 +410,23 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn coupled_frac_thresholds_and_floors() {
+        // below the trigger threshold: real fraction, clamped to the floor
+        assert_eq!(coupled_frac(1.0, 30.0, 8, 5), 0.5); // 1/30 < 1/5 → floor
+        assert_eq!(coupled_frac(1.0, 10.0, 30, 5), 0.3); // tall chart → 0.3
+        // not below threshold: untouched
+        assert_eq!(coupled_frac(1.0, 3.0, 8, 5), 1.0); // 1/3 > 1/5
+        assert_eq!(coupled_frac(1.0, 1.0, 8, 5), 1.0); // equal
+        assert_eq!(coupled_frac(1.0, 5.0, 8, 5), 1.0); // right at boundary
+        // disabled / degenerate inputs
+        assert_eq!(coupled_frac(1.0, 30.0, 8, 0), 1.0);
+        assert_eq!(coupled_frac(0.0, 30.0, 8, 5), 1.0);
+        assert_eq!(coupled_frac(1.0, 0.0, 8, 5), 1.0);
+        assert_eq!(coupled_frac(1.0, 7.0, 8, 10), 1.0); // 1/7 ≥ 1/10
+        assert_eq!(coupled_frac(1.0, 15.0, 8, 10), 0.5); // 1/15 < 1/10 → floor
+    }
+
     fn solid_full_block_at_max() {
         let data = vec![100.0; 10];
         let lines = braille_graph(
@@ -393,6 +436,7 @@ mod tests {
             1.0,
             Gradient([Color::Green; 3]),
             GraphMode::Solid,
+            1.0,
         );
         assert_eq!(lines.len(), 1);
         let text = flat(&lines[0]);
@@ -414,6 +458,7 @@ mod tests {
             64.0 * 1024.0,
             Gradient([Color::Green; 3]),
             GraphMode::Solid,
+            1.0,
         );
         let bottom = flat(&lines[1]);
         let chars: Vec<char> = bottom.chars().collect();
@@ -431,7 +476,7 @@ mod tests {
             .map(|i| if i % 17 == 0 { 900_000.0 } else { 1200.0 })
             .collect();
         let grad = Gradient([Color::Green; 3]);
-        let full = braille_graph(&data, width, 3, 64.0 * 1024.0, grad, GraphMode::Solid);
+        let full = braille_graph(&data, width, 3, 64.0 * 1024.0, grad, GraphMode::Solid, 1.0);
         let suffix = braille_graph(
             &data[data.len() - width..],
             width,
@@ -439,6 +484,7 @@ mod tests {
             64.0 * 1024.0,
             grad,
             GraphMode::Solid,
+            1.0,
         );
         for (a, b) in full.iter().zip(&suffix) {
             assert_eq!(a.spans[0].content, b.spans[0].content);
@@ -448,14 +494,14 @@ mod tests {
     #[test]
     fn hybrid_fills_under_the_line() {
         let grad = Gradient([Color::Green; 3]);
-        let lines = braille_graph(&[0.0, 100.0], 2, 2, 1.0, grad, GraphMode::Hybrid);
+        let lines = braille_graph(&[0.0, 100.0], 2, 2, 1.0, grad, GraphMode::Hybrid, 1.0);
         // area under the interpolated line: col3 top half carries the line
         // segment (⣸), the bottom row is fully filled (⣿)
         assert_eq!(flat(&lines[0]).chars().nth(1), Some('\u{28f8}'));
         assert_eq!(flat(&lines[1]).chars().nth(1), Some('\u{28ff}'));
         // zero-data hybrid: a continuous floor line (interpolation keeps it
         // connected through every sub-column)
-        let lines = braille_graph(&[0.0; 4], 4, 2, 1.0, grad, GraphMode::Hybrid);
+        let lines = braille_graph(&[0.0; 4], 4, 2, 1.0, grad, GraphMode::Hybrid, 1.0);
         let chars: Vec<char> = flat(&lines[1]).chars().collect();
         assert_eq!(chars[0], '\u{28a0}');
         assert_eq!(chars[1], '\u{28e0}');
@@ -481,6 +527,7 @@ mod tests {
             1.0,
             Gradient([Color::Green; 3]),
             GraphMode::Solid,
+            1.0,
         );
         assert_eq!(lines.len(), 2);
         assert_eq!(flat(&lines[0]).chars().count(), 4);
@@ -496,6 +543,7 @@ mod tests {
             1.0,
             Gradient([Color::Green; 3]),
             GraphMode::Centered,
+            1.0,
         );
         // dots_h=4, mid=2, f=4 => rows 0..4 filled => full block
         assert_eq!(flat(&lines[0]).chars().next(), Some('\u{28ff}'));
@@ -511,6 +559,7 @@ mod tests {
             1.0,
             Gradient([Color::Green; 3]),
             GraphMode::Line,
+            1.0,
         );
         // 2-dot stroke: col1 {0,1}; segment to col3 tops out via col2 {4,5},
         // col3 {4..7} (vertical connect) => continuous, no holes
@@ -530,6 +579,7 @@ mod tests {
             1.0,
             Gradient([Color::Green; 3]),
             GraphMode::Heartbeat,
+            1.0,
         );
         // 2-dot flat run at y=0..1 through col2; jump at col3 fills all rows
         let row_top = flat(&lines[0]);

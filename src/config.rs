@@ -228,6 +228,8 @@ pub struct Config {
     pub proc_expand_default: bool,
     /// 退出进程账本保留分钟数(防 pid 账本无界增长);0 = 永久保留
     pub proc_exit_retention_min: u64,
+    pub net_graph_coupled: bool,
+    pub net_graph_scale_ratio: u32,
     pub conn_sort: ConnSort,
     pub proc_sort: ProcSort,
 }
@@ -254,6 +256,8 @@ impl Default for Config {
             theme_live_follow: false,
             proc_expand_default: false,
             proc_exit_retention_min: 30,
+            net_graph_coupled: false,
+            net_graph_scale_ratio: 5,
             conn_sort: ConnSort::Proc,
             proc_sort: ProcSort::NetSum,
         }
@@ -427,6 +431,12 @@ impl Config {
                         cfg.proc_exit_retention_min = v;
                     }
                 }
+                "net_graph_coupled" => cfg.net_graph_coupled = v == "true",
+                "net_graph_scale_ratio" => {
+                    if let Ok(v) = v.parse::<u32>() {
+                        cfg.net_graph_scale_ratio = v.clamp(2, 20);
+                    }
+                }
                 "theme" => {
                     if !v.is_empty() {
                         cfg.theme = v.to_string();
@@ -473,7 +483,7 @@ impl Config {
             .map(|&b| if b { '1' } else { '0' })
             .collect();
         format!(
-            "lang = {}\nlayout = {}\ntick_ms = {}\ngraph_net = {}\ngraph_disk = {}\nboxes = {}\nlog_interval_ms = {}\nlog_retention_days = {}\nsweep_interval_s = {}\nsweep = {}\nlog_tracked_only = {}\nallow_global_kill = {}\nlan_sort = {}\nconn_filter = {}\nconn_sort = {}\nproc_sort = {}\ntombstone_ttl_ms = {}\ntheme = {}\ntheme_live_follow = {}\nproc_expand_default = {}\nproc_exit_retention_min = {}\n",
+            "lang = {}\nlayout = {}\ntick_ms = {}\ngraph_net = {}\ngraph_disk = {}\nboxes = {}\nlog_interval_ms = {}\nlog_retention_days = {}\nsweep_interval_s = {}\nsweep = {}\nlog_tracked_only = {}\nallow_global_kill = {}\nlan_sort = {}\nconn_filter = {}\nconn_sort = {}\nproc_sort = {}\ntombstone_ttl_ms = {}\ntheme = {}\ntheme_live_follow = {}\nproc_expand_default = {}\nproc_exit_retention_min = {}\nnet_graph_coupled = {}\nnet_graph_scale_ratio = {}\n",
             self.lang.label(),
             match self.layout {
                 LayoutMode::Classic => "classic",
@@ -499,6 +509,8 @@ impl Config {
             self.theme_live_follow,
             self.proc_expand_default,
             self.proc_exit_retention_min,
+            self.net_graph_coupled,
+            self.net_graph_scale_ratio,
         )
     }
 

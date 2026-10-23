@@ -899,6 +899,45 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
 
 fn handle_mouse(app: &mut App, m: &crossterm::event::MouseEvent) {
     use crossterm::event::MouseButton;
+    // detail 弹窗打开时接管鼠标:单击字段行移动游标、双击复制字段值、
+    // 滚轮逐字段步进、点击弹窗外关闭面板
+    if let crate::app::MenuState::Detail(b, id) = app.menu {
+        let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
+        let area = ratatui::layout::Rect::new(0, 0, cols, rows);
+        let dbl = app.last_click.is_some_and(|(t0, c0, r0)| {
+            t0.elapsed() < std::time::Duration::from_millis(400)
+                && c0 == m.column
+                && r0 == m.row
+        });
+        app.last_click = Some((std::time::Instant::now(), m.column, m.row));
+        match m.kind {
+            MouseEventKind::ScrollUp => {
+                app.detail_sel = app.detail_sel.saturating_sub(1);
+            }
+            MouseEventKind::ScrollDown => {
+                let n = ui::detail_field_count(app, b, id);
+                app.detail_sel = (app.detail_sel + 1).min(n.saturating_sub(1));
+            }
+            MouseEventKind::Down(MouseButton::Left) => {
+                match ui::detail_hit_test(app, b, id, area, m.row) {
+                    ui::DetailHit::Field(idx, value) => {
+                        app.detail_sel = idx;
+                        if dbl {
+                            osc52_copy(&value);
+                            app.last_click = None;
+                        }
+                    }
+                    ui::DetailHit::Heading => {}
+                    ui::DetailHit::Outside => {
+                        app.menu = crate::app::MenuState::None;
+                        app.last_click = None;
+                    }
+                }
+            }
+            _ => {}
+        }
+        return;
+    }
     match m.kind {
         MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
             if let Some(idx) = ui::hit_box(m.column, m.row) {
@@ -1345,6 +1384,22 @@ pub fn pick_s(zh: bool, en: &str, c: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn detail_popup_smoke_and_hit_test_outside_on_empty_data() {
+        use ratatui::backend::TestBackend;
+        use ratatui::Terminal;
+        let mut app = App::new(None);
+        app.menu = crate::app::MenuState::Detail(app::BOX_PROCS, 0);
+        let mut term = Terminal::new(TestBackend::new(120, 40)).unwrap();
+        term.draw(|f| ui::draw(f, &app)).unwrap(); // smoke: empty-data path renders
+        let area = ratatui::layout::Rect::new(0, 0, 120, 40);
+        assert!(matches!(
+            ui::detail_hit_test(&app, app::BOX_PROCS, 0, area, 39),
+            ui::DetailHit::Outside
+        ));
+    }
     use super::*;
 
     /// the build-time eBPF object must parse and carry all four probes plus
