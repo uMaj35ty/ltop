@@ -280,6 +280,11 @@ impl App {
         };
         // config-driven state that lives in the collectors
         app.tick = Duration::from_millis(cfg.tick_ms);
+        app.proc.exit_retention = if cfg.proc_exit_retention_min == 0 {
+            Duration::MAX
+        } else {
+            Duration::from_secs(cfg.proc_exit_retention_min * 60)
+        };
         app.lan.sweep_interval = Duration::from_secs(cfg.sweep_interval_s);
         app.lan.sweep_enabled = cfg.sweep;
         // retention housekeeping on startup
@@ -325,6 +330,11 @@ impl App {
             },
             theme_live_follow: self.theme_live_follow,
             proc_expand_default: self.proc_expand_default,
+            proc_exit_retention_min: if self.proc.exit_retention == Duration::MAX {
+                0
+            } else {
+                self.proc.exit_retention.as_secs() / 60
+            },
         }
         .save();
     }

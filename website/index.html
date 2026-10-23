@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ltop — where does the traffic go?</title>
+<meta name="description" content="ltop is a terminal monitor that finds the process eating your bandwidth or disk: per-process network and disk I/O, per-connection traffic, LAN neighbours. For developers, sysadmins and enthusiasts. No root required; an optional eBPF helper adds exact TCP+UDP byte accounting.">
+<meta property="og:title" content="ltop — where does the traffic go?">
+<meta property="og:description" content="Per-process and per-connection network + disk accounting, LAN neighbours with per-peer traffic, and an AI-friendly data plane (watch + report, ~97% fewer tokens).">
+<meta property="og:image" content="assets/screenshots/main.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0e14'/%3E%3Crect x='6' y='6' width='6' height='20' fill='%233fd06c'/%3E%3Crect x='15' y='14' width='4' height='12' fill='%23ff5c7a'/%3E%3Crect x='22' y='10' width='4' height='16' fill='%2356c8ff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css?v=4">
+</head>
+<body>
+
+<nav>
+  <div class="wrap nav-inner">
+    <a class="logo" href="#top"><b>l</b>top</a>
+    <div class="links">
+      <a href="#features">Features</a>
+      <a href="#quickstart">Quick start</a>
+      <a href="#roadmap" class="docsy">Roadmap</a>
+      <a href="gallery.html" class="docsy">Gallery</a>
+      
+      <a href="skills.html" class="docsy">Skills</a>
+      <a href="docs/" class="docsy">Docs</a>
+      <a href="https://github.com/uMaj35ty/ltop" class="gh">GitHub ↗</a>
+      <a href="index.zh.html" class="lang" hreflang="zh-CN">中文</a>
+    </div>
+  </div>
+</nav>
+
+<header id="top">
+  <div class="wrap">
+    <div class="boxstrip" aria-hidden="true">
+      <span class="on">NET</span><span class="on">LAN</span><span class="on">DISK I/O</span><span class="on">DISKS</span><span class="on">CONNS</span><span class="on">PROCS</span>
+    </div>
+    <h1>Where does the <span class="rx">traffic</span> go?<br>Who is <span class="tx">eating</span> your disk?</h1>
+    <p class="lead">
+      ltop finds the process eating your bandwidth or disk —
+      <em>per process, per connection, per LAN peer</em> — in one btop-style screen.
+    </p>
+    <p class="tagline">
+      A terminal monitor for software and game developers, sysadmins and
+      enthusiasts. Runs without root; an optional eBPF helper adds exact TCP
+      and UDP byte accounting.
+    </p>
+    <div class="badges">
+      <a href="https://crates.io/crates/ltop"><img alt="Crates.io" src="https://img.shields.io/crates/v/ltop?logo=rust&logoColor=white&labelColor=1d2632&color=3fd06c"></a>
+      <a href="https://github.com/uMaj35ty/ltop/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/uMaj35ty/ltop/ci.yml?branch=master&labelColor=1d2632&color=56c8ff"></a>
+      <img alt="License" src="https://img.shields.io/badge/license-MIT-1d2632?labelColor=1d2632">
+      <img alt="Platforms" src="https://img.shields.io/badge/platform-linux%20%7C%20macOS%20%C2%B7%20x86__64%20%7C%20aarch64-1d2632?labelColor=1d2632&color=bd93f9">
+    </div>
+
+    <div class="install">
+      <div class="bar"><i class="r"></i><i class="y"></i><i class="g"></i><span class="t">quick install</span></div>
+      <div class="row">
+        <code><span class="p">$</span> brew install uMaj35ty/ltop/ltop    <span class="c"># macOS &amp; Linux · prebuilt</span></code>
+        <button class="copy" data-copy="brew install uMaj35ty/ltop/ltop">copy</button>
+      </div>
+      <div class="row">
+        <code><span class="p">$</span> cargo install ltop              <span class="c"># from source · Rust stable</span></code>
+        <button class="copy" data-copy="cargo install ltop">copy</button>
+      </div>
+      <div class="row">
+        <code><span class="p">$</span> <span class="c"># or tarballs (x86_64/aarch64): github.com/uMaj35ty/ltop/releases</span></code>
+      </div>
+    </div>
+
+    <div class="install sub">
+      <div class="bar"><i class="r"></i><i class="y"></i><i class="g"></i><span class="t lx">linux · optional eBPF accounting (per-process &amp; per-connection bytes)</span></div>
+      <div class="row">
+        <code><span class="p">$</span> sudo cp ltop-bpf /usr/local/bin/        <span class="c"># from the same release</span></code>
+        <button class="copy" data-copy="sudo cp ltop-bpf /usr/local/bin/">copy</button>
+      </div>
+      <div class="row">
+        <code><span class="p">$</span> sudo cp ltop-bpf.service /etc/systemd/system/</code>
+        <button class="copy" data-copy="sudo cp ltop-bpf.service /etc/systemd/system/">copy</button>
+      </div>
+      <div class="row">
+        <code><span class="p">$</span> sudo systemctl enable --now ltop-bpf</code>
+        <button class="copy" data-copy="sudo systemctl enable --now ltop-bpf">copy</button>
+      </div>
+    </div>
+
+    <div class="ctas">
+      <a class="btn primary" href="docs/quickstart.html">Quick start →</a>
+      <a class="btn" href="docs/">Read the docs</a>
+      <a class="btn" href="https://github.com/uMaj35ty/ltop">Source on GitHub</a>
+    </div>
+
+    <figure class="hero-shot">
+      <div class="frame">
+        <div class="cap"><i class="r"></i><i class="y"></i><i class="g"></i>&nbsp; ltop — omarchy — wlp5s0 — refresh 1.0s+</div>
+        <img src="assets/screenshots/main.png" alt="ltop classic layout mid Steam download: NET charts climbing to 8.8 MiB/s, LAN neighbours, connections grouped by process (steam x50 highlighted), per-process totals and the disk tree" fetchpriority="high">
+      </div>
+      <figcaption>The classic layout, live: a Steam download in progress — NET charts climbing, connections
+      grouped per process with group Σ, session-cumulative per-process network + disk, and the physical
+      disk tree with capacity bars.</figcaption>
+    </figure>
+  </div>
+</header>
+
+<section id="features" class="alt">
+  <div class="wrap">
+    <h2>Features</h2>
+    <p class="sec-sub">Six boxes, one job each. Everything on screen is also machine-readable —
+    <code>ltop --json</code> emits the same data as a versioned schema.</p>
+    <div class="grid">
+      <div class="card">
+        <h3><em>▣</em>Six boxes, one job each</h3>
+        <p>NET charts per-NIC throughput; DISK I/O plus a device tree with capacity
+        bars; CONNS lists every socket with live per-connection B/s and totals;
+        PROCS keeps per-process network (TCP+UDP) and disk totals for the whole
+        session — exited processes stay on screen, grayed out, relaunchable with
+        one key.</p>
+      </div>
+      <div class="card">
+        <h3><em>◉</em>eBPF accounting: TCP <b>and</b> UDP</h3>
+        <p>The kernel exposes no per-socket UDP counters, and sampling misses
+        short-lived connections. The optional root helper <code>ltop-bpf</code>
+        counts bytes at the send/recv syscalls (v4+v6), per pid and per socket
+        inode; the unprivileged TUI diffs a 1-second snapshot. Without the
+        helper, everything else keeps working.</p>
+      </div>
+      <div class="card">
+        <h3><em>⌬</em>Made for AI agents</h3>
+        <p><code>ltop --json</code> / <code>--schema</code> for one-shot questions;
+        <code>ltop watch</code> records a window headlessly and
+        <code>ltop report --json</code> returns exact sums and peaks — a
+        10-minute window costs ~1k tokens instead of ~40k. Agent skill included.</p>
+      </div>
+      <div class="card">
+        <h3><em>⌂</em>LAN neighbours with traffic</h3>
+        <p>Passive ARP plus a periodic UDP knock finds devices on your subnet
+        (IP, MAC, mDNS hostname, gateway flag). Each neighbour shows its live
+        connection count, rate and bytes — <code>enter</code> pins it and filters
+        CONNS to that peer.</p>
+      </div>
+      <div class="card">
+        <h3><em>◐</em>72 btop themes, Omarchy follow</h3>
+        <p>Any btop theme file loads as-is; 72 are built in and switchable at
+        runtime. On Omarchy ltop follows the desktop theme, and
+        <code>--follow-theme</code> re-colors it while running. UI in English or
+        Chinese (<code>lang = zh</code>).</p>
+      </div>
+      <div class="card">
+        <h3><em>⭓</em>Linux + macOS, no root</h3>
+        <p>x86_64 and aarch64; prebuilt for glibc 2.35+. The TUI runs
+        unprivileged; macOS reads native sources (nettop, IOKit, route socket).
+        Verified per release in QEMU/KVM on five distributions — SELinux
+        enforcing included — and on Apple Silicon hardware.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="quickstart">
+  <div class="wrap">
+    <h2>Quick start</h2>
+    <p class="sec-sub">From zero to full detail in three commands. The footer always shows the
+    current keys; <code>m → help</code> has the full table.</p>
+    <div class="steps">
+      <div class="step">
+        <span class="n">1</span>
+        <h3>Install</h3>
+        <p>Prebuilt via Homebrew, source via cargo, or release tarballs —
+        <a href="docs/installation.html">all channels</a>.</p>
+        <div class="prewrap"><pre><span class="p">$</span> brew install uMaj35ty/ltop/ltop</pre><button class="copy" data-copy="brew install uMaj35ty/ltop/ltop">copy</button></div>
+      </div>
+      <div class="step">
+        <span class="n">2</span>
+        <h3>Run — and press these</h3>
+        <p><kbd>Tab</kbd> layouts · <kbd>/</kbd> search · <kbd>enter</kbd> detail panel ·
+        <kbd>p</kbd><kbd>c</kbd><kbd>l</kbd> focus a box · <kbd>z</kbd> zoom ·
+        <kbd>1</kbd>–<kbd>6</kbd> toggle boxes · <kbd>space</kbd> pause · <kbd>m</kbd> menu.</p>
+        <div class="prewrap"><pre><span class="p">$</span> ltop</pre><button class="copy" data-copy="ltop">copy</button></div>
+        <p class="more"><a href="docs/tui.html">The full TUI tour →</a></p>
+      </div>
+      <div class="step">
+        <span class="n">3</span>
+        <h3>Optional: exact byte accounting</h3>
+        <p>Linux only; adds per-process/per-connection UDP and closes the
+        short-lived-connection gap.</p>
+        <div class="prewrap"><pre><span class="p">$</span> sudo systemctl enable --now ltop-bpf</pre><button class="copy" data-copy="sudo systemctl enable --now ltop-bpf">copy</button></div>
+        <p class="more"><a href="docs/ebpf.html">How the helper works →</a></p>
+      </div>
+      <div class="step">
+        <span class="n">★</span>
+        <h3>For agents: watch, then report</h3>
+        <p>Record a window headlessly, get exact per-process/per-connection
+        sums and peaks as ~2 KB of JSON — ~97% fewer tokens than polling.</p>
+        <div class="prewrap"><pre><span class="p">$</span> ltop watch --duration 10m --proc chrome
+<span class="p">$</span> ltop report <span class="p">&lt;file&gt;</span> --json  <span class="c"># ~1k tokens</span></pre><button class="copy" data-copy="ltop watch --duration 10m --proc chrome
+ltop report &lt;file&gt; --json  # ~1k tokens">copy</button></div>
+        <p class="more"><a href="docs/ai.html">The AI workflow →</a></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="roadmap" class="alt">
+  <div class="wrap">
+    <h2>Roadmap</h2>
+    <p class="sec-sub">What shipped, what's next. Details in the
+    <a href="https://github.com/uMaj35ty/ltop/blob/master/CHANGELOG.md">CHANGELOG</a>.</p>
+    <div class="rm">
+      <div class="col">
+        <h3><span class="tag">✓</span> SHIPPED</h3>
+        <ul>
+          <li><span class="v">0.1.0</span><span>First public release — x86_64 Linux</span></li>
+          <li><span class="v">0.2.0</span><span>aarch64 Linux: dual-arch eBPF, double tarballs</span></li>
+          <li><span class="v">0.2.1</span><span>Native macOS: nettop, IOKit, route socket</span></li>
+          <li><span class="v">0.2.2</span><span>QOL batch (help, detail colors, block graphs) + automated Homebrew tap</span></li>
+          <li><span class="v">0.2.3</span><span>AI-friendly surface: <code>--json</code>, <code>--schema</code>, agent skill</span></li>
+          <li><span class="v">0.2.4</span><span>Headless <code>watch</code> + <code>report</code> — exact window summaries, ~97% fewer tokens</span></li>
+          <li><span class="v">0.2.5</span><span>Docs site (you're here) + resource-footprint audit</span></li>
+        </ul>
+      </div>
+      <div class="col">
+        <h3><span class="tag" style="color:var(--cyan)">→</span> NEXT</h3>
+        <ul>
+          <li><span class="v">0.2.6</span><span>smarter net-graph scaling: when up/down differ wildly, the small side is drawn at a proportional fraction instead of full height</span></li>
+          <li><span class="v">0.3</span><span><code>ltop mcp</code> — a stdio JSON-RPC server wrapping the JSON surfaces for agents</span></li>
+          <li><span class="v">0.3</span><span><b>fleet</b> — SSH aggregation of many machines: one terminal watches the whole LAN, nodes install nothing new</span></li>
+          <li><span class="v">0.4?</span><span>macOS privileged helper to unlock real MAC addresses</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot-inner">
+    <span class="l"><b>l</b>top — localist top · MIT license · no telemetry, no root required</span>
+    <div class="foot-links">
+      <a href="docs/">Documentation</a>
+      <a href="https://crates.io/crates/ltop">crates.io</a>
+      <a href="https://github.com/uMaj35ty/ltop/releases">Releases</a>
+      <a href="https://github.com/uMaj35ty/ltop">GitHub</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll(".copy").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var done = function () {
+        btn.textContent = "copied ✓"; btn.classList.add("ok");
+        setTimeout(function () { btn.textContent = "copy"; btn.classList.remove("ok"); }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(btn.dataset.copy).then(done);
+      } else {
+        var ta = document.createElement("textarea");
+        ta.value = btn.dataset.copy; document.body.appendChild(ta);
+        ta.select(); document.execCommand("copy"); document.body.removeChild(ta); done();
+      }
+    });
+  });
+</script>
+</body>
+</html>

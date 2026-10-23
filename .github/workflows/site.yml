@@ -1,0 +1,45 @@
+name: site
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "book/**"
+      - "website/**"
+      - "assets/**"
+      - "docs/**"
+      - "scripts/build-site.sh"
+      - ".github/workflows/site.yml"
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: site-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install mdbook
+        uses: taiki-e/install-action@v2
+        with:
+          tool: mdbook
+
+      - name: Build site (landing + book)
+        run: ./scripts/build-site.sh dist/site
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: dist/site
+          force_orphan: true
+          commit_message: "site: ${{ github.event.head_commit.message || github.ref_name }}"

@@ -213,26 +213,67 @@ fn sample_entries() -> std::io::Result<(Vec<DevCounters>, BTreeMap<String, Iface
     Ok((entries, infos))
 }
 
-/// mac:接口计数走 `netstat -ib`(Apple 二进制不受隐私门控;getifaddrs 的
+/// mac:接口计数走 `netstat`(Apple 二进制不受隐私门控;getifaddrs 的
 /// if_data64 对未授权进程是冻结的假数据,实测 98MB 传输纹丝不动),接口
-/// 元信息(MAC/MTU/状态/地址)仍走 getifaddrs(不受限)
+/// 元信息(MAC/MTU/状态/地址)仍走 getifaddrs(不受限)。
+/// 查询粒度=逐接口 `netstat -I <if> -b`:macOS 27 实测全接口枚举(`-ib`)
+/// 会卡在个别 P2P 链路(awdl0 5-18s)拖死整个 tick,而单接口查询 0.00s。
 #[cfg(target_os = "macos")]
 fn sample_entries() -> std::io::Result<(Vec<DevCounters>, BTreeMap<String, IfaceInfo>)> {
-    let entries = parse_netstat_ib(&netstat_ib_output());
     let (_, mut infos) = sample_link_info()?;
     for info in infos.values_mut() {
         info.addrs.sort();
     }
+    // P2P 侧链整体不进 NET 盒:查询会阻塞(见 NETSTAT_SLOW_IFACES),
+    // 留着也只能显示全 0 行造成困惑
+    for name in NETSTAT_SLOW_IFACES {
+        infos.remove(name);
+    }
+    let entries = parse_netstat_ib(&netstat_counters_output(infos.keys()));
     Ok((entries, infos))
 }
 
+/// 已知会阻塞查询的 P2P 链路(AirDrop/低功耗直连):单接口查询也卡 5s+,
+/// 字节计数不入 NET 口径(NET=NIC 与 PROCS=payload 的差异注记已覆盖)
 #[cfg(target_os = "macos")]
-fn netstat_ib_output() -> String {
-    std::process::Command::new("netstat")
-        .args(["-ib"])
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
-        .unwrap_or_default()
+const NETSTAT_SLOW_IFACES: [&str; 2] = ["awdl0", "llw0"];
+
+/// 逐接口并行 `netstat -I <if> -b`,500ms 总超时:超时/掉队线程的结果
+/// 丢弃(该接口本轮无计数,下轮重查),tick 永不被单接口拖住。
+/// 输出直接拼接:每段自带表头行,解析器的 `<Link` 过滤会安全跳过。
+#[cfg(target_os = "macos")]
+fn netstat_counters_output<'a>(ifaces: impl Iterator<Item = &'a String>) -> String {
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    let (tx, rx) = mpsc::channel();
+    let mut n = 0usize;
+    for name in ifaces {
+        if NETSTAT_SLOW_IFACES.contains(&name.as_str()) {
+            continue;
+        }
+        let tx = tx.clone();
+        let name = name.clone();
+        std::thread::spawn(move || {
+            let out = std::process::Command::new("netstat")
+                .args(["-I", &name, "-b"])
+                .output()
+                .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+                .unwrap_or_default();
+            let _ = tx.send(out);
+        });
+        n += 1;
+    }
+    drop(tx);
+    let deadline = Instant::now() + Duration::from_millis(500);
+    let mut buf = String::new();
+    for _ in 0..n {
+        match rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+            Ok(out) => buf.push_str(&out),
+            Err(_) => break,
+        }
+    }
+    buf
 }
 
 /// `netstat -ib` 的 Link 行 → (name, ibytes, obytes, 0, 0)。
