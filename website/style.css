@@ -228,12 +228,12 @@
   @media (max-width: 640px) {
     header { padding-top: 48px; }
     section { padding: 48px 0; }
-    nav .links { gap: 14px; }
-    nav .links a { display: none; }
-    nav .links a.gh, nav .links a.lang,
-    nav .links a[href$="docs/"], nav .links a[href$="docs/zh/"] {
-      display: inline-block;
+    nav .links {
+      flex: 1 1 100%;
+      justify-content: flex-end;
+      gap: 2px 12px;
     }
+    nav .links a { padding: 7px 8px; }
     .install code { white-space: pre-wrap; word-break: break-all; }
   }
 
