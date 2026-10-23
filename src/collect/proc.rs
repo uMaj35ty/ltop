@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
 use std::fs;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use libc::geteuid;
 
@@ -105,6 +105,8 @@ struct ProcState {
     cmdline: Option<Vec<String>>,
     /// 首见时的进程运行秒数(/proc/uptime − starttime/CLK_TCK)
     uptime_s: Option<u64>,
+    /// 最后一次见活的时刻(驱逐依据:死进程超过 exit_retention 即清)
+    last_alive: Option<Instant>,
 }
 
 impl ProcState {
@@ -119,6 +121,7 @@ impl ProcState {
             start_ticks: None,
             cmdline: None,
             uptime_s: None,
+            last_alive: None,
         }
     }
 
@@ -129,6 +132,7 @@ impl ProcState {
         s.start_ticks = read_pid_start(pid);
         s.cmdline = read_pid_cmdline(pid);
         s.uptime_s = read_pid_uptime_s(pid);
+        s.last_alive = Some(Instant::now());
         s
     }
 
@@ -139,6 +143,7 @@ impl ProcState {
         let mut s = Self::zero();
         s.start_ticks = start_epoch.map(|e| e.max(0) as u64);
         s.cmdline = crate::collect::macproc::cmdline(pid);
+        s.last_alive = Some(Instant::now());
         s.uptime_s = start_epoch.and_then(|e| {
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -165,6 +170,9 @@ pub struct ProcCollector {
     last_t: Instant,
     pub procs: Vec<ProcRow>,
     pub sort: ProcSort,
+    /// 死进程账本条目的保留时长(超时驱逐,防 pid 账本无界增长;
+    /// Duration::MAX = 永久保留)。详见 RESOURCE-AUDIT
+    pub exit_retention: Duration,
     /// euid == 0: /proc/<pid>/fd and /proc/<pid>/io are readable for all users
     pub is_root: bool,
 }
@@ -188,6 +196,7 @@ impl ProcCollector {
             last_t: Instant::now(),
             procs: Vec::new(),
             sort: ProcSort::NetSum,
+            exit_retention: Duration::from_secs(30 * 60),
             is_root: unsafe { geteuid() == 0 },
         }
     }
@@ -319,6 +328,10 @@ impl ProcCollector {
             HashMap::new()
         };
 
+        // --- 无界账本驱逐(pids_now 完整后、rows 构建前):死进程超
+        //     exit_retention 清除;io_prev 只留活 pid(死 pid 基线无用) ---
+        self.evict_dead(&pids_now, now);
+
         // --- rows ---
         self.procs = self
             .acc
@@ -372,6 +385,26 @@ impl ProcCollector {
             st.udp_recv = 0;
             st.udp_sent = 0;
         }
+    }
+
+    /// 无界账本驱逐(RESOURCE-AUDIT #1/#2):退出进程在 exit_retention 内
+    /// 保留(detail 面板可看/可重启),到期清除;活进程刷新 last_alive。
+    /// io_prev 对死 pid 的基线没有价值,直接清——两表都被活 pid 数封顶。
+    fn evict_dead(&mut self, pids_now: &HashMap<u32, u64>, now: Instant) {
+        let retention = self.exit_retention;
+        self.acc
+            .retain(|(pid, _name): &(u32, String), st: &mut ProcState| {
+                if row_alive(st.start_ticks, pids_now.get(pid).copied()) {
+                    st.last_alive = Some(now);
+                    true
+                } else {
+                    match st.last_alive {
+                        Some(t) => now.duration_since(t) < retention,
+                        None => true,
+                    }
+                }
+            });
+        self.io_prev.retain(|pid, _| pids_now.contains_key(pid));
     }
 
     /// name for a UDP-only delta: current comm if readable, else the last one
@@ -611,5 +644,58 @@ mod tests {
         assert!(row.cmdline.is_some());
         assert!(saw_alive, "row must have been seen alive first");
         let _ = fs::remove_file(&tmp);
+    }
+
+    /// RESOURCE-AUDIT #1/#2:死进程账本按 exit_retention 驱逐,活进程刷新
+    /// last_alive 永留;io_prev 只留活 pid。0.2.5 双端测试锚点。
+    #[test]
+    fn evict_dead_caps_ledger_growth() {
+        use std::time::Duration;
+        let mut c = ProcCollector::new();
+        let now = Instant::now();
+        // pid 1: 活(start_ticks 命中 pids_now)
+        // pid 2: 死,30 分钟前见活 → 默认保留期内,留
+        // pid 3: 死,2 小时前见活 → 超时,清
+        let mk = |start: Option<u64>, seen: Option<Instant>| ProcState {
+            net_recv: 1,
+            start_ticks: start,
+            last_alive: seen,
+            ..ProcState::zero()
+        };
+        let mut s1 = mk(Some(1), Some(now));
+        s1.start_ticks = Some(1);
+        let mut s2 = mk(Some(2), Some(now - Duration::from_secs(1200)));
+        s2.start_ticks = Some(2);
+        let mut s3 = mk(Some(3), Some(now - Duration::from_secs(7200)));
+        s3.start_ticks = Some(3);
+        c.acc.insert((1, "a".into()), s1);
+        c.acc.insert((2, "b".into()), s2);
+        c.acc.insert((3, "c".into()), s3);
+        c.io_prev.insert(1, (10, 10));
+        c.io_prev.insert(3, (30, 30)); // 死 pid,应被清
+        let mut pids_now = HashMap::new();
+        pids_now.insert(1u32, 1u64); // 只有 pid 1 活着
+
+        c.evict_dead(&pids_now, now);
+
+        assert!(c.acc.contains_key(&(1, "a".to_string())), "活进程永留");
+        assert!(
+            c.acc.contains_key(&(2, "b".to_string())),
+            "死进程保留期内留"
+        );
+        assert!(!c.acc.contains_key(&(3, "c".to_string())), "死进程超时清");
+        assert!(c.io_prev.contains_key(&1), "io_prev 留活 pid");
+        assert!(!c.io_prev.contains_key(&3), "io_prev 清死 pid");
+        // 永久模式:超时也留
+        c.exit_retention = Duration::MAX;
+        c.acc.insert(
+            (3, "c".into()),
+            mk(Some(3), Some(now - Duration::from_secs(7200))),
+        );
+        c.evict_dead(&pids_now, now);
+        assert!(
+            c.acc.contains_key(&(3, "c".to_string())),
+            "retention=0(永久)不清"
+        );
     }
 }

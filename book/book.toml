@@ -1,0 +1,22 @@
+[book]
+title = "ltop — localist top"
+authors = ["uMaj35ty"]
+description = "btop-styled TUI monitoring for local network, LAN neighbours and disk I/O — with an AI-friendly data plane (schema-v1 JSON, watch + report)."
+src = "src"
+language = "en"
+
+[build]
+build-dir = "book"
+create-missing = false
+
+[output.html]
+site-url = "/ltop/docs/"
+default-theme = "ayu"
+preferred-dark-theme = "ayu"
+git-repository-url = "https://github.com/uMaj35ty/ltop"
+edit-url-template = "https://github.com/uMaj35ty/ltop/edit/master/book/{path}"
+additional-css = ["theme/site.css"]
+additional-js = ["theme/lang.js"]
+
+[output.html.search]
+enable = true

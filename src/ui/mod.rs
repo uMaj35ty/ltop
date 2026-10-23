@@ -1184,7 +1184,8 @@ fn draw_net(f: &mut Frame, area: Rect, app: &App, focused: bool) {
     let rates = app.net.selected_rates();
     let (hrx, htx) = app.net.selected_hist();
 
-    // 头行标签随列宽分级:≥52 全称,≥40 缩写,更窄只留 session
+    // 头行标签随列宽分级:≥52 全称,≥40 缩写,≥30 紧凑(Σa 无留白),
+    // 更窄只留 session——alive Σ 是头行主指标,能塞下就不静默消失
     let head_w = chunks[1].width as usize;
     let sess_lbl = if head_w >= 52 {
         "  session Σ "
@@ -1195,6 +1196,8 @@ fn draw_net(f: &mut Frame, area: Rect, app: &App, focused: bool) {
         ("  alive Σ ", true)
     } else if head_w >= 40 {
         (" Σa ", true)
+    } else if head_w >= 30 {
+        ("Σa", true)
     } else {
         ("", false)
     };

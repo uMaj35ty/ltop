@@ -1,0 +1,22 @@
+[book]
+title = "ltop 中文文档"
+authors = ["uMaj35ty"]
+description = "btop 风格的终端监控：本地网络、LAN 邻居与磁盘 I/O——附带面向 AI 的数据面（schema-v1 JSON、watch + report）。"
+src = "src"
+language = "zh"
+
+[build]
+build-dir = "book"
+create-missing = false
+
+[output.html]
+site-url = "/ltop/docs/zh/"
+default-theme = "ayu"
+preferred-dark-theme = "ayu"
+git-repository-url = "https://github.com/uMaj35ty/ltop"
+edit-url-template = "https://github.com/uMaj35ty/ltop/edit/master/book-zh/{path}"
+additional-css = ["theme/site.css"]
+additional-js = ["theme/lang.js"]
+
+[output.html.search]
+enable = true

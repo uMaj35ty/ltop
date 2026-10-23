@@ -408,10 +408,17 @@ pub fn run(args: &[String]) -> Result<()> {
                 return Ok(());
             }
             "--top" => {
-                let v = args.get(i + 1).context(p("--top needs a number", "--top 需要一个数字"))?;
+                let v = args
+                    .get(i + 1)
+                    .context(p("--top needs a number", "--top 需要一个数字"))?;
                 top = v
                     .parse::<usize>()
-                    .map_err(|_| anyhow::anyhow!(p(&format!("--top {v:?} is not a number"), &format!("--top {v:?} 不是数字"))))?
+                    .map_err(|_| {
+                        anyhow::anyhow!(p(
+                            &format!("--top {v:?} is not a number"),
+                            &format!("--top {v:?} 不是数字")
+                        ))
+                    })?
                     .max(1);
                 i += 1;
             }
@@ -461,7 +468,10 @@ pub fn run(args: &[String]) -> Result<()> {
     let (mut snaps, skipped) = load(&path, zh)?;
     if snaps.is_empty() {
         let tail = if skipped > 0 {
-            p(&format!("skipped {skipped} lines"), &format!("跳过 {skipped} 行"))
+            p(
+                &format!("skipped {skipped} lines"),
+                &format!("跳过 {skipped} 行"),
+            )
         } else {
             p("empty file", "文件为空").to_string()
         };
@@ -648,7 +658,12 @@ fn print_human(r: &Report, top: usize, f: Fields) {
         let mut hdr = vec![p("Process", "进程")];
         let mut w = vec![24usize];
         if f.net {
-            hdr.extend([p("Σrx", "Σ收"), p("Σtx", "Σ发"), p("pk rx/s", "峰收/s"), p("pk tx/s", "峰发/s")]);
+            hdr.extend([
+                p("Σrx", "Σ收"),
+                p("Σtx", "Σ发"),
+                p("pk rx/s", "峰收/s"),
+                p("pk tx/s", "峰发/s"),
+            ]);
             w.extend([9, 9, 9, 9]);
         }
         if f.udp {
@@ -689,7 +704,11 @@ fn print_human(r: &Report, top: usize, f: Fields) {
             cells.push(crate::app::fmt_dur(p.samples as u64 * r.interval_s.max(1)));
             cells.push(
                 if zh {
-                    if p.last_alive { "活" } else { "退" }
+                    if p.last_alive {
+                        "活"
+                    } else {
+                        "退"
+                    }
                 } else if p.last_alive {
                     "alive"
                 } else {
@@ -707,7 +726,10 @@ fn print_human(r: &Report, top: usize, f: Fields) {
                         "({} more processes not shown; adjust --top N)",
                         r.procs.len() - procs.len()
                     ),
-                    &format!("(其余 {} 个进程未列出,--top N 调整)", r.procs.len() - procs.len())
+                    &format!(
+                        "(其余 {} 个进程未列出,--top N 调整)",
+                        r.procs.len() - procs.len()
+                    )
                 )
             );
         }

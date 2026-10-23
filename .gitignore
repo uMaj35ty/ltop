@@ -16,3 +16,7 @@ SHA256SUMS
 # 编辑器与系统
 *.swp
 .DS_Store
+
+# mdbook build outputs
+/book/book
+/book-zh/book

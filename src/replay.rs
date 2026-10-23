@@ -376,17 +376,18 @@ fn text(s: &str, key: &str) -> Option<String> {
 
 pub fn print_report(ses: &Session, top: usize, zh: bool) {
     let p = |en: &str, c: &str| crate::pick_s(zh, en, c);
-    println!(
-        "{}",
-        p("== ltop replay ==", "== ltop 回放 ==")
-    );
+    println!("{}", p("== ltop replay ==", "== ltop 回放 =="));
     println!(
         "{}",
         p(
             &format!(
                 "file  {}\nhost  {}  start {}  {} snapshots  interval {}s",
                 ses.path.display(),
-                if ses.host.is_empty() { "—" } else { &ses.host },
+                if ses.host.is_empty() {
+                    "—"
+                } else {
+                    &ses.host
+                },
                 fmt_ts(ses.start),
                 ses.samples,
                 ses.interval_s
@@ -394,7 +395,11 @@ pub fn print_report(ses: &Session, top: usize, zh: bool) {
             &format!(
                 "file  {}\nhost  {}  开始 {}  快照 {} 个  间隔 {}s",
                 ses.path.display(),
-                if ses.host.is_empty() { "—" } else { &ses.host },
+                if ses.host.is_empty() {
+                    "—"
+                } else {
+                    &ses.host
+                },
                 fmt_ts(ses.start),
                 ses.samples,
                 ses.interval_s
@@ -439,15 +444,15 @@ pub fn print_report(ses: &Session, top: usize, zh: bool) {
                     "({} more processes not shown; adjust --top N)",
                     ses.procs.len() - shown
                 ),
-                &format!("(其余 {} 个进程未列出,--top N 调整)", ses.procs.len() - shown)
+                &format!(
+                    "(其余 {} 个进程未列出,--top N 调整)",
+                    ses.procs.len() - shown
+                )
             )
         );
     }
     if !ses.busy.is_empty() {
-        println!(
-            "{}",
-            p("\nBusiest intervals:", "\n最忙时段:")
-        );
+        println!("{}", p("\nBusiest intervals:", "\n最忙时段:"));
         for (ts, rate) in &ses.busy {
             println!("  {}  {}/s", fmt_ts(*ts), crate::fmt_human(*rate));
         }
@@ -455,15 +460,13 @@ pub fn print_report(ses: &Session, top: usize, zh: bool) {
 }
 
 fn write_csv(ses: &Session, out: &std::path::Path) -> Result<()> {
-    let mut w = std::io::BufWriter::new(
-        std::fs::File::create(out).with_context(|| {
-            crate::pick_s(
-                crate::cli_lang_zh(),
-                &format!("cannot create {}", out.display()),
-                &format!("创建 {} 失败", out.display()),
-            )
-        })?,
-    );
+    let mut w = std::io::BufWriter::new(std::fs::File::create(out).with_context(|| {
+        crate::pick_s(
+            crate::cli_lang_zh(),
+            &format!("cannot create {}", out.display()),
+            &format!("创建 {} 失败", out.display()),
+        )
+    })?);
     writeln!(
         w,
         "name,pid,first_ts,last_ts,samples,net_recv,net_sent,udp_recv,udp_sent,disk_r,disk_w,peak_net_bps"

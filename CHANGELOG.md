@@ -3,6 +3,39 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.5] - 2026-10-23
+
+### Added
+
+- **Documentation website** — landing page, gallery, skills page, roadmap and
+  an mdBook manual (12 chapters, English with a full Chinese mirror),
+  deployed to GitHub Pages; the README is slimmed to pitch + quick start with
+  the deep details moved to the site (layout, eBPF internals, data plane,
+  compatibility matrix, comparison, FAQ)
+- **31 Omarchy themes merged into the built-in library** — each theme's
+  effective btop palette, selectable in the theme menu as `omarchy-<name>`;
+  builtin themes 41 → **72**
+- `ltop watch --retention <DAYS>` — purge old capture files at start
+  (default 7 days, `0` = keep forever)
+- `proc_exit_retention_min` config — evict exited-process ledgers after
+  N minutes (default 30, `0` = keeps the old keep-forever behavior)
+- `scripts/soak.sh` — long-run memory soak harness (55 min runs, RSS flat)
+
+### Changed
+
+- **macOS NET box**: per-interface `netstat -I` queries now run in parallel
+  under a 500 ms total budget, and `awdl0`/`llw0` are excluded (their kernel
+  queries stall). `watch --duration 2s` completes in ~3.3 s where it took
+  6–13 s; en0 counters verified against `netstat` ground truth
+
+### Internal
+
+- Resource audit closed: every ledger, cache and history is bounded or
+  evicted (proc ledger, io_prev, watch files were the three unbounded ones;
+  charts, tombstones, monlog retention, eBPF LRU maps and LAN neighbours
+  verified bounded); 55-min soak with flat RSS
+- Tests: 132 passing on Linux, clippy clean
+
 ## [0.2.4] - 2026-10-23
 
 ### Added

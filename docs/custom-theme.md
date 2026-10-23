@@ -6,7 +6,7 @@ you cannot read on your terminal.
 
 ## Where themes live
 
-- Built-in: 41 themes converted from btop, selectable from the theme menu
+- Built-in: 72 themes converted from btop, selectable from the theme menu
   (`m` → theme) or `--theme <name>` on the command line.
 - Omarchy: if `~/.local/state/omarchy/current/theme/btop.theme` exists, the
   menu also offers `omarchy` — selecting it follows the desktop theme and

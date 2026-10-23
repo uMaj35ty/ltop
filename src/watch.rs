@@ -25,6 +25,9 @@ pub struct WatchOpts {
     pub stop: Option<PathBuf>,
     /// 聚焦:仅写名称匹配(子串,不区分大小写)的进程及其连接行
     pub proc: Option<String>,
+    /// 产物保留天数(启动时清 state 目录里的旧 ltop-session-*.jsonl;
+    /// 0 = 永久保留)。防磁盘侧无限累积
+    pub retention_days: u32,
 }
 
 /// `10s` / `5m` / `2h`;纯数字按秒
@@ -50,6 +53,7 @@ pub fn run(args: &[String]) -> Result<()> {
         out: None,
         stop: None,
         proc: None,
+        retention_days: 7,
     };
     let mut i = 0;
     while i < args.len() {
@@ -97,6 +101,19 @@ pub fn run(args: &[String]) -> Result<()> {
                 }
                 i += 1;
             }
+            "--retention" => {
+                let v = args.get(i + 1).context(p(
+                    "--retention needs a number of days (0 = keep forever)",
+                    "--retention 需要一个天数(0 = 永久保留)",
+                ))?;
+                opts.retention_days = v.parse().map_err(|_| {
+                    anyhow::anyhow!(p(
+                        &format!("--retention {v:?} is not a number"),
+                        &format!("--retention {v:?} 不是天数")
+                    ))
+                })?;
+                i += 1;
+            }
             a if a.starts_with("--") => bail!("ltop watch: unknown option {a} (try --help)"),
             a => bail!(
                 "{}",
@@ -112,6 +129,39 @@ pub fn run(args: &[String]) -> Result<()> {
     Ok(())
 }
 
+/// 清理 state 目录里超过保留期的 ltop-session-*.jsonl(0 天 = 不清理)。
+/// watch 产物前缀独立于 TUI monlog 清理,自己管自己的生命周期。
+pub fn purge_in(dir: &std::path::Path, retention_days: u32) -> usize {
+    if retention_days == 0 {
+        return 0;
+    }
+    let cutoff = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+        .saturating_sub(retention_days as u64 * 86_400);
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return 0;
+    };
+    let mut removed = 0;
+    for e in rd.flatten() {
+        let path = e.path();
+        let Some(ts) = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .and_then(|n| n.strip_prefix("ltop-session-"))
+            .and_then(|n| n.strip_suffix(".jsonl"))
+            .and_then(|n| n.parse::<u64>().ok())
+        else {
+            continue;
+        };
+        if ts < cutoff && std::fs::remove_file(&path).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
+}
+
 fn watch_usage(zh: bool) -> String {
     if zh {
         format!(
@@ -124,6 +174,7 @@ USAGE:
     --duration <T>   总时长,如 30s / 5m / 2h(缺省 = 采到 --stop 或 Ctrl-C)
     --out <FILE>     输出 JSONL(默认 ~/.local/state/ltop/ltop-session-<ts>.jsonl)
     --stop <FILE>    哨兵文件:文件出现即停止(停止后删除该文件)
+    --retention <D>  保留期:启动时清理超过 D 天的旧采集文件(默认 7;0 = 永久)
     --proc <NAME>    聚焦:只写名称匹配(子串)的进程及其连接;按名追踪,
                      进程重启换 pid 不丢线
     -h, --help       本帮助
@@ -143,6 +194,7 @@ USAGE:
     --duration <T>   total duration, e.g. 30s / 5m / 2h (default: run until --stop or Ctrl-C)
     --out <FILE>     output JSONL (default ~/.local/state/ltop/ltop-session-<ts>.jsonl)
     --stop <FILE>    sentinel file: stop as soon as it appears (consumed on stop)
+    --retention <D>  purge capture files older than D days at start (default 7; 0 = keep forever)
     --proc <NAME>    focus: record only processes matching NAME (substring) and their
                      connections; tracked by name — survives pid changes on restart
     -h, --help       this help
@@ -192,6 +244,20 @@ fn execute(opts: WatchOpts, zh: bool) -> Result<usize> {
     let start = Instant::now();
 
     let path = opts.out.clone().unwrap_or_else(default_out);
+    // 产物保留期:启动时清理过期文件(当前写的文件时间戳是 now,永不会命中)
+    let purged = purge_in(
+        path.parent().unwrap_or(std::path::Path::new("/tmp")),
+        opts.retention_days,
+    );
+    if purged > 0 {
+        eprintln!(
+            "{}",
+            p(
+                &format!("ltop watch: purged {purged} capture file(s) past retention"),
+                &format!("ltop watch: 已清理 {purged} 个超过保留期的采集文件")
+            )
+        );
+    }
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).with_context(|| {
             p(
@@ -200,7 +266,7 @@ fn execute(opts: WatchOpts, zh: bool) -> Result<usize> {
             )
         })?;
     }
-    let mut f = std::fs::File::create(&path).with_context(|| {
+    let mut w = std::fs::File::create(&path).with_context(|| {
         p(
             &format!("cannot create {}", path.display()),
             &format!("创建 {} 失败", path.display()),
@@ -220,7 +286,7 @@ fn execute(opts: WatchOpts, zh: bool) -> Result<usize> {
         .map(|d| d.as_secs().to_string())
         .unwrap_or_else(|| "null".into());
     writeln!(
-        f,
+        w,
         "{{\"watch_start\":{secs},\"host\":\"{}\",\"interval_s\":{},\"proc\":{proc_js},\"duration_s\":{dur_js}}}",
         crate::log::json_str(&app.hostname),
         opts.interval.as_secs(),
@@ -238,7 +304,7 @@ fn execute(opts: WatchOpts, zh: bool) -> Result<usize> {
             snap.conns
                 .retain(|c| c.process.as_deref().is_some_and(|pn| proc_matches(f, pn)));
         }
-        writeln!(f, "{}", serde_json::to_string(&snap).unwrap_or_default())?;
+        writeln!(w, "{}", serde_json::to_string(&snap).unwrap_or_default())?;
         lines += 1;
         if STOP.load(Ordering::SeqCst) {
             reason = p("SIGINT/SIGTERM received", "收到 SIGINT/SIGTERM");
@@ -271,7 +337,7 @@ fn execute(opts: WatchOpts, zh: bool) -> Result<usize> {
         }
         app.update();
     }
-    f.flush()?;
+    w.flush()?;
     eprintln!(
         "{}",
         p(
@@ -314,12 +380,15 @@ mod tests {
         let out = dir.join("w.jsonl");
         let lines = execute(
             WatchOpts {
-            interval: Duration::from_secs(1),
-            duration: Some(Duration::from_secs(2)),
-            out: Some(out.clone()),
-            stop: None,
-            proc: None,
-        }, true)
+                interval: Duration::from_secs(1),
+                duration: Some(Duration::from_secs(2)),
+                out: Some(out.clone()),
+                stop: None,
+                proc: None,
+                retention_days: 0,
+            },
+            true,
+        )
         .unwrap();
         assert!(lines >= 2, "2s@1s 至少 2 行,实测 {lines}");
         let content = std::fs::read_to_string(&out).unwrap();
@@ -349,12 +418,15 @@ mod tests {
         let out = dir.join("w.jsonl");
         let lines = execute(
             WatchOpts {
-            interval: Duration::from_secs(1),
-            duration: Some(Duration::from_secs(2)),
-            out: Some(out.clone()),
-            stop: None,
-            proc: Some("zzz-no-such-proc".into()),
-        }, true)
+                interval: Duration::from_secs(1),
+                duration: Some(Duration::from_secs(2)),
+                out: Some(out.clone()),
+                stop: None,
+                proc: Some("zzz-no-such-proc".into()),
+                retention_days: 0,
+            },
+            true,
+        )
         .unwrap();
         assert!(lines >= 2);
         let content = std::fs::read_to_string(&out).unwrap();
@@ -371,6 +443,45 @@ mod tests {
                 "聚焦模式下不应有未匹配进程"
             );
         }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod purge_tests {
+    use super::*;
+
+    #[test]
+    fn purge_removes_only_old_session_files() {
+        let dir = std::env::temp_dir().join(format!("ltop-purge-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        // 旧 session 文件(8 天前)、新文件、别的名字、别的后缀
+        let old = format!("ltop-session-{}.jsonl", now - 8 * 86_400);
+        let new = format!("ltop-session-{}.jsonl", now - 86_400);
+        for (name, _) in [
+            (old.clone(), now - 8 * 86_400),
+            (new.clone(), now - 86_400),
+            ("ltop-log-999.jsonl".to_string(), now - 30 * 86_400), // monlog 前缀,不属于 watch
+            ("ltop-session-notats.jsonl".to_string(), now - 30 * 86_400),
+        ] {
+            std::fs::write(dir.join(name), b"{}").unwrap();
+        }
+        assert_eq!(purge_in(&dir, 7), 1, "只清 8 天前的那个");
+        assert!(!dir.join(&old).exists());
+        assert!(dir.join(&new).exists());
+        assert!(dir.join("ltop-log-999.jsonl").exists(), "monlog 前缀不动");
+        assert!(
+            dir.join("ltop-session-notats.jsonl").exists(),
+            "无时间戳文件名不动"
+        );
+        // 0 = 不清理
+        assert_eq!(purge_in(&dir, 0), 0);
+        assert!(dir.join(&new).exists());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
