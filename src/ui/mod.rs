@@ -563,15 +563,13 @@ fn draw_table_grid(f: &mut Frame, area: Rect, app: &App, ids: &[usize]) {
         })
         .collect();
     // in each grid row the process table (conns/procs) gets the spare height
-    let spare_rows: Vec<usize> = row_ideals
+    // — spare targets are the GLOBAL indices of those boxes (alloc_heights
+    // indexes into the ideals vec); none visible ⇒ spread evenly
+    let spare_rows: Vec<usize> = ids
         .iter()
         .enumerate()
-        .map(|(r, _)| {
-            ids[r * 2..(r * 2 + 2).min(ids.len())]
-                .iter()
-                .position(|&i| matches!(i, BOX_CONNS | BOX_PROCS))
-                .unwrap_or(0)
-        })
+        .filter(|(_, &i)| matches!(i, BOX_CONNS | BOX_PROCS))
+        .map(|(i, _)| i)
         .collect();
     let desired = alloc_heights(&row_ideals, area.height, &spare_rows);
     let hs = LIST_ALLOC
@@ -892,8 +890,9 @@ pub fn conn_items(app: &App) -> Vec<ConnItem<'_>> {
             .map(|c| ConnItem::Row { c, child: false })
             .collect();
     }
-    // 搜索时全部展开:命中不可见的折叠组等于没搜到
-    let expand_all = !app.search.is_empty();
+    // 搜索时全部展开:命中不可见的折叠组等于没搜到。仅当搜索目标是
+    // CONNS 本身——目标是 procs 时 conns 未被过滤,摊平只会白白降信息密度
+    let expand_all = !app.search.is_empty() && app.search_box == BOX_CONNS;
     let group_open = |key: &str| -> bool { app.proc_expand_default != app.expanded.contains(key) };
     let mut out: Vec<ConnItem> = Vec::new();
     let mut i = 0;
@@ -1744,6 +1743,19 @@ fn draw_conns(f: &mut Frame, area: Rect, app: &App, focused: bool) {
         fword('f', "filter", filter.label()),
         fword('o', "order", app.conn.sort.label()),
     ];
+    // 采集降级徽标:netlink 被拒(linux)/nettop 失败(mac)时 CONNS 可能
+    // 比实际少,明示而不是让用户以为"没有连接"
+    #[cfg(target_os = "linux")]
+    let degraded = app.conn.diag_error.clone();
+    #[cfg(target_os = "macos")]
+    let degraded = if app.nettop.stale {
+        Some("nettop".to_string())
+    } else {
+        None
+    };
+    if let Some(e) = degraded {
+        rest.push(vec![Span::styled(format!("⚠ {e}"), bold(alert_end()))]);
+    }
     let sh = scroll_hint(items.len(), off, area);
     if !sh.is_empty() {
         rest.push(vec![text_s(sh)]);

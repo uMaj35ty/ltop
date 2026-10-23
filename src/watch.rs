@@ -35,10 +35,12 @@ pub fn parse_duration(s: &str) -> Option<Duration> {
     let s = s.trim();
     let (num, unit) = s.split_at(s.find(|c: char| c.is_ascii_alphabetic()).unwrap_or(s.len()));
     let n: u64 = num.parse().ok()?;
+    // checked:release 无溢出检查,回绕会把超大时长变成错误的短时长,
+    // 进程静默提前结束
     let secs = match unit {
         "" | "s" => n,
-        "m" => n * 60,
-        "h" => n * 3600,
+        "m" => n.checked_mul(60)?,
+        "h" => n.checked_mul(3600)?,
         _ => return None,
     };
     Some(Duration::from_secs(secs))
@@ -146,11 +148,13 @@ pub fn purge_in(dir: &std::path::Path, retention_days: u32) -> usize {
     let mut removed = 0;
     for e in rd.flatten() {
         let path = e.path();
+        // 时间戳可带 -<pid> 后缀(同秒碰撞防护的文件名)
         let Some(ts) = path
             .file_name()
             .and_then(|n| n.to_str())
             .and_then(|n| n.strip_prefix("ltop-session-"))
             .and_then(|n| n.strip_suffix(".jsonl"))
+            .and_then(|n| n.split('-').next())
             .and_then(|n| n.parse::<u64>().ok())
         else {
             continue;
@@ -211,7 +215,8 @@ fn default_out() -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    crate::log::log_dir().join(format!("ltop-session-{secs}.jsonl"))
+    // -<pid> 后缀:同秒双实例不互相截断(截断者继续写旧偏移 = NUL 稀疏文件)
+    crate::log::log_dir().join(format!("ltop-session-{secs}-{}.jsonl", std::process::id()))
 }
 
 fn proc_matches(filter: &Option<String>, name: &str) -> bool {
@@ -222,7 +227,7 @@ fn proc_matches(filter: &Option<String>, name: &str) -> bool {
 }
 
 /// 采样直到停止条件;返回写出的行数。sleep 切小片以便信号及时生效。
-fn execute(opts: WatchOpts, zh: bool) -> Result<usize> {
+pub(crate) fn execute(opts: WatchOpts, zh: bool) -> Result<usize> {
     let p = |en: &str, c: &str| crate::pick_s(zh, en, c);
     unsafe {
         // SIGINT/SIGTERM 优雅收尾:置位即停,最后一条快照完整落盘
@@ -294,7 +299,7 @@ fn execute(opts: WatchOpts, zh: bool) -> Result<usize> {
 
     let mut lines = 0usize;
     let mut reason = p("duration reached", "duration 到点");
-    loop {
+    'outer: loop {
         // 先落盘再睡:warm-up 第二个样本即窗口基线;信号/duration 到点时
         // 最后一个快照已在文件里,窗口不缺头尾
         let mut snap = crate::snapshot::from_app(&app);
@@ -312,7 +317,6 @@ fn execute(opts: WatchOpts, zh: bool) -> Result<usize> {
         }
         if let Some(sf) = &opts.stop {
             if sf.exists() {
-                // 哨兵即消费:删掉避免下次启动立即停
                 let _ = std::fs::remove_file(sf);
                 reason = p("stop file seen", "哨兵文件出现");
                 break;
@@ -331,9 +335,22 @@ fn execute(opts: WatchOpts, zh: bool) -> Result<usize> {
             .min(opts.interval);
         let mut left = budget;
         while left > Duration::ZERO && !STOP.load(Ordering::SeqCst) {
+            // 哨兵按切片粒度响应:interval 1h 时"出现即停"不再最多晚 1 小时
+            if let Some(sf) = &opts.stop {
+                if sf.exists() {
+                    // 哨兵即消费:删掉避免下次启动立即停
+                    let _ = std::fs::remove_file(sf);
+                    reason = p("stop file seen", "哨兵文件出现");
+                    break 'outer;
+                }
+            }
             let slice = left.min(Duration::from_millis(200));
             std::thread::sleep(slice);
             left = left.saturating_sub(slice);
+        }
+        if STOP.load(Ordering::SeqCst) {
+            reason = p("SIGINT/SIGTERM received", "收到 SIGINT/SIGTERM");
+            break;
         }
         app.update();
     }
@@ -369,6 +386,43 @@ mod tests {
         assert_eq!(parse_duration("abc"), None);
         assert_eq!(parse_duration("5x"), None);
         assert_eq!(parse_duration(""), None);
+    }
+
+    /// 哨兵按切片粒度生效:interval 10s 时中途出现的哨兵秒级停止,
+    /// 不再等下一个整间隔边界(0.2.6 最多晚一整个 interval)
+    #[test]
+    fn stop_sentinel_honored_within_slice_granularity() {
+        let dir = std::env::temp_dir().join(format!("ltop-watch-stop-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let out = dir.join("w.jsonl");
+        let sf = dir.join("stop.now");
+        let sf2 = sf.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(500));
+            std::fs::write(&sf2, b"").unwrap();
+        });
+        let t0 = std::time::Instant::now();
+        let lines = execute(
+            WatchOpts {
+                interval: Duration::from_secs(10),
+                duration: None,
+                out: Some(out.clone()),
+                stop: Some(sf.clone()),
+                proc: None,
+                retention_days: 0,
+            },
+            true,
+        )
+        .unwrap();
+        let elapsed = t0.elapsed();
+        assert!(
+            elapsed < Duration::from_secs(5),
+            "哨兵应秒级生效,实测 {elapsed:?}"
+        );
+        assert_eq!(lines, 1, "写完首快照即停,不等下一个间隔边界");
+        assert!(!sf.exists(), "哨兵被消费");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// 端到端:短 duration 产出 表头 + ≥2 快照行,末行 schema v1 可反序列化

@@ -244,8 +244,12 @@ const NETSTAT_SLOW_IFACES: [&str; 2] = ["awdl0", "llw0"];
 #[cfg(target_os = "macos")]
 fn netstat_counters_output<'a>(ifaces: impl Iterator<Item = &'a String>) -> String {
     use std::sync::mpsc;
+    use std::sync::Arc;
     use std::time::Duration;
 
+    // 仍未完成的 netstat 子进程 pid:超时后统一 SIGKILL,否则卡死的接口
+    // 每 tick 泄漏一个线程+子进程,长会话无上界
+    let pending: Arc<std::sync::Mutex<Vec<i32>>> = Arc::default();
     let (tx, rx) = mpsc::channel();
     let mut n = 0usize;
     for name in ifaces {
@@ -254,12 +258,24 @@ fn netstat_counters_output<'a>(ifaces: impl Iterator<Item = &'a String>) -> Stri
         }
         let tx = tx.clone();
         let name = name.clone();
+        let pending = pending.clone();
         std::thread::spawn(move || {
-            let out = std::process::Command::new("netstat")
+            let Ok(mut child) = std::process::Command::new("netstat")
                 .args(["-I", &name, "-b"])
-                .output()
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+            else {
+                let _ = tx.send(String::new());
+                return;
+            };
+            let pid = child.id() as i32;
+            pending.lock().unwrap().push(pid);
+            let out = child
+                .wait_with_output()
                 .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
                 .unwrap_or_default();
+            pending.lock().unwrap().retain(|&p| p != pid);
             let _ = tx.send(out);
         });
         n += 1;
@@ -267,10 +283,22 @@ fn netstat_counters_output<'a>(ifaces: impl Iterator<Item = &'a String>) -> Stri
     drop(tx);
     let deadline = Instant::now() + Duration::from_millis(500);
     let mut buf = String::new();
+    let mut timed_out = false;
     for _ in 0..n {
         match rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
             Ok(out) => buf.push_str(&out),
-            Err(_) => break,
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                timed_out = true;
+                break;
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        }
+    }
+    if timed_out {
+        for pid in pending.lock().unwrap().drain(..) {
+            unsafe {
+                libc::kill(pid, libc::SIGKILL);
+            }
         }
     }
     buf

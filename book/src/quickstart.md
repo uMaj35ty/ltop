@@ -67,8 +67,9 @@ release the TUI came from (see [eBPF accounting](ebpf.md) and the
 The one command to remember:
 
 ```bash
-ltop watch --duration 10m --proc chrome   # record headlessly (no root, crash-safe)
-ltop report ~/.local/state/ltop/ltop-session-*.jsonl --json
+ltop watch --duration 10m --proc chrome   # record headlessly (no root, crash-safe);
+                                         # prints the output path
+ltop report <that path> --json            # report takes a single file
 ```
 
 `report` prints exact window sums and peaks instead of sampled guesses —

@@ -140,7 +140,9 @@ impl LanCollector {
     /// 重建无 MAC 的邻居列表(IP/主机名/流量联动可用)
     #[cfg(target_os = "macos")]
     fn maybe_rt_scan(&mut self, now: Instant) {
-        if self.rt_scan_busy || self.subnets.is_empty() {
+        // 只作 ARP 被隐私机制拦死时的替代:ARP 正常时无条件空扫整个子网
+        // 白白发 RTM_GET,还会把 read_arp 拿到的真实 MAC 周期性清成隐藏
+        if !self.arp_blocked || self.rt_scan_busy || self.subnets.is_empty() {
             return;
         }
         if self
@@ -192,8 +194,11 @@ impl LanCollector {
             match self.neighbors.get_mut(&ip) {
                 Some(n) => {
                     n.iface = iface;
-                    n.mac = None;
-                    n.mac_hidden = true;
+                    if n.mac.is_none() {
+                        // 已有真实 ARP MAC 的邻居不清成隐藏:RTM 探测只补
+                        // 缺 MAC 的行,否则 MAC 列随扫描周期闪烁
+                        n.mac_hidden = true;
+                    }
                     n.complete = true;
                     n.is_gateway = is_gateway;
                     n.is_self = is_self;
@@ -454,7 +459,16 @@ impl LanCollector {
         self.subnets
             .iter()
             .find(|(_, net, prefix)| {
-                host_range(*net, *prefix).any(|ip| self.gateways.contains(&ip))
+                // 掩码位运算判网关归属,不枚举地址:大网段下 host_range
+                // 全段 .any() 是千万级迭代
+                let mask = if *prefix == 0 {
+                    0
+                } else {
+                    u32::MAX << (32 - *prefix as u32)
+                };
+                self.gateways
+                    .iter()
+                    .any(|g| u32::from(*g) & mask == u32::from(*net))
             })
             .or_else(|| self.subnets.first())
             .cloned()
@@ -499,7 +513,9 @@ impl Default for LanCollector {
 }
 
 fn host_addrs(net: Ipv4Addr, prefix: u8) -> Vec<Ipv4Addr> {
-    host_range(net, prefix).collect()
+    // 大网段(VPN 的 /8-/21)按 /22 粒度截断:全段枚举是千万级地址的 Vec
+    // + 每个扫描周期近死循环;网关与常见设备几乎总在本段头部 /22
+    host_range(net, prefix.max(22)).collect()
 }
 
 #[cfg(target_os = "macos")]
@@ -560,7 +576,9 @@ fn parse_arp_an(out: &str) -> Vec<(Ipv4Addr, Option<String>, String)> {
         let Ok(ip) = line[a + 1..a + 1 + b].parse::<Ipv4Addr>() else {
             continue;
         };
-        if ip.is_multicast() || ip.is_broadcast() || ip.octets()[3] == 255 {
+        // 广播条目按全 f MAC 判:按 IP 末字节==255 判断会在 /23+/8 下
+        // 误杀合法主机(.255 可是真实地址)
+        if ip.is_multicast() || ip.is_broadcast() {
             continue;
         }
         let rest = &line[a + 1 + b..];
@@ -578,6 +596,11 @@ fn parse_arp_an(out: &str) -> Vec<(Ipv4Addr, Option<String>, String)> {
         } else {
             (Some(tail.trim()), true)
         };
+        // 子网广播条目按全 f MAC 判:按 IP 末字节==255 判断会在 /23+/8
+        // 下误杀合法主机(.255 可以是真实地址)
+        if mac_raw.is_some_and(|m| m.eq_ignore_ascii_case("ff:ff:ff:ff:ff:ff")) {
+            continue;
+        }
         let iface = tail
             .split(" on ")
             .nth(1)
@@ -917,6 +940,15 @@ mod tests {
         assert_eq!(hosts.len(), 254);
         assert_eq!(hosts[0], "192.168.1.1".parse::<Ipv4Addr>().unwrap());
         assert_eq!(hosts[253], "192.168.1.254".parse::<Ipv4Addr>().unwrap());
+    }
+
+    #[test]
+    fn host_addrs_clamped_on_huge_subnets() {
+        // /8 VPN 网段按 /22 截断:不再构造千万级地址的 Vec、扫描不再
+        // 近死循环(修复前 = 1670 万地址)
+        assert_eq!(host_addrs("10.0.0.0".parse().unwrap(), 8).len(), 1022);
+        // 正常 /24 行为不变
+        assert_eq!(host_addrs("192.168.1.0".parse().unwrap(), 24).len(), 254);
     }
 
     #[test]

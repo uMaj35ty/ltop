@@ -89,7 +89,7 @@ pub fn run_replay(args: &[String]) -> Result<()> {
     let p = |en: &str, c: &str| crate::pick_s(zh, en, c);
     let path = match file {
         Some(p) => p,
-        None => newest_in(&log_dir()).context(p(
+        None => newest_in(&crate::log::log_dir()).context(p(
             "no session log in the state dir; record with the L key or --log first, or specify a file: ltop --replay <session-*.jsonl>",
             "state 目录里没有会话日志；先用 `L` 键或 --log 录制，或指定文件：ltop --replay <session-*.jsonl>",
         ))?,
@@ -130,12 +130,16 @@ pub fn load_file(path: &std::path::Path) -> Result<Session> {
     // (pid, name) -> previous snapshot counters
     let mut prev: HashMap<(u32, String), [u64; 6]> = HashMap::new();
     let mut prev_ts: Option<u64> = None;
-    let mut interval_total: Vec<(u64, u64)> = Vec::new(); // (ts, net bytes in interval)
+    let mut interval_total: Vec<(u64, u64, u64)> = Vec::new(); // (ts, net bytes, dt)
 
     for line in rd.lines() {
         let line = line?;
-        if line.contains("\"session_start\"") {
-            ses.start = num(&line, "session_start").unwrap_or(0);
+        // 两种表头:TUI monlog 写 session_start,watch 写 watch_start;
+        // 只认旧的会让 watch 产物显示 host —/1970/间隔 0
+        if line.contains("\"session_start\"") || line.contains("\"watch_start\"") {
+            ses.start = num(&line, "session_start")
+                .or_else(|| num(&line, "watch_start"))
+                .unwrap_or(0);
             if let Some(h) = text(&line, "host") {
                 ses.host = h;
             }
@@ -198,17 +202,18 @@ pub fn load_file(path: &std::path::Path) -> Result<Session> {
             prev.insert(key, cur);
         }
         if dt > 0 {
-            interval_total.push((ts, net_sum));
+            interval_total.push((ts, net_sum, dt));
         }
         prev_ts = Some(ts);
     }
-    interval_total.sort_by_key(|&(_, bytes)| std::cmp::Reverse(bytes));
+    interval_total.sort_by_key(|&(_, bytes, _)| std::cmp::Reverse(bytes));
     ses.busy = interval_total
         .into_iter()
         .take(3)
-        .map(|(ts, bytes)| {
-            let rate = bytes as f64 / ses.interval_s.max(1) as f64;
-            (ts, rate)
+        .map(|(ts, bytes, dt)| {
+            // 分母用实际 dt:暂停/采集停滞区间的累计计数按名义 interval
+            // 除会成倍虚高,也与逐进程 peak_net_bps(实际 dt)口径相左
+            (ts, bytes as f64 / dt.max(1) as f64)
         })
         .collect();
     ses.procs.sort_by_key(|a| std::cmp::Reverse(a.total()));
@@ -220,29 +225,15 @@ pub fn newest_in(dir: &std::path::Path) -> Option<PathBuf> {
     for e in std::fs::read_dir(dir).ok()?.flatten() {
         let p = e.path();
         let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        if let Some(ts) = name
-            .strip_prefix("session-")
-            .and_then(|r| r.strip_suffix(".jsonl"))
-            .and_then(|r| r.parse::<u64>().ok())
-        {
+        // 三类前缀都算会话日志:TUI monlog(ltop-log-*)、watch 采集
+        // (ltop-session-*)、旧版裸 session-*;时间戳可带 -<pid> 后缀
+        if let Some(ts) = crate::log::session_file_ts(name) {
             if best.as_ref().is_none_or(|(b, _)| ts > *b) {
                 best = Some((ts, p));
             }
         }
     }
     best.map(|(_, p)| p)
-}
-
-fn log_dir() -> PathBuf {
-    if let Ok(x) = std::env::var("XDG_STATE_HOME") {
-        if !x.is_empty() {
-            return PathBuf::from(x).join("ltop");
-        }
-    }
-    match std::env::var("HOME") {
-        Ok(h) if !h.is_empty() => PathBuf::from(h).join(".local/state/ltop"),
-        _ => PathBuf::from("/tmp/ltop"),
-    }
 }
 
 struct SnapProc {
@@ -328,8 +319,13 @@ fn decode_proc(obj: &str) -> Option<SnapProc> {
         net_sent: num(obj, "net_sent").unwrap_or(0),
         udp_recv: num(obj, "udp_recv").unwrap_or(0),
         udp_sent: num(obj, "udp_sent").unwrap_or(0),
-        disk_r: num(obj, "disk_r").unwrap_or(0),
-        disk_w: num(obj, "disk_w").unwrap_or(0),
+        // schema 快照行写 disk_read/disk_written;旧版手写行用 disk_r/disk_w
+        disk_r: num(obj, "disk_read")
+            .or_else(|| num(obj, "disk_r"))
+            .unwrap_or(0),
+        disk_w: num(obj, "disk_written")
+            .or_else(|| num(obj, "disk_w"))
+            .unwrap_or(0),
     })
 }
 
@@ -638,5 +634,57 @@ mod tests {
         assert_eq!(csv_field("plain"), "plain");
         assert_eq!(csv_field("a,b"), "\"a,b\"");
         assert_eq!(csv_field("say\"hi"), "\"say\"\"hi\"");
+    }
+
+    /// schema 快照行(serde 序列化)的新键名:表头 watch_start、盘挂
+    /// disk_read/disk_written。0.2.6 及之前 replay 只认旧键,自家 watch
+    /// 产物显示 1970/盘挂全 0,而旧格式 fixture 全绿——对这类回归失明
+    #[test]
+    fn parses_current_schema_keys() {
+        let cur = concat!(
+            "{\"watch_start\":1700000000,\"host\":\"lima\",\"interval_s\":5,\"proc\":null,\"duration_s\":null}\n",
+            "{\"ts\":1700000005,\"procs\":[",
+            "{\"pid\":100,\"name\":\"dl\",\"net_recv\":1000,\"net_sent\":200,",
+            "\"disk_read\":500,\"disk_written\":70}]}\n",
+            "{\"ts\":1700000010,\"procs\":[",
+            "{\"pid\":100,\"name\":\"dl\",\"net_recv\":3000,\"net_sent\":600,",
+            "\"disk_read\":1500,\"disk_written\":270}]}\n",
+        );
+        let ses = load_str("cur_schema", cur);
+        assert_eq!(ses.host, "lima", "watch 头的 host 必须解析");
+        assert_eq!(ses.start, 1700000000, "watch_start 必须被识别(0 = 显示 1970)");
+        assert_eq!(ses.interval_s, 5);
+        let dl = ses.procs.iter().find(|a| a.name == "dl").unwrap();
+        assert_eq!(dl.disk_r, 1000, "disk_read 差分");
+        assert_eq!(dl.disk_w, 200, "disk_written 差分");
+        assert_eq!(dl.net_recv, 2000);
+    }
+
+    /// 端到端:watch 的真实输出直接可回放(表头 + 快照行全键兼容),
+    /// 而不是只对着手写 fixture 自证
+    #[test]
+    fn replays_real_watch_output() {
+        let dir = std::env::temp_dir().join(format!("ltop-replay-fixture-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let out = dir.join("ltop-session-fixture.jsonl");
+        crate::watch::execute(
+            crate::watch::WatchOpts {
+                interval: std::time::Duration::from_secs(1),
+                duration: Some(std::time::Duration::from_secs(2)),
+                out: Some(out.clone()),
+                stop: None,
+                proc: None,
+                retention_days: 0,
+            },
+            true,
+        )
+        .unwrap();
+        let ses = load_file(&out).unwrap();
+        assert!(ses.start > 0, "watch_start 头必须被识别(0 = 显示 1970)");
+        assert!(!ses.host.is_empty(), "host 必须从 watch 头解析");
+        assert_eq!(ses.interval_s, 1);
+        assert!(ses.samples >= 2, "快照行必须被解析");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

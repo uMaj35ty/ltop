@@ -29,7 +29,7 @@ For "watch this for 10 minutes, then report", **do not poll** `--json`
 
 ```bash
 ltop watch --duration 10m --proc chrome    # headless, crash-safe, no root
-ltop report ~/.local/state/ltop/ltop-session-*.jsonl --json
+ltop report <path watch printed> --json    # report takes a single file
 ```
 
 `report --json` returns ~2 KB with exact numbers — window sums (last

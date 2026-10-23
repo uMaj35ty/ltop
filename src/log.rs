@@ -71,7 +71,9 @@ impl MonLog {
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
-        let path = dir.join(format!("ltop-log-{secs}.jsonl"));
+        // -<pid> 后缀:同秒双实例不再互相截断(截断者继续写旧偏移会产出
+        // NUL 稀疏文件,report 计为 skipped,静默腐蚀)
+        let path = dir.join(format!("ltop-log-{secs}-{}.jsonl", std::process::id()));
         let Ok(f) = File::create(&path) else {
             return None;
         };
@@ -136,14 +138,24 @@ pub(crate) fn log_dir() -> PathBuf {
     }
 }
 
-/// unix ts from a `<prefix>-<ts>.jsonl` file name(新旧前缀兼容)
+/// unix ts from a `<prefix>-<ts>[-<pid>].jsonl` file name(新旧名兼容)。
+/// monlog 清理只认 ltop-log-/session-(watch 产物 ltop-session-* 不归它管)
 fn session_ts(name: &str) -> Option<u64> {
-    // 新前缀 ltop-log-;旧 session- 前缀文件仍可读/清理
-    let name = name
-        .strip_prefix("ltop-log-")
-        .or_else(|| name.strip_prefix("session-"))?
+    parse_prefixed_ts(name, &["ltop-log-", "session-"])
+}
+
+/// replay 的会话文件发现:三类前缀都算(TUI monlog、watch 采集、旧版裸名)
+pub(crate) fn session_file_ts(name: &str) -> Option<u64> {
+    parse_prefixed_ts(name, &["ltop-log-", "ltop-session-", "session-"])
+}
+
+fn parse_prefixed_ts(name: &str, prefixes: &[&str]) -> Option<u64> {
+    let stem = prefixes
+        .iter()
+        .find_map(|p| name.strip_prefix(p))?
         .strip_suffix(".jsonl")?;
-    name.parse::<u64>().ok()
+    // 新文件名带 -<pid> 后缀(同秒碰撞防护);旧名是纯秒
+    stem.split('-').next()?.parse::<u64>().ok()
 }
 
 pub(crate) fn json_str(s: &str) -> String {
@@ -167,8 +179,20 @@ mod tests {
     fn parses_session_file_names() {
         assert_eq!(session_ts("session-1792368483.jsonl"), Some(1792368483));
         assert_eq!(session_ts("ltop-log-1792368483.jsonl"), Some(1792368483));
+        // -<pid> 后缀(同秒碰撞防护)与纯秒旧名都认
+        assert_eq!(session_ts("ltop-log-1792368483-1234.jsonl"), Some(1792368483));
         assert_eq!(session_ts("session-abc.jsonl"), None);
         assert_eq!(session_ts("other.jsonl"), None);
         assert_eq!(session_ts("session-12.txt"), None);
+        // monlog 清理不碰 watch 采集产物
+        assert_eq!(session_ts("ltop-session-1792368483.jsonl"), None);
+        // replay 发现:三类前缀都认
+        assert_eq!(
+            session_file_ts("ltop-session-1792368483-99.jsonl"),
+            Some(1792368483)
+        );
+        assert_eq!(session_file_ts("ltop-log-1792368483.jsonl"), Some(1792368483));
+        assert_eq!(session_file_ts("session-1792368483.jsonl"), Some(1792368483));
+        assert_eq!(session_file_ts("other.jsonl"), None);
     }
 }
