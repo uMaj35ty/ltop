@@ -734,42 +734,55 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
         },
         MenuState::Graphs(sel) => match code {
             KeyCode::Up | KeyCode::Char('k') => app.menu = MenuState::Graphs(sel.saturating_sub(1)),
-            KeyCode::Down | KeyCode::Char('j') => app.menu = MenuState::Graphs((sel + 1).min(2)),
+            KeyCode::Down | KeyCode::Char('j') => app.menu = MenuState::Graphs((sel + 1).min(4)),
             // 行改值:Right/l=下一模式,Left/h=上一模式(Block 仅在此可达)
             KeyCode::Right | KeyCode::Char('l') => match sel {
                 0 => app.graph_net = app.graph_net.next_with_block(),
                 1 => app.graph_disk = app.graph_disk.next_with_block(),
-                _ => {
+                2 => {
                     let s = app.graph_net.next_with_block();
                     app.graph_net = s;
                     app.graph_disk = s;
                 }
+                3 => app.net_graph_coupled = !app.net_graph_coupled,
+                4 => app.net_graph_scale_ratio = next_scale_ratio(app.net_graph_scale_ratio),
+                _ => {}
             },
             KeyCode::Left | KeyCode::Char('h') => match sel {
                 0 => app.graph_net = app.graph_net.prev_with_block(),
                 1 => app.graph_disk = app.graph_disk.prev_with_block(),
-                _ => {
+                2 => {
                     let s = app.graph_net.prev_with_block();
                     app.graph_net = s;
                     app.graph_disk = s;
                 }
+                3 => app.net_graph_coupled = !app.net_graph_coupled,
+                4 => app.net_graph_scale_ratio = prev_scale_ratio(app.net_graph_scale_ratio),
+                _ => {}
             },
             KeyCode::Enter => match sel {
                 0 => app.graph_net = app.graph_net.next_with_block(),
                 1 => app.graph_disk = app.graph_disk.next_with_block(),
-                _ => {
+                2 => {
                     let s = app.graph_net.next_with_block();
                     app.graph_net = s;
                     app.graph_disk = s;
                 }
+                3 => app.net_graph_coupled = !app.net_graph_coupled,
+                4 => app.net_graph_scale_ratio = next_scale_ratio(app.net_graph_scale_ratio),
+                _ => {}
             },
-            // n/d/a 直达键保留(下一模式)
+            // n/d/a 直达键保留(下一模式);c/r 跳到耦合缩放行
             KeyCode::Char('n') => app.graph_net = app.graph_net.next_with_block(),
             KeyCode::Char('d') => app.graph_disk = app.graph_disk.next_with_block(),
             KeyCode::Char('a') => {
                 let s = app.graph_net.next_with_block();
                 app.graph_net = s;
                 app.graph_disk = s;
+            }
+            KeyCode::Char('c') => app.net_graph_coupled = !app.net_graph_coupled,
+            KeyCode::Char('r') => {
+                app.net_graph_scale_ratio = next_scale_ratio(app.net_graph_scale_ratio)
             }
             KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('m') => app.menu = MenuState::None,
             _ => {}
@@ -895,6 +908,25 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
             _ => {}
         },
     }
+}
+
+const SCALE_STEPS: [u32; 4] = [2, 5, 10, 20];
+
+fn next_scale_ratio(cur: u32) -> u32 {
+    SCALE_STEPS
+        .iter()
+        .find(|&&s| s > cur)
+        .copied()
+        .unwrap_or(SCALE_STEPS[0])
+}
+
+fn prev_scale_ratio(cur: u32) -> u32 {
+    SCALE_STEPS
+        .iter()
+        .rev()
+        .find(|&&s| s < cur)
+        .copied()
+        .unwrap_or(*SCALE_STEPS.last().unwrap())
 }
 
 fn handle_mouse(app: &mut App, m: &crossterm::event::MouseEvent) {
