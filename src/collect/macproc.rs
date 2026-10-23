@@ -219,6 +219,10 @@ pub fn cmdline(pid: u32) -> Option<Vec<String>> {
 #[cfg(target_os = "macos")]
 pub fn socket_map() -> HashMap<u64, (u32, String)> {
     let mut out = HashMap::new();
+    // kern_proc_all 的 p_comm 兜底:proc_pidpath 对部分 launchd 常驻进程
+    // (如 brew services 的 syncthing)返回 0,若不回退 CONNS 分组名显示 "?"
+    let pid_names: HashMap<u32, String> =
+        list_pids().into_iter().map(|p| (p.pid, p.comm)).collect();
     // 首调(NULL, 0)返回 pid 个数;重调的 buffersize 按“字节”解释
     let pid_count = unsafe { proc_listallpids(std::ptr::null_mut(), 0) };
     if pid_count <= 0 {
@@ -271,8 +275,14 @@ pub fn socket_map() -> HashMap<u64, (u32, String)> {
             }
             if let Some((proto, local, remote)) = socket_tuple(&buf) {
                 let ino = flow_inode(proto, &local, &remote);
-                out.entry(ino)
-                    .or_insert_with(|| (pid as u32, comm.clone().unwrap_or_else(|| "?".into())));
+                out.entry(ino).or_insert_with(|| {
+                    (
+                        pid as u32,
+                        comm.clone()
+                            .or_else(|| pid_names.get(&(pid as u32)).cloned())
+                            .unwrap_or_else(|| "?".into()),
+                    )
+                });
             }
         }
     }
