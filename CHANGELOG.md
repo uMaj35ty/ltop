@@ -3,7 +3,7 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.2.10] - 2026-10-24
 
 Tech-debt and QoL line: long-window `report` no longer loads whole capture
 files, real MAC addresses on macOS behind the 27 privacy gate, ledger and
