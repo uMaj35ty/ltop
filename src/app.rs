@@ -315,6 +315,7 @@ impl App {
     /// Snapshot current user-adjustable state into the config file
     pub fn save_config(&self) {
         Config {
+            extra: Vec::new(),
             lang: self.lang,
             layout: self.layout,
             tick_ms: self.tick.as_millis() as u64,
