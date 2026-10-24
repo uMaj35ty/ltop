@@ -290,16 +290,53 @@ fn diff_procs(
     out
 }
 
+/// 单进程有界执行:超时 SIGKILL 并按失败返回。nettop 卡住(黑屏节能
+/// 唤醒后首个调用可达秒级)时不再无限阻塞采样线程——`Command::output()`
+/// 无超时,会把整个 UI tick 连同 CONNS/PROCS 一起挂死
+#[cfg(target_os = "macos")]
+fn run_capped(
+    cmd: &mut std::process::Command,
+    cap: std::time::Duration,
+) -> std::io::Result<String> {
+    use std::sync::mpsc;
+    let child = cmd
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()?;
+    let pid = child.id() as i32;
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(match child.wait_with_output() {
+            Ok(o) if o.status.success() => Ok(String::from_utf8_lossy(&o.stdout).into_owned()),
+            Ok(_) => Err(std::io::Error::other("nettop failed")),
+            Err(e) => Err(e),
+        });
+    });
+    match rx.recv_timeout(cap) {
+        Ok(res) => res,
+        Err(_) => {
+            unsafe {
+                libc::kill(pid, libc::SIGKILL);
+            }
+            Err(std::io::Error::other("nettop timed out"))
+        }
+    }
+}
+
+/// nettop 单次调用的预算:唤醒后的首个调用偏慢,给足余量但仍封顶;
+/// 超时按采集失败处理(清空+stale 徽标),下一 tick 自愈重试
+#[cfg(target_os = "macos")]
+const NETTOP_CAP: std::time::Duration = std::time::Duration::from_millis(1500);
+
 #[cfg(target_os = "macos")]
 fn dump_mode(extra: &[&str]) -> std::io::Result<(Vec<NetProcRow>, Vec<NetFlowRow>)> {
-    let out = std::process::Command::new("nettop")
-        .args(["-L", "1", "-x", "-n"])
-        .args(extra)
-        .output()?;
-    if !out.status.success() {
-        return Err(std::io::Error::other("nettop failed"));
-    }
-    Ok(parse_dump(&String::from_utf8_lossy(&out.stdout)))
+    let out = run_capped(
+        std::process::Command::new("nettop")
+            .args(["-L", "1", "-x", "-n"])
+            .args(extra),
+        NETTOP_CAP,
+    )?;
+    Ok(parse_dump(&out))
 }
 
 #[cfg(test)]

@@ -27,6 +27,8 @@ pub struct IfaceRates {
 pub struct NetCollector {
     last_totals: HashMap<String, (u64, u64, Instant)>,
     base_totals: HashMap<String, (u64, u64)>,
+    /// 接口连续缺席轮数(宽限淘汰计数)
+    missed_rounds: HashMap<String, u32>,
     pub ifaces: BTreeMap<String, IfaceInfo>,
     pub rates: HashMap<String, IfaceRates>,
     pub history_rx: HashMap<String, VecDeque<f64>>,
@@ -34,11 +36,17 @@ pub struct NetCollector {
     pub selected: Option<String>,
 }
 
+/// 接口从本轮采集中消失后,保留其速率/历史/选中的宽限轮数:
+/// mac netstat 预算偶发超时、瞬时采集失败都不再清空图表或切换选中
+/// (旧逻辑单轮缺席即整组状态清除——图表无端重置的直接来源)
+const IFACE_GRACE_ROUNDS: u32 = 20;
+
 impl NetCollector {
     pub fn new() -> Self {
         Self {
             last_totals: HashMap::new(),
             base_totals: HashMap::new(),
+            missed_rounds: HashMap::new(),
             ifaces: BTreeMap::new(),
             rates: HashMap::new(),
             history_rx: HashMap::new(),
@@ -49,38 +57,45 @@ impl NetCollector {
 
     pub fn sample(&mut self) {
         let now = Instant::now();
-        let (entries, mut infos) = sample_entries().unwrap_or_default();
-
-        if let Ok(list) = get_if_addrs() {
-            for ifa in list {
-                let s = match ifa.addr {
-                    IfAddr::V4(v4) => {
-                        format!("{}/{}", v4.ip, u32::from(v4.netmask).count_ones())
+        // 整轮失败:历史/速率/选中原样保留——旧行为会被 retain 清空,
+        // 图表无端重置、alive Σ 归零
+        if let Ok((entries, mut infos)) = sample_entries() {
+            if let Ok(list) = get_if_addrs() {
+                for ifa in list {
+                    let s = match ifa.addr {
+                        IfAddr::V4(v4) => {
+                            format!("{}/{}", v4.ip, u32::from(v4.netmask).count_ones())
+                        }
+                        IfAddr::V6(v6) => {
+                            let prefix: u32 =
+                                v6.netmask.octets().iter().map(|b| b.count_ones()).sum();
+                            format!("{}/{}", v6.ip, prefix)
+                        }
+                    };
+                    if let Some(info) = infos.get_mut(&ifa.name) {
+                        info.addrs.push(s);
                     }
-                    IfAddr::V6(v6) => {
-                        let prefix: u32 = v6.netmask.octets().iter().map(|b| b.count_ones()).sum();
-                        format!("{}/{}", v6.ip, prefix)
-                    }
-                };
-                if let Some(info) = infos.get_mut(&ifa.name) {
-                    info.addrs.push(s);
                 }
             }
+            for info in infos.values_mut() {
+                info.addrs.sort();
+            }
+            self.ifaces = infos;
+            self.ingest(entries, now);
         }
-        for info in infos.values_mut() {
-            info.addrs.sort();
-        }
-        self.ifaces = infos;
+    }
 
-        let mut new_last = HashMap::new();
+    /// 一轮采集计数落地。entries 为空(mac netstat 预算内全员超时)视同
+    /// 整轮失败:原样保留,不推历史、不清状态
+    fn ingest(&mut self, entries: Vec<DevCounters>, now: Instant) {
+        if entries.is_empty() {
+            return;
+        }
+
         for (name, rx, tx, ..) in entries.iter().cloned() {
-            new_last.insert(name, (rx, tx, now));
-        }
-
-        for (name, (rx, tx, _)) in &new_last {
-            self.base_totals.entry(name.clone()).or_insert((*rx, *tx));
-            let (brx, btx) = self.base_totals[name];
-            if let Some(&(prx, ptx, pt)) = self.last_totals.get(name) {
+            self.base_totals.entry(name.clone()).or_insert((rx, tx));
+            let (brx, btx) = self.base_totals[&name];
+            if let Some(&(prx, ptx, pt)) = self.last_totals.get(&name) {
                 let dt = now.duration_since(pt).as_secs_f64().max(1e-6);
                 let rxb = rx.saturating_sub(prx) as f64 / dt;
                 let txb = tx.saturating_sub(ptx) as f64 / dt;
@@ -96,14 +111,35 @@ impl NetCollector {
                     },
                 );
             }
+            // 本轮计数写回:下一轮差分的基线(缺席轮不动它,重现为跨
+            // 缺席期的真实差分)
+            self.last_totals.insert(name, (rx, tx, now));
         }
 
-        // drop state for interfaces that disappeared
-        self.last_totals = new_last;
-        let live: Vec<String> = self.last_totals.keys().cloned().collect();
-        self.rates.retain(|k, _| live.contains(k));
-        self.history_rx.retain(|k, _| live.contains(k));
-        self.history_tx.retain(|k, _| live.contains(k));
+        // 宽限淘汰:本轮出现的清零缺席计数,缺席的 +1;连续超限才淘汰
+        // 状态、历史与 base(宽限内的缺席接口速率/图表原样冻结)
+        let present: std::collections::HashSet<String> =
+            entries.iter().map(|(n, ..)| n.clone()).collect();
+        let mut expired: Vec<String> = Vec::new();
+        for name in self.last_totals.keys() {
+            if present.contains(name) {
+                self.missed_rounds.remove(name);
+            } else {
+                let m = self.missed_rounds.entry(name.clone()).or_insert(0);
+                *m += 1;
+                if *m > IFACE_GRACE_ROUNDS {
+                    expired.push(name.clone());
+                }
+            }
+        }
+        for name in &expired {
+            self.last_totals.remove(name);
+            self.rates.remove(name);
+            self.history_rx.remove(name);
+            self.history_tx.remove(name);
+            self.base_totals.remove(name);
+            self.missed_rounds.remove(name);
+        }
 
         self.ensure_selected();
     }
@@ -483,5 +519,70 @@ utun7      1380  <Link#41>   <#41>                     0     0           0      
         assert!(parse_netstat_ib("Name Mtu Network").is_empty());
         // 数值列非数字的行跳过
         assert!(parse_netstat_ib("en0 1500 <Link#1> x a b c d e f g").is_empty());
+    }
+
+    fn dev(name: &str, rx: u64, tx: u64) -> DevCounters {
+        (name.to_string(), rx, tx, 0, 0)
+    }
+
+    /// 空轮(mac netstat 预算内全员超时)保留全部状态:不推历史、不清
+    /// 速率与选中——旧行为 retain 空 live 会把图表整个清掉
+    #[test]
+    fn empty_round_keeps_everything() {
+        let mut n = NetCollector::new();
+        n.ingest(vec![dev("en0", 1000, 2000)], Instant::now());
+        n.ingest(vec![dev("en0", 2000, 2500)], Instant::now());
+        let len = n.history_rx.get("en0").unwrap().len();
+        assert_eq!(len, 1);
+        n.ingest(vec![], Instant::now());
+        assert_eq!(
+            n.history_rx.get("en0").unwrap().len(),
+            len,
+            "空轮不得推进或清空历史"
+        );
+        assert!(n.rates.contains_key("en0"), "空轮不得清速率");
+        assert_eq!(n.selected.as_deref(), Some("en0"), "空轮不得换选中");
+    }
+
+    /// 宽限内的缺席:状态冻结不丢;重现后差分跨缺席期继续(恰好多一行)
+    #[test]
+    fn transient_miss_freezes_then_resumes() {
+        let mut n = NetCollector::new();
+        n.ingest(vec![dev("en0", 0, 0)], Instant::now());
+        for i in 1..=3u64 {
+            n.ingest(vec![dev("en0", i * 1000, 0)], Instant::now());
+        }
+        assert_eq!(n.history_rx.get("en0").unwrap().len(), 3);
+        // en0 缺席 3 轮(只有 en1 在场):宽限内历史/速率/选中全保留
+        for _ in 0..3 {
+            n.ingest(vec![dev("en1", 0, 0)], Instant::now());
+        }
+        assert_eq!(n.history_rx.get("en0").unwrap().len(), 3, "缺席不清历史");
+        assert!(n.rates.contains_key("en0"), "缺席不清速率");
+        assert_eq!(n.selected.as_deref(), Some("en0"), "缺席不换选中");
+        // 重现:差分跨缺席期,恰好多一行
+        n.ingest(vec![dev("en1", 0, 0), dev("en0", 10_000, 0)], Instant::now());
+        assert_eq!(n.history_rx.get("en0").unwrap().len(), 4);
+        assert_eq!(n.missed_rounds.get("en0"), None, "重现清缺席计数");
+    }
+
+    /// 连续缺席超宽限才淘汰:状态、历史与 base_totals 一并清(顺带修
+    /// base 从不修剪的旧账)
+    #[test]
+    fn sustained_absence_expires_after_grace() {
+        let mut n = NetCollector::new();
+        n.ingest(vec![dev("en0", 0, 0)], Instant::now());
+        for i in 1..=3u64 {
+            n.ingest(vec![dev("en0", i * 1000, 0)], Instant::now());
+        }
+        assert!(n.base_totals.contains_key("en0"));
+        for _ in 0..(IFACE_GRACE_ROUNDS + 1) {
+            n.ingest(vec![dev("en1", 0, 0)], Instant::now());
+        }
+        assert!(!n.history_rx.contains_key("en0"), "超宽限淘汰历史");
+        assert!(!n.rates.contains_key("en0"));
+        assert!(!n.last_totals.contains_key("en0"));
+        assert!(!n.base_totals.contains_key("en0"), "base 一并修剪");
+        assert_eq!(n.selected.as_deref(), Some("en1"), "淘汰后重选在场接口");
     }
 }

@@ -110,6 +110,64 @@ Data scopes differ by design (PROCS = payload, NET box = NIC bytes) — see in-a
     )
 }
 
+/// mac:声明用户主动型活动禁用 App Nap。挂机/节能时系统会挂起"空闲"
+/// 进程并合并定时器——tick 停摆,唤醒后子进程采样(netstat/nettop)连锁
+/// 失效,NET/CONNS 清零僵死。该声明允许系统照常睡眠,但本进程不因空闲
+/// 被节流;活动持续整个进程生命周期,无需手动结束
+#[cfg(target_os = "macos")]
+fn disable_app_nap() {
+    use std::ffi::c_void;
+    use std::os::raw::c_char;
+    #[link(name = "objc", kind = "dylib")]
+    extern "C" {
+        fn objc_getClass(name: *const c_char) -> *mut c_void;
+        fn sel_registerName(name: *const c_char) -> *mut c_void;
+        fn objc_msgSend();
+    }
+    type Id = *mut c_void;
+    unsafe {
+        // 本crate只链 IOKit(带 CoreFoundation):dlopen 保证 Foundation 在场
+        libc::dlopen(
+            b"/System/Library/Frameworks/Foundation.framework/Foundation\0".as_ptr()
+                as *const c_char,
+            libc::RTLD_LAZY,
+        );
+        let cls = objc_getClass(c"NSProcessInfo".as_ptr());
+        if cls.is_null() {
+            return;
+        }
+        let msg2: unsafe extern "C" fn(Id, Id) -> Id =
+            std::mem::transmute(objc_msgSend as *const ());
+        let msg3: unsafe extern "C" fn(Id, Id, *const c_char) -> Id =
+            std::mem::transmute(objc_msgSend as *const ());
+        let msg4: unsafe extern "C" fn(Id, Id, u64, Id) -> u64 =
+            std::mem::transmute(objc_msgSend as *const ());
+        let pi = msg2(cls, sel_registerName(c"processInfo".as_ptr()));
+        if pi.is_null() {
+            return;
+        }
+        let nsstr = objc_getClass(c"NSString".as_ptr());
+        if nsstr.is_null() {
+            return;
+        }
+        let reason = msg3(
+            nsstr,
+            sel_registerName(c"stringWithUTF8String:".as_ptr()),
+            c"ltop monitoring tick".as_ptr(),
+        );
+        if reason.is_null() {
+            return;
+        }
+        // NSActivityUserInitiatedLettingSystemSleepDisabled = 1 << 21
+        let _token = msg4(
+            pi,
+            sel_registerName(c"beginActivityWithOptions:reason:".as_ptr()),
+            1 << 21,
+            reason,
+        );
+    }
+}
+
 /// eBPF 探针的 PT_REGS 寄存器映射与各数据源都按 x86_64 与 aarch64 双架构
 /// 覆盖;其他架构启动即明确报错,而不是静默产出错账
 pub fn arch_guard() -> Result<()> {
@@ -137,6 +195,8 @@ pub fn cli_main() -> Result<()> {
     unsafe {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }
+    #[cfg(target_os = "macos")]
+    disable_app_nap();
     let args: Vec<String> = std::env::args().collect();
     // 子命令最先分派:各自的 --help/参数校验在各自模块(help/version
     // 通用短路在下方,只管 TUI 路径的旗标)

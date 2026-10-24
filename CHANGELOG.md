@@ -3,6 +3,45 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.8] - 2026-10-24
+
+macOS resilience for display sleep / long idle, plus chart stability —
+NET/CONNS no longer zero out and wedge after idle, stalled subprocesses can
+no longer freeze a sampling tick, and rate charts no longer reset on a
+transient sampling miss.
+
+### Fixed
+
+- **NET/CONNS no longer die after display sleep or long idle (macOS)**
+  - App Nap is disabled for the whole process (NSProcessInfo user-initiated
+    activity, letting the system still sleep): an idle ltop is no longer
+    throttled or suspended, so the sampling tick keeps running across idle
+    periods
+  - `nettop` invocations now run under a 1.5 s budget with SIGKILL on
+    overrun — `Command::output()` had no timeout, so a single stalled nettop
+    (the first call after wake can take seconds) froze the entire sampling
+    tick, taking CONNS and PROCS with it; failure clears the rows and lights
+    the stale badge, and the next tick self-heals
+  - NET interface state survives a missed sampling round (per-interface
+    `netstat` budget timeout): rates, chart history and the alive Σ are kept
+    frozen instead of being zeroed
+- **Rate charts no longer reset on a transient sampling miss (NET box)**
+  - root cause: interface-state retention wiped everything absent from the
+    current round — one missed round erased the chart history AND dropped
+    the selected interface, re-picking a different one (the "trace suddenly
+    disappears and resets / left side vanishes while a new chart jumps in"
+    symptom)
+  - a wholly failed round now changes nothing; a single interface missing
+    for up to 20 rounds keeps its history frozen with the selection stable,
+    and re-joins with a true counter delta across the gap
+  - sustained absence (> 20 rounds) still evicts state — including
+    `base_totals`, which previously never pruned
+
+### Internal
+
+- Tests: 146 passing (141 in 0.2.7), zero warnings on Linux and macOS
+  builds
+
 ## [0.2.7] - 2026-10-24
 
 macOS bug fixes plus TUI experience changes — grouped settings panel with
