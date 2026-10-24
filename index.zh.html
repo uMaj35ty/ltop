@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ltop — 流量去哪了，谁在吃磁盘？</title>
+<meta name="description" content="ltop 是一款一屏揪出吃带宽/吃磁盘进程的终端监控：按进程的网络与磁盘 I/O、逐连接流量、局域网邻居。面向开发者、系统管理员和折腾爱好者。主程序免 root，可选 eBPF 助手补齐精确的 TCP/UDP 字节计费。">
+<meta property="og:title" content="ltop — 流量去哪了，谁在吃磁盘？">
+<meta property="og:description" content="按进程/按连接的网络与磁盘计费、带流量的局域网邻居、面向 AI 的数据面（watch + report，省 ~97% token）。">
+<meta property="og:image" content="assets/screenshots/main.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0e14'/%3E%3Crect x='6' y='6' width='6' height='20' fill='%233fd06c'/%3E%3Crect x='15' y='14' width='4' height='12' fill='%23ff5c7a'/%3E%3Crect x='22' y='10' width='4' height='16' fill='%2356c8ff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css?v=10">
+</head>
+<body>
+
+<nav>
+  <div class="wrap nav-inner">
+    <a class="logo" href="#top"><b>l</b>top</a>
+    <div class="links">
+      <a href="#features">功能</a>
+      <a href="#quickstart">快速上手</a>
+      <a href="#roadmap" class="docsy">路线图</a>
+      <a href="gallery.zh.html" class="docsy">画廊</a>
+      
+      <a href="skills.zh.html" class="docsy">Skills</a>
+      <a href="docs/zh/" class="docsy">文档</a>
+          </div>
+      <span class="nav-row2"><a href="https://github.com/uMaj35ty/ltop" class="gh">GitHub ↗</a><a href="index.html" class="lang" hreflang="en">English</a></span>
+  </div>
+</nav>
+
+<header id="top">
+  <div class="wrap">
+    <div class="boxstrip" aria-hidden="true">
+      <span class="on">NET</span><span class="on">LAN</span><span class="on">DISK I/O</span><span class="on">DISKS</span><span class="on">CONNS</span><span class="on">PROCS</span>
+    </div>
+    <h1><span class="rx">流量</span>去哪了？谁在<span class="tx">吃</span>你的磁盘？</h1>
+    <p class="lead">
+      ltop 一屏揪出吃带宽、吃磁盘的进程——<em>按进程、按连接、按局域网对端</em>。
+    </p>
+    <p class="tagline">
+      面向软件与游戏开发者、系统管理员和折腾爱好者的终端监控。主程序免 root；
+      可选 eBPF 助手补齐精确的 TCP/UDP 字节计费。
+    </p>
+    <div class="badges">
+      <a href="https://crates.io/crates/ltop"><img alt="Crates.io" src="https://img.shields.io/crates/v/ltop?logo=rust&logoColor=white&labelColor=1d2632&color=3fd06c"></a>
+      <a href="https://github.com/uMaj35ty/ltop/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/uMaj35ty/ltop/ci.yml?branch=master&labelColor=1d2632&color=56c8ff"></a>
+      <img alt="License" src="https://img.shields.io/badge/license-MIT-1d2632?labelColor=1d2632">
+      <img alt="Platforms" src="https://img.shields.io/badge/platform-linux%20%7C%20macOS%20%C2%B7%20x86__64%20%7C%20aarch64-1d2632?labelColor=1d2632&color=bd93f9">
+    </div>
+
+    <div class="install">
+      <div class="bar"><i class="r"></i><i class="y"></i><i class="g"></i><span class="t">快速安装</span></div>
+      <div class="row">
+        <code><span class="p">$</span> brew install uMaj35ty/ltop/ltop    <span class="c"># macOS 与 Linux · 预编译</span></code>
+        <button class="copy" data-copy="brew install uMaj35ty/ltop/ltop">复制</button>
+      </div>
+      <div class="row">
+        <code><span class="p">$</span> cargo install ltop              <span class="c"># 源码编译 · Rust stable</span></code>
+        <button class="copy" data-copy="cargo install ltop">复制</button>
+      </div>
+      <div class="row">
+        <code><span class="p">$</span> <span class="c"># 或 tarball（x86_64/aarch64）：github.com/uMaj35ty/ltop/releases</span></code>
+      </div>
+    </div>
+
+    <div class="install sub">
+      <div class="bar"><i class="r"></i><i class="y"></i><i class="g"></i><span class="t lx">仅 Linux · 可选 eBPF 计费（每进程/每连接字节）</span></div>
+      <div class="row">
+        <code><span class="p">$</span> sudo cp ltop-bpf /usr/local/bin/        <span class="c"># 与 TUI 同一 release</span></code>
+        <button class="copy" data-copy="sudo cp ltop-bpf /usr/local/bin/">复制</button>
+      </div>
+      <div class="row">
+        <code><span class="p">$</span> sudo cp ltop-bpf.service /etc/systemd/system/</code>
+        <button class="copy" data-copy="sudo cp ltop-bpf.service /etc/systemd/system/">复制</button>
+      </div>
+      <div class="row">
+        <code><span class="p">$</span> sudo systemctl enable --now ltop-bpf</code>
+        <button class="copy" data-copy="sudo systemctl enable --now ltop-bpf">复制</button>
+      </div>
+    </div>
+
+    <div class="ctas">
+      <a class="btn primary" href="docs/zh/quickstart.html">快速上手 →</a>
+      <a class="btn" href="docs/zh/">阅读文档</a>
+      <a class="btn" href="https://github.com/uMaj35ty/ltop">源码在 GitHub</a>
+    </div>
+
+    <figure class="hero-shot">
+      <div class="frame">
+        <div class="cap"><i class="r"></i><i class="y"></i><i class="g"></i>&nbsp; ltop — omarchy — wlp5s0 — refresh 1.0s+</div>
+        <img src="assets/screenshots/main.png" alt="ltop classic 布局：Steam 下载进行中——NET 图表爬升至 8.8MiB/s，连接按进程分组（steam ×50 高亮），每进程累计与磁盘树" fetchpriority="high">
+      </div>
+      <figcaption>classic 布局实况：Steam 下载进行中——NET 图表爬升、连接按进程分组带组 Σ、每进程整场网络+磁盘累计、带容量条的物理磁盘树。</figcaption>
+    </figure>
+  </div>
+</header>
+
+<section id="features" class="alt">
+  <div class="wrap">
+    <h2>功能</h2>
+    <p class="sec-sub">六盒各司一职。屏幕上的每一项都同时是机器可读的——<code>ltop --json</code>
+    输出同一份数据，schema 随版本。</p>
+    <div class="grid">
+      <div class="card">
+        <h3><em>▣</em>六盒，各司一职</h3>
+        <p>NET 出每网卡吞吐图表；DISK I/O 加设备树与容量条；CONNS 列出系统全部
+        socket，逐连接实时 B/s 与总量；PROCS 记每进程整场的网络（TCP+UDP）与磁盘
+        总量——退出的进程灰显保留，一键重启。</p>
+      </div>
+      <div class="card">
+        <h3><em>◉</em>eBPF 计费：TCP <b>和</b> UDP</h3>
+        <p>内核不给逐 socket 的 UDP 字节，抽样又会漏掉短命连接。可选的 root 助手
+        <code>ltop-bpf</code> 在 send/recv 系统调用（v4+v6）处按 pid 和 socket
+        inode 计数；免特权的 TUI 每秒 diff 一份快照。没有助手，其余功能照常。</p>
+      </div>
+      <div class="card">
+        <h3><em>⌬</em>为 AI 而生</h3>
+        <p>一次性问题用 <code>ltop --json</code> / <code>--schema</code>；时间窗用
+        <code>ltop watch</code> 无头录制、<code>ltop report --json</code> 给出精确
+        总和与峰值——10 分钟窗口约 1k token，轮询要 4 万。配套 agent skill。</p>
+      </div>
+      <div class="card">
+        <h3><em>⌂</em>带流量的 LAN 邻居</h3>
+        <p>被动 ARP 加周期 UDP knock，自动发现子网设备（IP、MAC、mDNS 主机名、
+        网关标记）。每个邻居带实时连接数、速率和字节——<code>enter</code> 置顶它，
+        CONNS 只看这个对端。</p>
+      </div>
+      <div class="card">
+        <h3><em>◐</em>72 套 btop 主题，跟随 Omarchy</h3>
+        <p>任何 btop 主题文件直接可用；内嵌 72 套随时切换。Omarchy 下跟随桌面
+        主题，<code>--follow-theme</code> 让运行中的 ltop 实时变色。界面英文或
+        中文（<code>lang = zh</code>）。</p>
+      </div>
+      <div class="card">
+        <h3><em>⭓</em>Linux + macOS，免 root</h3>
+        <p>x86_64 与 aarch64；预编译覆盖 glibc 2.35+。TUI 免特权运行；macOS 读
+        原生源（nettop、IOKit、路由 socket）。每个 release 在 QEMU/KVM 五个
+        发行版（含 SELinux enforcing）与 Apple Silicon 实机验证。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="quickstart">
+  <div class="wrap">
+    <h2>快速上手</h2>
+    <p class="sec-sub">三条命令从零到看清全局。页脚永远显示当前可用键；<code>m → help</code>
+    是完整键位表。</p>
+    <div class="steps">
+      <div class="step">
+        <span class="n">1</span>
+        <h3>安装</h3>
+        <p>Homebrew 预编译、cargo 源码编译或 release tarball——<a
+        href="docs/zh/installation.html">全部渠道</a>。</p>
+        <div class="prewrap"><pre><span class="p">$</span> brew install uMaj35ty/ltop/ltop</pre><button class="copy" data-copy="brew install uMaj35ty/ltop/ltop">复制</button></div>
+      </div>
+      <div class="step">
+        <span class="n">2</span>
+        <h3>运行，按这几个键</h3>
+        <p><kbd>Tab</kbd> 布局 · <kbd>/</kbd> 搜索 · <kbd>enter</kbd> 详情面板 ·
+        <kbd>p</kbd><kbd>c</kbd><kbd>l</kbd> 单焦点 · <kbd>z</kbd> 缩放 ·
+        <kbd>1</kbd>–<kbd>6</kbd> 开关盒子 · <kbd>space</kbd> 暂停 · <kbd>m</kbd> 菜单。</p>
+        <div class="prewrap"><pre><span class="p">$</span> ltop</pre><button class="copy" data-copy="ltop">复制</button></div>
+        <p class="more"><a href="docs/zh/tui.html">TUI 完整导览 →</a></p>
+      </div>
+      <div class="step">
+        <span class="n">3</span>
+        <h3>可选：精确字节计费</h3>
+        <p>仅 Linux；补齐每进程/每连接的 UDP，堵住短命连接漏计。</p>
+        <div class="prewrap"><pre><span class="p">$</span> sudo systemctl enable --now ltop-bpf</pre><button class="copy" data-copy="sudo systemctl enable --now ltop-bpf">复制</button></div>
+        <p class="more"><a href="docs/zh/ebpf.html">助手工作原理 →</a></p>
+      </div>
+      <div class="step">
+        <span class="n">★</span>
+        <h3>给 agent：先 watch 再 report</h3>
+        <p>无头录制一个时间窗，得到按进程/按连接的精确总和与峰值（~2 KB JSON）
+        ——比轮询省 ~97% token。</p>
+        <div class="prewrap"><pre><span class="p">$</span> ltop watch --duration 10m --proc chrome
+<span class="p">$</span> ltop report <span class="p">&lt;file&gt;</span> --json  <span class="c"># ~1k token</span></pre><button class="copy" data-copy="ltop watch --duration 10m --proc chrome
+ltop report &lt;file&gt; --json  # ~1k token">复制</button></div>
+        <p class="more"><a href="docs/zh/ai.html">AI 工作流 →</a></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="roadmap" class="alt">
+  <div class="wrap">
+    <h2>路线图</h2>
+    <p class="sec-sub">已完成的与在路上。细节见
+    <a href="https://github.com/uMaj35ty/ltop/blob/master/CHANGELOG.md">CHANGELOG</a>。</p>
+    <div class="rm">
+      <div class="col">
+        <h3><span class="tag">✓</span> 已发布</h3>
+        <ul>
+          <li><span class="v">0.1.0</span><span>首个公开版本——x86_64 Linux</span></li>
+          <li><span class="v">0.2.0</span><span>aarch64 Linux：双架构 eBPF、双 tarball</span></li>
+          <li><span class="v">0.2.1</span><span>macOS 原生：nettop、IOKit、路由 socket</span></li>
+          <li><span class="v">0.2.2</span><span>QOL 批（help、detail 配色、block 图表）+ Homebrew tap 自动化</span></li>
+          <li><span class="v">0.2.3</span><span>AI 友好接口：<code>--json</code>、<code>--schema</code>、agent skill</span></li>
+          <li><span class="v">0.2.4</span><span>无头 <code>watch</code> + <code>report</code>——精确窗口摘要，省 ~97% token</span></li>
+          <li><span class="v">0.2.5</span><span>文档站（就是这里）+ 资源占用审查</span></li>
+          <li><span class="v">0.2.6</span><span>detail 面板鼠标交互（单击移游标、双击复制）+ NET 图表比例耦合 + mac 连接归属修复</span></li>
+          <li><span class="v">0.2.7</span><span>mac bug 修复 + TUI 体验升级——设置面板分组与录制/kill 热键闸门、中文翻译补全、CJK 弹窗布局、zoom / CONNS 分组修复</span></li>
+          <li><span class="v">0.2.8</span><span>黑屏节能/长挂机韧性（App Nap 禁用、nettop 有界执行、采样宽限）+ 图表尖峰阻尼缩放（NET 与 DISK I/O）</span></li>
+          <li><span class="v">0.2.9</span><span>四目标网络与安全审计——终端逃逸加固、LAN 欺骗防护、mac 磁盘计费修复、供应链加固</span></li>
+          <li><span class="v">0.2.10</span><span>技术债与 QoL 专项——<code>report</code> 流式化（长窗口不再 OOM）、<code>ltop lan-setup</code> 解锁 macOS 真 MAC、eBPF sk_ino 失效钩子、config 原子写、台账与 CLI 细化</span></li>
+        </ul>
+      </div>
+      <div class="col">
+        <h3><span class="tag" style="color:var(--cyan)">→</span> 在路上</h3>
+        <ul>
+          <li><span class="v">0.2.x</span><span>持续维护——bug 修复、技术债与 QoL 走稳定线</span></li>
+          <li><span class="v">0.3</span><span><b>fleet</b>（beta 分支已开）——SSH 多机聚合：一个终端盯整个局域网，节点不装任何新东西</span></li>
+          <li><span class="v">0.4</span><span><code>ltop mcp</code>——stdio JSON-RPC 服务，把 JSON 接口直接交给 agent</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot-inner">
+    <span class="l"><b>l</b>top — localist top · MIT · 无遥测，免 root</span>
+    <div class="foot-links">
+      <a href="docs/zh/">文档</a>
+      <a href="https://crates.io/crates/ltop">crates.io</a>
+      <a href="https://github.com/uMaj35ty/ltop/releases">Releases</a>
+      <a href="https://github.com/uMaj35ty/ltop">GitHub</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll(".copy").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var done = function () {
+        btn.textContent = "已复制 ✓"; btn.classList.add("ok");
+        setTimeout(function () { btn.textContent = "复制"; btn.classList.remove("ok"); }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(btn.dataset.copy).then(done);
+      } else {
+        var ta = document.createElement("textarea");
+        ta.value = btn.dataset.copy; document.body.appendChild(ta);
+        ta.select(); document.execCommand("copy"); document.body.removeChild(ta); done();
+      }
+    });
+  });
+</script>
+</body>
+</html>
