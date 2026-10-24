@@ -472,6 +472,7 @@ pub fn sock_str(s: &(IpAddr, u16)) -> String {
     format!("{}:{}", s.0, s.1)
 }
 
+#[cfg(target_os = "linux")]
 fn dump_family(family: libc::c_int, proto: u8, out: &mut Vec<Conn>) -> Result<(), String> {
     // SAFETY: raw netlink socket, all buffers sized by the protocol's fixed
     // message layout; fd is closed on every return path below.
