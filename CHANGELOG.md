@@ -115,6 +115,11 @@ macOS bug fixes.
   inside their group, and same-key tombstones merge back into their group;
   other sort orders keep the old pin-to-top behavior. Regression test
   included
+- **Zoom exits only via `z`; `Esc` inside zoom clears just the box focus**
+  and stays full-screen (the zoom footer now shows `z` exit zoom and
+  `esc` unfocus). Previously `Esc` tore down zoom and focus together, so a
+  clean full-screen view without the focus highlight was unreachable.
+  Regression test included
 
 ### Added
 
