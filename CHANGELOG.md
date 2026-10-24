@@ -5,7 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [0.2.7] - 2026-10-24
 
-macOS bug fixes.
+macOS bug fixes plus TUI experience changes — grouped settings panel with
+guarded record/kill hotkeys, complete Chinese translations, CJK-safe popup
+layout, and zoom / CONNS grouping fixes.
 
 ### Fixed
 
