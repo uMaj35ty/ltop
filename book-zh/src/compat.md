@@ -48,9 +48,15 @@ macOS 没有 eBPF; 同样六个盒子读 Apple 原生源:
   传输不计入。（eBPF 路径在系统调用处计数，不漏。）
 - **系统对非 Apple 签名二进制隐藏部分本地网络**——与"本地网络"隐私开关
   无关: 邻居表枚举为空，单条路由查询返回的 MAC 被脱敏成接口合成地址，
-  `getifaddrs` 字节计数冻结（全部与 Apple 签名工具同秒交叉验证过）。ltop
-  的绕法: NET 盒改用 `netstat -ib` 计数，LAN 盒经路由 socket 逐条探测内核
-  缓存重建邻居列表——IP、mDNS 主机名和流量链路是真的; MAC 显示 `—`。
+  `getifaddrs` 字节计数冻结（全部与 Apple 签名工具同秒交叉验证过）。
+  macOS 27 更进一步: 从应用里 shell 出的 Apple 签名 `arp` 也返回空，
+  `getifaddrs` 把所有网卡 MAC 报成 `02:00:00:00:00:00`（读取权改由未公开
+  的 `com.apple.developer.networking.topology-observation` entitlement 按
+  「责任进程归因 × 平台签名」双维度门控）。ltop 的绕法: NET 盒改用
+  `netstat -ib` 计数，LAN 盒经路由 socket 逐条探测内核缓存重建邻居列表，
+  `ltop lan-setup` 另装一个每用户 launchd 代理，经 Apple 平台签名工具
+  轮转 `arp`/`ifconfig` 快照——LAN/NET 盒显示真实 MAC，免 root、免
+  entitlement。未启用时 MAC 显示 `—`。
 - 裸终端的帧buffer 字体可能缺盲文字形; 走 ssh 或用正经终端模拟器则齐全。
 
 ## 分发渠道回顾

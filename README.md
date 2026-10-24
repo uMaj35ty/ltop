@@ -108,6 +108,11 @@ combination. Details: [AI agents on the docs](https://umaj35ty.github.io/ltop/do
   1-second snapshot from `/run/ltop/udp.json`. LRU maps, single-instance
   lock, automatic detach — no root for the TUI, no nightly toolchain to
   build. Without the helper everything else keeps working
+- **Real MAC addresses on macOS, even 27** — Apple gates neighbour and
+  interface MACs by attribution × signature (27 blinds even Apple-signed
+  `arp` run from an app); `ltop lan-setup` installs a per-user launchd agent
+  that rotates `arp`/`ifconfig` snapshots via Apple platform binaries — LAN
+  and NET boxes show real MACs, no root, no entitlements
 - **Headless watch + report** — crash-safe JSONL capture (per-line appends
   survive a process crash; `--interval`, `--duration`, `--stop` sentinel,
   `--proc` focus) and window-differenced summaries; the TUI monitoring log (`L` / `--log`) shares the schema, and
