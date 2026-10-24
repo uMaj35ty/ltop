@@ -233,8 +233,9 @@ pub fn load(path: &std::path::Path, zh: bool) -> Result<(Vec<Snapshot>, usize)> 
 
 // ---------- 聚合 ----------
 
-/// 流式聚合状态:逐快照喂入,内存只留聚合去重态(进程名 / 连接 inode),
-/// 与快照总数无关 —— report 长窗口(7 天 × 5s ≈ 十二万行)不再全量驻留
+/// 流式聚合状态:逐快照喂入,主驻留项(整段 Vec<Snapshot>)消失,只剩
+/// 聚合去重态(进程名 / 连接 inode,随窗口内 churn 增长、与旧 build 持平)
+/// —— report 长窗口(7 天 × 5s ≈ 十二万行)不再全量驻留
 struct ReportAcc {
     host: Option<String>,
     start: u64,
