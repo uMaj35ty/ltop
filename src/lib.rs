@@ -3,6 +3,7 @@
 pub mod app;
 pub mod collect;
 pub mod config;
+pub mod lansetup;
 pub mod log;
 pub mod replay;
 pub mod report;
@@ -203,11 +204,12 @@ pub fn cli_main() -> Result<()> {
     // 通用短路在下方,只管 TUI 路径的旗标)
     match args.get(1).map(String::as_str) {
         Some("watch") => return watch::run(&args[2..]),
+        Some("lan-setup") => return lansetup::run(&args[2..]),
         Some("report") => return report::run(&args[2..]),
         // 子命令打错字不能掉进 TUI(此前 repor 会静默开界面);
         // 旗标(含 --json 等)照旧走原路径
         Some(cmd) if !cmd.starts_with('-') => {
-            eprintln!("ltop: unknown command {cmd:?} (subcommands: watch, report; try --help)");
+            eprintln!("ltop: unknown command {cmd:?} (subcommands: watch, report, lan-setup; try --help)");
             return Err(anyhow::anyhow!("unknown command"));
         }
         _ => {}
