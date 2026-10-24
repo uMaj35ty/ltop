@@ -12,3 +12,5 @@
 - [兼容性](compat.md)
 - [与其他工具对比](comparison.md)
 - [常见问题](faq.md)
+- [安全](security.md)
+- [参与贡献](contributing.md)

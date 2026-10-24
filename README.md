@@ -146,6 +146,8 @@ combination. Details: [AI agents on the docs](https://umaj35ty.github.io/ltop/do
 | [eBPF accounting](https://umaj35ty.github.io/ltop/docs/ebpf.html) | helper architecture, guard rails, data semantics |
 | [The data plane](https://umaj35ty.github.io/ltop/docs/data.html) | `--json`/`--schema`, monitoring log, watch/report, config keys |
 | [AI agents](https://umaj35ty.github.io/ltop/docs/ai.html) | snapshot + watch/report workflow, token numbers, agent skill |
+| [Security](https://umaj35ty.github.io/ltop/docs/security.html) | privileges, data on disk, LAN behavior, disclosure |
+| [Contributing](https://umaj35ty.github.io/ltop/docs/contributing.html) | setup, conventions, PR flow |
 | [Compatibility](https://umaj35ty.github.io/ltop/docs/compat.html) | tested matrix, macOS notes, limitations |
 | [Comparison](https://umaj35ty.github.io/ltop/docs/comparison.html) | vs btop / nethogs / iftop / shell pipelines |
 | [FAQ](https://umaj35ty.github.io/ltop/docs/faq.html) | common misreads and traps |

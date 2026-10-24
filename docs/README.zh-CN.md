@@ -132,6 +132,8 @@ ltop report <watch 打印的路径> --json   # ~2 KB 摘要(单文件)
 | [兼容性](https://umaj35ty.github.io/ltop/docs/compat.html) | 测试矩阵、macOS 说明、已知限制 |
 | [横向对比](https://umaj35ty.github.io/ltop/docs/comparison.html) | vs btop / nethogs / iftop / shell 管道 |
 | [FAQ](https://umaj35ty.github.io/ltop/docs/faq.html) | 常见误读与坑 |
+| [安全](https://umaj35ty.github.io/ltop/docs/zh/security.html) | 权限边界、磁盘数据、LAN 行为、漏洞上报 |
+| [参与贡献](https://umaj35ty.github.io/ltop/docs/zh/contributing.html) | 环境准备、工程约定、PR 流程 |
 
 ## 源码构建
 
