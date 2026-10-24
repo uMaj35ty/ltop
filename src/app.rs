@@ -157,7 +157,9 @@ fn host_name() -> String {
     let mut buf = [0 as libc::c_char; 256];
     // SAFETY: buf is a fully-owned 256-byte buffer for the duration of the call
     if unsafe { libc::gethostname(buf.as_mut_ptr(), buf.len()) } == 0 {
-        // SAFETY: gethostname NUL-terminates within the buffer on success
+        // 主机名恰为 256 字节(≥ 缓冲)时不保证 NUL 结尾:显式钉死最后一位
+        buf[255] = 0;
+        // SAFETY: buf 至少在 buf[255] 处有 NUL 终止
         unsafe { CStr::from_ptr(buf.as_ptr()) }
             .to_string_lossy()
             .trim_end_matches('.')

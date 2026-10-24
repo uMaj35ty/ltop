@@ -277,6 +277,11 @@ pub(crate) fn execute(opts: WatchOpts, zh: bool) -> Result<usize> {
             &format!("创建 {} 失败", path.display()),
         )
     })?;
+    // 采集文件记录全量连接对端/进程名,隐私敏感:显式 0600(同 monlog)
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+    }
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())

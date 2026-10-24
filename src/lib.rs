@@ -13,6 +13,7 @@ pub mod ui;
 pub mod watch;
 
 use std::io::{self, stdout, Write};
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
@@ -255,7 +256,18 @@ pub fn cli_main() -> Result<()> {
     }));
     let res = run(&mut terminal, log_interval, auto_log, follow_theme);
     restore()?;
-    res
+    // 录制收尾提示在备用屏关闭后打印才会被用户看到
+    if let Ok(Some(path)) = &res {
+        eprintln!(
+            "{}",
+            pick_s(
+                cli_lang_zh(),
+                &format!("ltop: monitoring log saved to {}", path.display()),
+                &format!("ltop: 监控日志已保存到 {}", path.display())
+            )
+        );
+    }
+    res.map(|_| ())
 }
 
 fn setup() -> Result<Tui> {
@@ -288,7 +300,7 @@ fn run(
     log_interval: Option<Duration>,
     auto_log: bool,
     follow_theme: bool,
-) -> Result<()> {
+) -> Result<Option<PathBuf>> {
     let mut app = App::new(log_interval);
     // CLI --follow-theme 在配置之上再开一档(配置默认关)
     app.theme_live_follow = app.theme_live_follow || follow_theme;
@@ -325,8 +337,10 @@ fn run(
             last_tick = Instant::now();
         }
     }
-    app.log.finalize();
-    Ok(())
+    // 录制收尾:flush+关闭,路径由 cli_main 在备用屏关闭后打印
+    // (restore 前打印会被 LeaveAlternateScreen 连屏丢弃)
+    let log_path = app.log.finalize();
+    Ok(log_path)
 }
 
 /// OSC 52:把文本写入终端本地剪贴板(base64;零依赖,ssh 场景直达本地)
@@ -355,6 +369,15 @@ fn osc52_copy(text: &str) {
     }
     let _ = write!(stdout(), "\x1b]52;c;{b64}\x07");
     let _ = stdout().flush();
+}
+
+/// 不可信字符串的终端安全过滤:丢弃 C0 控制符(含 ESC/CSI/OSC 载体)。
+/// TUI 渲染路径由 ratatui 的 is_control 过滤兜底;所有**绕过 ratatui 的
+/// CLI 输出**(--replay/report 的 println、--dump 的名字列)必须先过这里,
+/// 否则外部 JSONL 或 LAN 对端提供的进程名/主机名可携带终端转义序列
+/// 直接执行(清屏/剪贴板覆写/钓鱼链接)
+pub(crate) fn sanitize_text(s: &str) -> String {
+    s.chars().filter(|c| !c.is_control()).collect()
 }
 
 /// Settings 菜单:循环改第 sel 项的值(forward=下一个值/反向=上一个值;
@@ -1342,7 +1365,8 @@ pub fn dump(theme_src: &str) -> Result<()> {
             n.ip.to_string(),
             n.mac.clone().unwrap_or_default(),
             n.iface,
-            n.hostname.clone().unwrap_or_default(),
+            // mDNS/NBNS 主机名来自 LAN 对端:--dump 裸写终端,剥控制符
+            sanitize_text(n.hostname.as_deref().unwrap_or_default()),
             if n.is_gateway { "gw " } else { "" },
             if n.is_self { "self" } else { "" },
         );
@@ -1351,7 +1375,7 @@ pub fn dump(theme_src: &str) -> Result<()> {
     println!("== CONNS == total {}", app.conn.conns.len());
     for c in app.conn.conns.iter().take(12) {
         let proc_str = match (&c.proc, c.pid) {
-            (Some(n), Some(p)) => format!("{n}({p})"),
+            (Some(n), Some(p)) => format!("{}({p})", sanitize_text(n)),
             _ => app.conn.user_name(c.uid),
         };
         println!(
@@ -1375,7 +1399,7 @@ pub fn dump(theme_src: &str) -> Result<()> {
     for p in app.proc.procs.iter().take(12) {
         println!(
             "{:<20} net SUM={}/{} r {}/{} disk SUM={}/{} r {}/{}",
-            format!("{}({})", p.name, p.pid),
+            format!("{}({})", sanitize_text(&p.name), p.pid),
             fmt_human(p.net_recv as f64),
             fmt_human(p.net_sent as f64),
             fmt_human(p.net_rr),

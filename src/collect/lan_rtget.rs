@@ -96,7 +96,7 @@ pub fn parse_reply(buf: &[u8], seq: u32, pid: u32) -> Option<(u16, bool)> {
             continue;
         }
         addrs >>= 1;
-        if off >= buf.len() {
+        if off + 4 > buf.len() {
             break;
         }
         let len = buf[off] as usize;
@@ -143,7 +143,9 @@ pub fn probe(ip: Ipv4Addr, seq: u32, pid: u32) -> Option<LlEntry> {
             return None;
         }
         let mut buf = [0u8; 512];
-        loop {
+        // 迭代上限:路由广播风暴下 SO_RCVTIMEO 只在包间生效,不设上限可
+        // 让本函数长时间空转
+        for _ in 0..64 {
             let n = unsafe { libc::recv(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len(), 0) };
             if n <= 0 {
                 return None; // 超时/错误:视为无条目
@@ -153,6 +155,7 @@ pub fn probe(ip: Ipv4Addr, seq: u32, pid: u32) -> Option<LlEntry> {
                 return has_link_addr.then_some(LlEntry { if_index });
             }
         }
+        None
     })();
     unsafe { libc::close(fd) };
     result

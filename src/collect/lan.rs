@@ -1,11 +1,13 @@
 use std::collections::{BTreeMap, HashSet};
 use std::ffi::CStr;
+
 #[cfg(target_os = "linux")]
 use std::fs;
 use std::net::{Ipv4Addr, UdpSocket};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use if_addrs::{get_if_addrs, IfAddr};
 
@@ -642,6 +644,29 @@ fn resolve_any(ip: Ipv4Addr) -> Option<String> {
 const MDNS_GROUP: Ipv4Addr = Ipv4Addr::new(224, 0, 0, 251);
 const MDNS_PORT: u16 = 5353;
 
+/// 每查询随机化的事务 ID:恒定 ID(mDNS 0x6c74 / NBNS 0x2a2a)可被同链路
+/// 抢答者无竞速预测。时间纳秒 ^ pid ^ 原子计数器做混淆即可——防的是
+/// "预测后抢先应答",不是密码学 PRNG 场景
+fn query_id() -> u16 {
+    static COUNTER: AtomicU32 = AtomicU32::new(0);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.subsec_nanos())
+        .unwrap_or(0);
+    let c = COUNTER.fetch_add(0x9E37_79B9, Ordering::Relaxed);
+    let x = nanos
+        .wrapping_mul(0x9E37_79B1)
+        ^ c
+        ^ (c >> 16)
+        ^ std::process::id();
+    (((x >> 8) ^ x) & 0xFFFF) as u16
+}
+
+/// 应答头两字节 == 我们的事务 ID(前 2 字节在 len ≥ 2 时才读)
+fn reply_id_matches(buf: &[u8], id: u16) -> bool {
+    buf.len() >= 2 && [buf[0], buf[1]] == id.to_be_bytes()
+}
+
 /// Ask the LAN's mDNS responders for the PTR of `ip`
 /// (`d.c.b.a.in-addr.arpa`); this is how `avahi-resolve -a` works.
 /// Sent from an ephemeral port, so it is a *legacy* mDNS query and
@@ -651,18 +676,22 @@ fn resolve_mdns(ip: Ipv4Addr) -> Option<String> {
     let sock = UdpSocket::bind("0.0.0.0:0").ok()?;
     sock.set_read_timeout(Some(Duration::from_millis(600)))
         .ok()?;
-    let query = build_ptr_query(ip, 0x6c74);
+    let id = query_id();
+    let query = build_ptr_query(ip, id);
     let mut buf = [0u8; 1500];
     for _ in 0..2 {
         sock.send_to(&query, (MDNS_GROUP, MDNS_PORT)).ok()?;
         let until = Instant::now() + Duration::from_millis(600);
         while Instant::now() < until {
             match sock.recv_from(&mut buf) {
-                Ok((n, _)) => {
+                // 欺骗防护三件套:应答必须来自被查设备(legacy 单播 mDNS
+                // 的应答者即被查者,同 NBNS 路径)+ 事务 ID 匹配 + PTR 可解析
+                Ok((n, src)) if src.ip() == ip && reply_id_matches(&buf[..n], id) => {
                     if let Some(name) = parse_ptr_response(&buf[..n]) {
                         return Some(name);
                     }
                 }
+                Ok((_, _)) => continue,
                 Err(e)
                     if e.kind() == std::io::ErrorKind::WouldBlock
                         || e.kind() == std::io::ErrorKind::TimedOut =>
@@ -789,14 +818,17 @@ fn resolve_nbns(ip: Ipv4Addr) -> Option<String> {
     let sock = UdpSocket::bind("0.0.0.0:0").ok()?;
     sock.set_read_timeout(Some(Duration::from_millis(400)))
         .ok()?;
-    let query = build_nbns_query(0x2a2a);
+    let id = query_id();
+    let query = build_nbns_query(id);
     let mut buf = [0u8; 1500];
     for _ in 0..2 {
         sock.send_to(&query, (ip, 137)).ok()?;
         let until = Instant::now() + Duration::from_millis(400);
         while Instant::now() < until {
             match sock.recv_from(&mut buf) {
-                Ok((n, src)) if src.ip() == ip => {
+                Ok((n, src))
+                    if src.ip() == ip && reply_id_matches(&buf[..n], id) =>
+                {
                     if let Some(name) = parse_nbns_response(&buf[..n]) {
                         let name = name.trim_end_matches('\0').trim().to_lowercase();
                         // a reverse-encoded address or an empty string is not a name
@@ -1047,6 +1079,16 @@ mod tests {
         let mut i = ptr_at;
         assert_eq!(read_name(&m, &mut i).as_deref(), Some("a.local"));
         assert_eq!(i, ptr_at + 2); // consumed only the pointer
+    }
+
+    /// 事务 ID 随机化:恒定 ID(mDNS 0x6c74 / NBNS 0x2a2a 的旧写法)可被
+    /// 同链路攻击者无竞速预测后抢先伪造应答
+    #[test]
+    fn query_ids_are_randomized() {
+        let a = query_id();
+        let b = query_id();
+        let c = query_id();
+        assert!(!(a == b && b == c), "连续三次 ID 不应全同: {a} {b} {c}");
     }
 
     #[test]
