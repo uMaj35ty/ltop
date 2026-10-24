@@ -293,6 +293,15 @@ fn sample_entries() -> std::io::Result<(Vec<DevCounters>, BTreeMap<String, Iface
     for name in NETSTAT_SLOW_IFACES {
         infos.remove(name);
     }
+    // 27 起 getifaddrs AF_LINK 的 MAC 对未签名进程脱敏(恒 02:00:00:00:00:00),
+    // launchd 快照(ltop lan-setup 安装)里有 ifconfig(Apple 签名)的真值则覆盖
+    if let Some(ifmacs) = crate::collect::lan_snapshot::load_if_macs() {
+        for (name, mac) in ifmacs {
+            if let Some(info) = infos.get_mut(&name) {
+                info.mac = mac;
+            }
+        }
+    }
     let entries = parse_netstat_ib(&netstat_counters_output(infos.keys()));
     Ok((entries, infos))
 }

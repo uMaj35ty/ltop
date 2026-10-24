@@ -317,7 +317,19 @@ impl LanCollector {
             let raw = arp_an_output();
             // 正常输出至少含 incomplete 条目;0 行 = 被隐私机制静默拦截
             self.arp_blocked = raw.lines().next().is_none();
-            parse_arp_an(&raw)
+            let mut parsed = parse_arp_an(&raw);
+            if self.arp_blocked {
+                // 27 门控:app 归因下连 Apple 签名 arp 都被蒙空(实测),退避
+                // 到 launchd 代理快照(ltop lan-setup 安装,只读文件零门控)
+                if let Some(snap) = crate::collect::lan_snapshot::load_arp_entries() {
+                    self.arp_blocked = false;
+                    parsed = snap
+                        .into_iter()
+                        .map(|(ip, mac, iface)| (ip, Some(mac), iface))
+                        .collect();
+                }
+            }
+            parsed
         };
         for (ip, mac, iface) in entries {
             let complete = mac.is_some();
