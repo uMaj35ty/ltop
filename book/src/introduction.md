@@ -11,7 +11,7 @@ three questions btop, nethogs and iftop each answer only in part:
 3. **What does the LAN look like?** — which devices are on the local network,
    which is the gateway, and what traffic flows to each of them.
 
-![Classic layout — six boxes with live LAN neighbours and grouped connections](../assets/screenshots/classic-six-boxes.png)
+![Classic layout — six boxes with live LAN neighbours and grouped connections](../assets/screenshots/classic-six-boxes-small.png)
 
 ## How it works
 
