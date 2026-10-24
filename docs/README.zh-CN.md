@@ -96,6 +96,10 @@ ltop report <watch 打印的路径> --json   # ~2 KB 摘要(单文件)
   socket inode 累计字节;无特权的 UI 每秒 diff `/run/ltop/udp.json`
   快照。LRU map、单实例锁、退出自动摘除——TUI 免 root,构建不需要
   nightly。没有助手其余一切照常
+- **macOS 真 MAC 地址,27 也不例外**——苹果按「归因 × 签名」门控邻居与
+  网卡 MAC(27 连应用里跑的 Apple 签名 `arp` 都返回空);`ltop lan-setup`
+  安装每用户 launchd 代理,经 Apple 平台签名工具轮转 `arp`/`ifconfig`
+  快照——LAN/NET 盒显示真实 MAC,免 root、免 entitlement
 - **无头 watch + report**——崩溃安全的 JSONL 采集(`--interval`/
   `--duration`/`--stop` 哨兵/`--proc` 聚焦)与窗口差分摘要;TUI 监控日志
   (`L`/`--log`)共用同一 schema,`--replay`/`--csv` 兼容旧日志
