@@ -56,3 +56,17 @@ or anything in [Security](security.md), call it out in the PR description.
 The audit baseline lives in the repository's history (0.2.9); keep the
 property you're preserving stated explicitly — e.g. "LAN-supplied strings
 never reach a terminal unfiltered".
+
+## Acknowledgements
+
+ltop's look borrows — with gratitude and credit — from two projects and
+the artists behind them:
+
+- **btop** ([aristocratos/btop](https://github.com/aristocratos/btop)) by
+  Aristocratos: the theme format is btop-compatible, and 41 of the built-in
+  themes come from btop's official collection;
+- **Omarchy** ([dhh/omarchy](https://github.com/dhh/omarchy)) by DHH: 31 of
+  the built-in themes come from its bundled collection.
+
+Thank you to Aristocratos, DHH and the creators of every one of those
+themes — see [Themes → Acknowledgements](themes.md#acknowledgements).

@@ -8,8 +8,10 @@ colours you cannot read on your terminal.
 
 ## Where themes live
 
-- **Built-in:** 72 themes converted from btop, selectable from the theme menu
-  (`m` → theme) or `--theme <name>` on the command line.
+- **Built-in:** 72 themes — 41 from the btop project's official collection
+  and 31 from Omarchy's bundled themes — selectable from the theme menu
+  (`m` → theme) or `--theme <name>` on the command line (see
+  [Acknowledgements](#acknowledgements)).
 - **Omarchy:** if `~/.local/state/omarchy/current/theme/btop.theme` exists,
   the menu also offers `omarchy` — selecting it follows the desktop theme and
   live-reloads when the desktop theme changes.
@@ -37,6 +39,22 @@ and — for `main_bg` only — an empty value meaning "terminal default"
 theme[main_fg] = "#c0caf5"
 theme[inactive_fg] = "#565f89"
 ```
+
+## Acknowledgements
+
+The built-in theme library stands on the work of others, and this project
+is grateful for it:
+
+- **btop** ([aristocratos/btop](https://github.com/aristocratos/btop)) by
+  Aristocratos — ltop's theme file format *is* btop's, and 41 of the
+  embedded themes are converted from btop's official collection. Thank you
+  to Aristocratos and to every theme author in that collection.
+- **Omarchy** ([dhh/omarchy](https://github.com/dhh/omarchy)) by DHH — 31
+  embedded themes come from Omarchy's bundled collection. Thank you to DHH
+  and the creators of those themes.
+
+Any theme written for btop or Omarchy keeps working here — their work
+remains theirs, embedded with credit.
 
 ## Variable reference
 
