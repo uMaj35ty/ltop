@@ -85,6 +85,26 @@ ltop report <file.jsonl> --json             # ~2 KB window summary
 - Arbitrary queries: the file is plain JSONL, use `jq`. TUI monitoring
   logs (`ltop-log-*.jsonl`) share the schema — `report` reads them too;
   old `session-*` files (v1) belong to `--replay`.
+- `report` streams line-by-line: file size is not a memory concern (a
+  7-day × 5 s capture ≈ 120 k snapshots aggregates fine). Do not load the
+  whole file into your own context — report/jq exists so you don't have to.
+
+### Session file hygiene (short tasks)
+
+Captures land in `~/.local/state/ltop/ltop-session-*.jsonl` and survive
+until retention cleaning. In a **short task** (record a couple of minutes,
+report, done), the file has served its purpose the moment the summary is
+printed — but it is the user's disk: **ask before deleting**, don't rm on
+your own initiative. A good pattern:
+
+> Report done. Delete the capture file
+> (`~/.local/state/ltop/ltop-session-….jsonl`, ~N MB), or keep it for
+> follow-up `jq` queries?
+
+Delete only after an explicit yes. Never delete TUI monitoring logs
+(`ltop-log-*.jsonl`), other sessions' files, or anything you did not create
+in this task. Long captures (hours) are expensive to redo — default to
+keeping those and mention the disk cost instead.
 
 ## Reading the snapshot
 
@@ -97,8 +117,11 @@ ltop report <file.jsonl> --json             # ~2 KB window summary
 - `conns[].process` is null for sockets owned by other users (Linux) —
   do not claim those connections are unrelated to a process, they are just
   not attributable to you.
-- `lan.neighbours[].mac` is `null` on macOS: the system sanitizes neighbour
-  MACs for non-Apple-signed binaries (independent of any permission toggle).
+- `lan.neighbours[].mac` is `null` on macOS unless the snapshot agent is
+  installed (`ltop lan-setup`, one command, no root): the system sanitizes
+  neighbour/interface MACs for non-Apple-signed binaries by attribution ×
+  signature; the agent rotates `arp`/`ifconfig` snapshots through Apple
+  platform binaries so the boxes show real MACs (30 s cadence).
 - `procs[].disk_*` covers only processes owned by the current user.
 
 ## Diagnostic recipes
@@ -121,6 +144,7 @@ ltop report <file.jsonl> --json             # ~2 KB window summary
 - Linux: per-process/per-connection byte accounting requires the privileged
   helper (`sudo systemctl enable --now ltop-bpf`); without it, check
   `meta.udp_helper` — UDP numbers degrade.
-- macOS: neighbour MACs are hidden by the system for non-Apple-signed
-  binaries regardless of the Local Network toggle; interface byte counters
-  come from `netstat` (live) — see docs/custom-theme.md sibling notes.
+- macOS: neighbour/interface MACs are hidden by the system for
+  non-Apple-signed binaries regardless of the Local Network toggle —
+  `ltop lan-setup` restores them via a launchd-proxied snapshot (no root);
+  interface byte counters come from `netstat` (live).
