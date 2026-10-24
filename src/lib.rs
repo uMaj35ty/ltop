@@ -73,10 +73,19 @@ fn early_exit(args: &[String]) -> Option<Result<()>> {
         .skip(1)
         .find(|a| a.starts_with("--") && !known.contains(&a.as_str()))
     {
-        eprintln!("ltop: unknown option {bad} (try --help)");
+        usage_warn(
+            &format!("ltop: unknown option {bad} (try --help)"),
+            &format!("ltop: 未知选项 {bad}(试 --help)"),
+        );
         return Some(Err(anyhow::anyhow!("unknown option")));
     }
     None
+}
+
+/// CLI 用法错误统一口径(0.2.10 约定):`ltop[ 子命令]: <消息>(试 --help)`,
+/// 双语、stderr 提示行 + 退出码 1;子命令内与 TUI 旗标路径同款
+pub(crate) fn usage_warn(en: &str, zh: &str) {
+    eprintln!("{}", crate::pick_s(cli_lang_zh(), en, zh));
 }
 
 /// 与 `--dump`/`--replay`/`--log` 的实际处理一一对应;改参数先改这里。
@@ -209,7 +218,14 @@ pub fn cli_main() -> Result<()> {
         // 子命令打错字不能掉进 TUI(此前 repor 会静默开界面);
         // 旗标(含 --json 等)照旧走原路径
         Some(cmd) if !cmd.starts_with('-') => {
-            eprintln!("ltop: unknown command {cmd:?} (subcommands: watch, report, lan-setup; try --help)");
+            usage_warn(
+                &format!(
+                    "ltop: unknown command {cmd:?} (subcommands: watch, report, lan-setup; try --help)"
+                ),
+                &format!(
+                    "ltop: 未知命令 {cmd:?}(可用:watch、report、lan-setup;试 --help)"
+                ),
+            );
             return Err(anyhow::anyhow!("unknown command"));
         }
         _ => {}

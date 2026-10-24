@@ -554,7 +554,13 @@ pub fn run(args: &[String]) -> Result<()> {
             }
             "--json" => as_json = true,
             a if a.starts_with('-') && a != "-" => {
-                bail!("ltop report: unknown option {a} (try --help)")
+                bail!(
+                    "{}",
+                    p(
+                        &format!("ltop report: unknown option {a} (try --help)"),
+                        &format!("ltop report: 未知选项 {a}(试 --help)")
+                    )
+                )
             }
             a => {
                 if file.replace(PathBuf::from(a)).is_some() {
