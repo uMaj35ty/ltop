@@ -128,7 +128,7 @@ fn disable_app_nap() {
     unsafe {
         // 本crate只链 IOKit(带 CoreFoundation):dlopen 保证 Foundation 在场
         libc::dlopen(
-            b"/System/Library/Frameworks/Foundation.framework/Foundation\0".as_ptr()
+            c"/System/Library/Frameworks/Foundation.framework/Foundation".as_ptr()
                 as *const c_char,
             libc::RTLD_LAZY,
         );
