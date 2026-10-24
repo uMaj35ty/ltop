@@ -37,7 +37,7 @@ mod imp {
     unsafe impl Pod for UdpVal {}
 
     /// (program name in the object, kernel symbol, is kretprobe)
-    const PROBES: [(&str, &str, bool); 10] = [
+    const PROBES: [(&str, &str, bool); 11] = [
         ("udp_send", "udp_sendmsg", false),
         ("udp_recv_entry", "udp_recvmsg", false),
         ("udp_recv", "udp_recvmsg", true),
@@ -48,6 +48,9 @@ mod imp {
         ("tcp_send", "tcp_sendmsg", true),
         ("tcp_recv_entry", "tcp_recvmsg", false),
         ("tcp_recv", "tcp_recvmsg", true),
+        // sk→inode cache invalidation on socket teardown (0.2.10); kernels
+        // without the symbol just skip it (legacy LRU-eviction semantics)
+        ("sock_destruct", "inet_sock_destruct", false),
     ];
 
     pub fn entry() {
