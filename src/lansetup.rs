@@ -4,7 +4,7 @@
 //! 文件补真值。判别器实测与门控模型见 [`crate::collect::lan_snapshot`]。
 //!
 //! 供应链面刻意最小:plist 只引用 Apple 平台二进制与安装时展开的固定
-//! 路径,无网络、无变量注入面;plist 0644、快照目录 0700、快照文件经
+//! 路径(sh 单引号壳 + 单层 XML 转义),无网络;plist 0644、快照目录 0700、快照文件经
 //! umask 077 落成 0600(与 0.2.9 采集文件权限口径一致)。
 
 #[cfg(target_os = "macos")]
@@ -50,12 +50,15 @@ pub fn run(args: &[String]) -> Result<()> {
 /// 脚本里要展开的快照目录(与读取方 log_dir() 同源,XDG_STATE_HOME 优先)
 #[cfg(target_os = "macos")]
 fn agent_script(dir: &std::path::Path) -> String {
-    let d = xml_escape(&dir.display().to_string());
+    // 原样嵌入 + sh 单引号壳('\''转义,$/反引号/双引号全部失效);
+    // XML 转义只在 render_plist 一层做——两层转义会让含 & 的合法路径
+    // 在 launchd 解码后残留实体,快照静默写不出来(0.2.10 review #2/#3)
+    let d = dir.display().to_string().replace('\'', "'\\''");
     format!(
-        "umask 077; /usr/sbin/arp -a -n > \"{d}/lan-arp.tmp\" \
-         && /bin/mv \"{d}/lan-arp.tmp\" \"{d}/lan-arp.txt\"; \
-         /sbin/ifconfig > \"{d}/lan-if.tmp\" \
-         && /bin/mv \"{d}/lan-if.tmp\" \"{d}/lan-if.txt\""
+        "umask 077; /usr/sbin/arp -a -n > '{d}/lan-arp.tmp' \
+         && /bin/mv '{d}/lan-arp.tmp' '{d}/lan-arp.txt'; \
+         /sbin/ifconfig > '{d}/lan-if.tmp' \
+         && /bin/mv '{d}/lan-if.tmp' '{d}/lan-if.txt'"
     )
 }
 
@@ -112,7 +115,9 @@ fn install_agent(zh: bool) -> Result<()> {
     })?;
     let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
 
-    let home = std::env::var("HOME").unwrap_or_default();
+    let home = std::env::var("HOME").with_context(|| {
+        p("HOME is not set; cannot locate LaunchAgents", "未设置 HOME,定位不到 LaunchAgents")
+    })?;
     let plist = std::path::PathBuf::from(home)
         .join("Library/LaunchAgents")
         .join(format!("{LABEL}.plist"));
@@ -185,7 +190,9 @@ fn remove_agent(zh: bool) -> Result<()> {
     let p = |en: &str, c: &str| crate::pick_s(zh, en, c);
     let uid = unsafe { libc::getuid() };
     let _ = launchctl(&["bootout", &format!("gui/{uid}/{LABEL}")]);
-    let home = std::env::var("HOME").unwrap_or_default();
+    let home = std::env::var("HOME").with_context(|| {
+        p("HOME is not set; cannot locate LaunchAgents", "未设置 HOME,定位不到 LaunchAgents")
+    })?;
     let plist = std::path::PathBuf::from(home)
         .join("Library/LaunchAgents")
         .join(format!("{LABEL}.plist"));
@@ -233,6 +240,10 @@ mod tests {
         let plist = render_plist("io.test.label", script, 30);
         assert!(plist.contains("a &gt; b &amp; c &lt; d"));
         assert!(!plist.contains("a > b"));
+        assert!(
+            !plist.contains("&amp;amp;"),
+            "脚本层不得预转义(双层转义=合法路径静默失败)"
+        );
         assert!(plist.contains("<integer>30</integer>"));
         assert!(plist.contains("<string>io.test.label</string>"));
     }
@@ -243,8 +254,8 @@ mod tests {
         let s = agent_script(std::path::Path::new("/tmp/x"));
         assert!(s.contains("/usr/sbin/arp -a -n"));
         assert!(s.contains("/sbin/ifconfig"));
-        assert!(s.contains("/tmp/x/lan-arp.txt"));
-        assert!(s.contains("/tmp/x/lan-if.txt"));
+        assert!(s.contains("'/tmp/x/lan-arp.txt'"), "sh 单引号壳");
+        assert!(s.contains("'/tmp/x/lan-if.txt'"));
         assert!(s.contains("umask 077"));
         assert!(s.contains("/bin/mv"));
     }

@@ -222,13 +222,15 @@ impl ProcCollector {
         // --- network: fold per-pid eBPF deltas into per-process totals ---
         let mut net_rates: HashMap<u32, (f64, f64)> = HashMap::new();
         // start 读取按 tick 记忆化:net/udp 两轮对同一 pid 只读一次 /proc
+        // (mac 路径用进程表自带的 start_epoch,无此开销)
+        #[cfg(target_os = "linux")]
         let mut start_cache: HashMap<u32, Option<u64>> = HashMap::new();
         for d in net {
             let name = self.udp_name(d.pid);
             #[cfg(target_os = "linux")]
             let cur_start = cached_start(&mut start_cache, d.pid);
             #[cfg(target_os = "macos")]
-            let cur_start = self.mac_starts.get(&d.pid).map(|e| e.max(0) as u64);
+            let cur_start = self.mac_starts.get(&d.pid).map(|&e| e.max(0) as u64);
             let st = self.ledger_entry(d.pid, &name, cur_start);
             st.net_recv += d.recv;
             st.net_sent += d.sent;
@@ -303,7 +305,7 @@ impl ProcCollector {
                 #[cfg(target_os = "linux")]
                 let cur_start = cached_start(&mut start_cache, d.pid);
                 #[cfg(target_os = "macos")]
-                let cur_start = self.mac_starts.get(&d.pid).map(|e| e.max(0) as u64);
+                let cur_start = self.mac_starts.get(&d.pid).map(|&e| e.max(0) as u64);
                 let st = self.ledger_entry(d.pid, &name, cur_start);
                 st.udp_recv += d.recv;
                 st.udp_sent += d.sent;
@@ -503,8 +505,9 @@ fn read_pid_uptime_s(pid: u32) -> Option<u64> {
     Some(age.max(0.0) as u64)
 }
 
+/// sample() 内的 start 记忆化(net 与 udp 两轮共享,同一 pid 一次 /proc 读;
+/// mac 路径用进程表自带的 start_epoch,不走这里)
 #[cfg(target_os = "linux")]
-/// sample() 内的 start 记忆化(net 与 udp 两轮共享,同一 pid 一次 /proc 读)
 fn cached_start(cache: &mut HashMap<u32, Option<u64>>, pid: u32) -> Option<u64> {
     match cache.entry(pid) {
         std::collections::hash_map::Entry::Occupied(e) => *e.get(),
@@ -516,6 +519,7 @@ fn cached_start(cache: &mut HashMap<u32, Option<u64>>, pid: u32) -> Option<u64> 
     }
 }
 
+#[cfg(target_os = "linux")]
 fn read_pid_start(pid: u32) -> Option<u64> {
     let stat = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
     let after = stat.rsplit_once(')')?.1;
