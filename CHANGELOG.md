@@ -96,7 +96,23 @@ macOS bug fixes.
   every probe, and two instances writing different snapshot files can coexist
 - **Chinese translations completed** for the confirm kill/restart dialogs,
   help panel intro and keys header, zoom footer, detail panel hints
-  (track/copy/close/kill/start) and process state fields (running/exited)
+  (track/copy/close/kill/start), process state fields (running/exited) and
+  the main footer key labels (`quit`/`menu`/`boxes`/`zoom`/`kill`)
+- **CJK-aware popup layout widths**: every width computation in the help
+  panel, detail panel (label column, command wrapping, hint rows) and the
+  settings config-path truncation now measures terminal display width
+  (unicode-width, CJK = 2 columns) instead of char count, and the help popup
+  width includes the data-caliber header lines — Chinese text no longer
+  overflows and gets clipped (the "help panel shows half the information"
+  case)
+
+### Added
+
+- **`allow_global_log` config (default off)** gates the global record hotkey
+  `L` so an accidental Shift+L never starts writing a session log; recording
+  remains available via `--log` and the settings panel. The settings popup is
+  now grouped into labeled sections (general / graphs / recording / lan /
+  conns & procs) with the new toggle in the recording group
 
 ### Changed
 

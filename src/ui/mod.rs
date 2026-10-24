@@ -2270,6 +2270,13 @@ fn footer_key(k: &str, label: &str) -> Vec<Span<'static>> {
     ]
 }
 
+/// 终端显示宽度(CJK 与全角字符双宽):弹窗布局宽度一律按它算——按字符数
+/// 计算会把中文面板撑出边界,内容被整列裁掉
+fn disp_w(s: &str) -> usize {
+    use unicode_width::UnicodeWidthStr;
+    UnicodeWidthStr::width(s)
+}
+
 fn draw_footer(f: &mut Frame, area: Rect, app: &App) {
     let cols = Layout::horizontal([Constraint::Min(0), Constraint::Length(9)]).split(area);
     let key = |k: &str, label: &str| footer_key(k, label);
@@ -2284,18 +2291,18 @@ fn draw_footer(f: &mut Frame, area: Rect, app: &App) {
                 .add_modifier(Modifier::BOLD),
         ));
     }
-    spans.extend(key("q", "quit"));
-    spans.extend(key("m", "menu"));
+    spans.extend(key("q", lang.tr("quit")));
+    spans.extend(key("m", lang.tr("menu")));
     spans.extend(key("space", lang.tr("pause")));
     spans.extend(key("/", lang.tr("search")));
     spans.extend(key(
         "Tab",
         &format!("{}:{}", lang.tr("layout"), app.layout.label()),
     ));
-    spans.extend(key("1-6", "boxes"));
-    spans.extend(key("z", "zoom"));
+    spans.extend(key("1-6", lang.tr("boxes")));
+    spans.extend(key("z", lang.tr("zoom")));
     if app.allow_global_kill {
-        spans.extend(key("k", "kill"));
+        spans.extend(key("k", lang.tr("kill")));
     }
     f.render_widget(Paragraph::new(Line::from(spans)), cols[0]);
     f.render_widget(
@@ -2444,57 +2451,65 @@ fn draw_settings_popup(f: &mut Frame, area: Rect, app: &App, sel: usize) {
     } else {
         format!("{}d", app.log.retention_days)
     };
-    let rows: [(&str, String); 14] = [
-        (lang.tr("language"), lang.label().to_string()),
-        (lang.tr("refresh"), fmt_interval(app.tick)),
-        (lang.tr("layout"), app.layout.label().to_string()),
-        (lang.tr("net"), app.graph_net.label().to_string()),
-        (lang.tr("disk"), app.graph_disk.label().to_string()),
+    let toggle = |v: bool| lang.tr(if v { "on" } else { "off" }).to_string();
+    // 分组显示:行序即 cycle_setting 的 sel 索引(测试
+    // settings_rows_map_to_their_values 钉住映射)
+    let sections: Vec<(&str, Vec<(&str, String)>)> = vec![
         (
-            lang.tr("recording"),
-            lang.tr(if app.log.enabled { "on" } else { "off" })
-                .to_string(),
-        ),
-        (lang.tr("log_interval"), fmt_interval(app.log.interval)),
-        (lang.tr("log_retention"), retention),
-        (
-            lang.tr("sweep_interval"),
-            fmt_interval(app.lan.sweep_interval),
+            "group_general",
+            vec![
+                ("language", lang.label().to_string()),
+                ("refresh", fmt_interval(app.tick)),
+                ("layout", app.layout.label().to_string()),
+            ],
         ),
         (
-            lang.tr("sweep"),
-            lang.tr(if app.lan.sweep_enabled { "on" } else { "off" })
-                .to_string(),
+            "group_graphs",
+            vec![
+                ("net", app.graph_net.label().to_string()),
+                ("disk", app.graph_disk.label().to_string()),
+            ],
         ),
         (
-            lang.tr("tracked_only"),
-            lang.tr(if app.log_tracked_only { "on" } else { "off" })
-                .to_string(),
+            "group_recording",
+            vec![
+                ("recording", toggle(app.log.enabled)),
+                ("global_log", toggle(app.allow_global_log)),
+                ("log_interval", fmt_interval(app.log.interval)),
+                ("log_retention", retention),
+                ("tracked_only", toggle(app.log_tracked_only)),
+            ],
         ),
         (
-            lang.tr("global_kill"),
-            lang.tr(if app.allow_global_kill { "on" } else { "off" })
-                .to_string(),
+            "group_lan",
+            vec![
+                ("sweep_interval", fmt_interval(app.lan.sweep_interval)),
+                ("sweep", toggle(app.lan.sweep_enabled)),
+            ],
         ),
         (
-            lang.tr("tombstone"),
-            if app.conn.tombstone_ttl.is_zero() {
-                lang.tr("off").to_string()
-            } else {
-                fmt_interval(app.conn.tombstone_ttl)
-            },
-        ),
-        (
-            lang.tr("proc_groups"),
-            lang.tr(if app.proc_expand_default {
-                "expanded"
-            } else {
-                "collapsed"
-            })
-            .to_string(),
+            "group_procs",
+            vec![
+                (
+                    "tombstone",
+                    if app.conn.tombstone_ttl.is_zero() {
+                        lang.tr("off").to_string()
+                    } else {
+                        fmt_interval(app.conn.tombstone_ttl)
+                    },
+                ),
+                ("proc_groups", lang.tr(if app.proc_expand_default {
+                    "expanded"
+                } else {
+                    "collapsed"
+                })
+                .to_string()),
+                ("global_kill", toggle(app.allow_global_kill)),
+            ],
         ),
     ];
-    let (w, h) = (60.min(area.width), 20.min(area.height));
+    // 高度=内容行数(5 分组头+15 行+提示行)±配置路径行,收紧不留空洞
+    let (w, h) = (60.min(area.width), 24.min(area.height));
     let popup = centered(area, w, h);
     f.render_widget(Clear, popup);
     let block = Block::bordered()
@@ -2504,11 +2519,16 @@ fn draw_settings_popup(f: &mut Frame, area: Rect, app: &App, sel: usize) {
         .title(title_line(0, "settings", '\0', vec![], hi(), false));
     let inner = block.inner(popup);
     f.render_widget(block, popup);
-    let mut lines: Vec<Line> = rows
-        .iter()
-        .enumerate()
-        .map(|(i, (label, value))| {
-            let (ls, vs) = if i == sel {
+    let mut lines: Vec<Line> = Vec::new();
+    let mut sel_row = 0usize;
+    for (gkey, rows) in &sections {
+        lines.push(Line::from(Span::styled(
+            format!(" ── {} ──", lang.tr(gkey)),
+            dim(),
+        )));
+        for (label, value) in rows {
+            let selected = sel_row == sel;
+            let (ls, vs) = if selected {
                 (
                     Style::new()
                         .fg(bg().unwrap_or(Color::Reset))
@@ -2522,24 +2542,32 @@ fn draw_settings_popup(f: &mut Frame, area: Rect, app: &App, sel: usize) {
             } else {
                 (Style::new().fg(palette().title), text())
             };
-            Line::from(vec![
-                Span::styled(format!(" {label}: "), ls),
+            lines.push(Line::from(vec![
+                Span::styled(format!(" {}: ", lang.tr(label)), ls),
                 Span::styled(value.clone(), vs),
-            ])
-        })
-        .collect();
+            ]));
+            sel_row += 1;
+        }
+    }
     lines.push(Line::from(Span::styled(lang.tr("hint"), dim())));
     if let Some(p) = Config::path() {
         let mut path = p.display().to_string();
         let prefix = format!(" {}: ", lang.tr("config_path"));
-        let room = inner.width.saturating_sub(prefix.chars().count() as u16) as usize;
-        if path.chars().count() > room {
-            path = format!(
-                "…{}",
-                path.chars()
-                    .skip(path.chars().count() - room.saturating_sub(1))
-                    .collect::<String>()
-            );
+        // 中文标签双宽:前缀宽度与截断都按显示宽度算,否则路径溢出弹窗
+        let room = (inner.width.saturating_sub(disp_w(&prefix) as u16)) as usize;
+        if disp_w(&path) > room {
+            let mut s = path.as_str();
+            let mut w = disp_w(s);
+            while w > room.saturating_sub(1) {
+                let mut it = s.chars();
+                let c = it.next().unwrap_or('\0');
+                if c == '\0' {
+                    break;
+                }
+                s = it.as_str();
+                w -= disp_w(c.to_string().as_str());
+            }
+            path = format!("…{s}");
         }
         lines.push(Line::from(Span::styled(format!("{prefix}{path}"), dim())));
     }
@@ -2886,7 +2914,7 @@ fn detail_content(app: &App, box_idx: usize, id: u64, width: u16) -> DetailConte
     let lbl_w = groups
         .iter()
         .flat_map(|(_, fs)| fs.iter())
-        .map(|((l, _), _)| l.chars().count())
+        .map(|((l, _), _)| disp_w(l))
         .max()
         .unwrap_or(0);
     let inner_w = width.saturating_sub(2) as usize;
@@ -3001,7 +3029,7 @@ fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u
     let lbl_w = groups
         .iter()
         .flat_map(|(_, fs)| fs.iter())
-        .map(|((l, _), _)| l.chars().count())
+        .map(|((l, _), _)| disp_w(l))
         .max()
         .unwrap_or(0);
     let chunk_w = (l.popup.width.saturating_sub(2) as usize)
@@ -3093,7 +3121,7 @@ fn pack_rows(items: &[String], w: usize) -> Vec<String> {
     let mut cur = String::new();
     for it in items {
         let sep = if cur.is_empty() { "" } else { "   " };
-        if !cur.is_empty() && cur.chars().count() + sep.len() + it.chars().count() > w {
+        if !cur.is_empty() && disp_w(&cur) + 3 + disp_w(it) > w {
             rows.push(std::mem::take(&mut cur));
         } else {
             cur.push_str(sep);
@@ -3106,16 +3134,32 @@ fn pack_rows(items: &[String], w: usize) -> Vec<String> {
     rows.into_iter().map(|r| format!(" {r}")).collect()
 }
 
-/// split `s` into display chunks of at most `w` characters (char-aware)
+/// split `s` into display chunks of at most `w` terminal columns
+/// (CJK 双宽按 unicode-width 计,中文命令行/路径折行不再超宽)
 fn wrap_chunks(s: &str, w: usize) -> Vec<String> {
     if w == 0 {
         return vec![s.to_string()];
     }
-    let chars: Vec<char> = s.chars().collect();
-    if chars.len() <= w {
+    if disp_w(s) <= w {
         return vec![s.to_string()];
     }
-    chars.chunks(w).map(|c| c.iter().collect()).collect()
+    use unicode_width::UnicodeWidthStr;
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    let mut cur_w = 0usize;
+    for c in s.chars() {
+        let cw = UnicodeWidthStr::width(c.to_string().as_str());
+        if cur_w + cw > w && !cur.is_empty() {
+            out.push(std::mem::take(&mut cur));
+            cur_w = 0;
+        }
+        cur.push(c);
+        cur_w += cw;
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
 }
 
 fn draw_confirm_popup(f: &mut Frame, area: Rect, app: &App, pid: u32, restart: bool) {
@@ -3200,14 +3244,9 @@ fn draw_help_popup(f: &mut Frame, area: Rect, app: &App) {
     let rows = help_rows(app.lang);
     // 双列键位把总高从 ~33 行压到 ~23 行:旧版 h 估算 (+8) 低估头部开销
     // 且撞终端高度封顶后无滚动,底部(数据口径段/press any)固定被裁。
-    // 宽度按内容精确计算:双列放不下(横向截断)自动回退单列
-    let kw = rows
-        .iter()
-        .map(|(k, _)| k.chars().count())
-        .max()
-        .unwrap_or(0);
-    let desc_w =
-        |rs: &[(String, String)]| rs.iter().map(|(_, d)| d.chars().count()).max().unwrap_or(0);
+    // 宽度按内容精确计算(显示宽度,CJK 双宽):双列放不下自动回退单列
+    let kw = rows.iter().map(|(k, _)| disp_w(k)).max().unwrap_or(0);
+    let desc_w = |rs: &[(String, String)]| rs.iter().map(|(_, d)| disp_w(d)).max().unwrap_or(0);
     let dw_all = desc_w(&rows);
     let col_w = 3 + kw + 2 + dw_all + 3;
     let w_two = (2 + 2 * col_w) as u16;
@@ -3247,10 +3286,19 @@ fn draw_help_popup(f: &mut Frame, area: Rect, app: &App) {
         app.lang.tr("keys_header"),
         bold(hi()),
     )));
-    let col_spans = |(k, d): &(String, String), dw: usize| -> Vec<Span<'static>> {
+    // 头部(数据口径段)通常是面板里最宽的行:弹窗宽度必须把它算进去,
+    // 否则中文下整列被裁(help 面板"信息不全"的根因之一)
+    let head_max = lines
+        .iter()
+        .map(|l| l.spans.iter().map(|s| disp_w(&s.content)).sum::<usize>())
+        .max()
+        .unwrap_or(0) as u16;
+    let col_spans = |(k, d): &(String, String), dw: usize, kw: usize| -> Vec<Span<'static>> {
+        let kpad = " ".repeat(kw.saturating_sub(disp_w(k)));
+        let dpad = " ".repeat(dw.saturating_sub(disp_w(d)));
         vec![
-            Span::styled(format!(" {:<kw$}  ", k), bold(hi())),
-            Span::styled(format!("{:<dw$}   ", d), text()),
+            Span::styled(format!(" {k}{kpad}  "), bold(hi())),
+            Span::styled(format!("{d}{dpad}   "), text()),
         ]
     };
     if two_col {
@@ -3259,27 +3307,27 @@ fn draw_help_popup(f: &mut Frame, area: Rect, app: &App) {
         let dw_r = desc_w(right);
         for i in 0..half {
             let mut spans = match left.get(i) {
-                Some(e) => col_spans(e, dw_l),
+                Some(e) => col_spans(e, dw_l, kw),
                 None => vec![Span::raw(" ".repeat(6 + kw + dw_l))],
             };
             spans.push(Span::raw("  "));
             if let Some(e) = right.get(i) {
-                spans.extend(col_spans(e, dw_r));
+                spans.extend(col_spans(e, dw_r, kw));
             }
             lines.push(Line::from(spans));
         }
     } else {
         let dw = desc_w(&rows);
         for e in &rows {
-            lines.push(Line::from(col_spans(e, dw)));
+            lines.push(Line::from(col_spans(e, dw, kw)));
         }
     }
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(app.lang.tr("press_any"), dim())));
     let w = if two_col {
-        w_two
+        w_two.max(head_max + 4)
     } else {
-        w_one.min(area.width)
+        w_one.max(head_max + 4).min(area.width)
     };
     let h = (lines.len() as u16 + 2).min(area.height);
     let popup = centered(area, w, h);

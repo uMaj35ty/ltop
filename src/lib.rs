@@ -364,31 +364,32 @@ fn cycle_setting(app: &mut App, sel: usize, forward: bool) -> bool {
             true
         }
         6 => {
+            // 全局录制热键 L 的暴露开关(默认关,防误触)
+            app.allow_global_log = !app.allow_global_log;
+            true
+        }
+        7 => {
             let ms = step_in(&LOGS, app.log.interval.as_millis() as u64, forward);
             app.log.interval = Duration::from_millis(ms);
             true
         }
-        7 => {
+        8 => {
             let d = step_u32(&RETENTION, app.log.retention_days, forward);
             app.log.retention_days = d;
             let _ = app.log.purge_old();
             true
         }
-        8 => {
+        9 => {
+            app.log_tracked_only = !app.log_tracked_only;
+            true
+        }
+        10 => {
             let s = step_in(&SWEEPS, app.lan.sweep_interval.as_secs(), forward);
             app.lan.sweep_interval = Duration::from_secs(s);
             true
         }
-        9 => {
-            app.lan.sweep_enabled = !app.lan.sweep_enabled;
-            true
-        }
-        10 => {
-            app.log_tracked_only = !app.log_tracked_only;
-            true
-        }
         11 => {
-            app.allow_global_kill = !app.allow_global_kill;
+            app.lan.sweep_enabled = !app.lan.sweep_enabled;
             true
         }
         12 => {
@@ -405,6 +406,10 @@ fn cycle_setting(app: &mut App, sel: usize, forward: bool) -> bool {
         }
         13 => {
             app.proc_expand_default = !app.proc_expand_default;
+            true
+        }
+        14 => {
+            app.allow_global_kill = !app.allow_global_kill;
             true
         }
         _ => false,
@@ -544,7 +549,11 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
                 }
             }
             KeyCode::Char('L') => {
-                app.log.toggle();
+                // 全局录制热键:受 allow_global_log(默认关)约束防误触;
+                // 录制走 --log 或 settings 面板的录制行
+                if app.allow_global_log {
+                    app.log.toggle();
+                }
             }
             KeyCode::Enter => {
                 let b = app.last_focus;
@@ -662,10 +671,10 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
             }
         }
         MenuState::Settings(sel) => {
-            // 与 draw_settings_popup 的 rows 数、cycle_setting 的分支一一对应:
-            // 三处不同步曾把 5 号录制行之后全部错位一格(按录制行改的是日志
+            // 与 draw_settings_popup 的分组行、cycle_setting 的分支一一对应:
+            // 三处不同步曾把录制行之后全部错位一格(按录制行改的是日志
             // 间隔、按 global_kill 行改的是墓碑时长、末行失效)
-            const ROWS: usize = 14;
+            const ROWS: usize = 15;
             let changed = match code {
                 KeyCode::Up | KeyCode::Char('k') => {
                     app.menu = MenuState::Settings(sel.saturating_sub(1));
@@ -1924,8 +1933,8 @@ mod tests {
         // 录制开关测试不许往真实 state 目录写文件
         let dir = std::env::temp_dir().join(format!("ltop-settings-{}", std::process::id()));
         std::env::set_var("XDG_STATE_HOME", &dir);
-        // 全部 14 行都有处理分支(死行在此暴露)
-        for sel in 0..14 {
+        // 全部 15 行都有处理分支(死行在此暴露)
+        for sel in 0..15 {
             let mut probe = App::new(None);
             assert!(cycle_setting(&mut probe, sel, true), "第 {sel} 行无分支");
         }
@@ -1935,17 +1944,16 @@ mod tests {
         assert!(cycle_setting(&mut a, 5, true));
         assert!(a.log.enabled, "5 号行必须开启录制");
         assert_eq!(a.log.interval, iv, "5 号行不得改动日志间隔(错位)");
-        // 11 号行开 global kill,不动墓碑时长
+        // 6 号行开全局录制热键暴露
         let mut b = App::new(None);
-        let tomb = b.conn.tombstone_ttl;
-        assert!(cycle_setting(&mut b, 11, true));
-        assert!(b.allow_global_kill, "11 号行必须开 global kill");
-        assert_eq!(b.conn.tombstone_ttl, tomb, "11 号行不得改动墓碑时长(错位)");
-        // 末行(13,conns 进程分组)可循环
+        assert!(cycle_setting(&mut b, 6, true));
+        assert!(b.allow_global_log, "6 号行必须开全局录制键");
+        // 14 号行开 global kill,不动墓碑时长
         let mut c = App::new(None);
-        let exp = c.proc_expand_default;
-        assert!(cycle_setting(&mut c, 13, true));
-        assert_ne!(c.proc_expand_default, exp, "末行必须可循环");
+        let tomb = c.conn.tombstone_ttl;
+        assert!(cycle_setting(&mut c, 14, true));
+        assert!(c.allow_global_kill, "14 号行必须开 global kill");
+        assert_eq!(c.conn.tombstone_ttl, tomb, "14 号行不得改动墓碑时长(错位)");
         std::env::remove_var("XDG_STATE_HOME");
         let _ = std::fs::remove_dir_all(dir);
     }

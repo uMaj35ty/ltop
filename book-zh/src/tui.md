@@ -112,4 +112,5 @@ net-rate → disk-sum → disk-rate → name）。退出进程的账本默认 30
 刷新 `tick_ms`（默认 1000）、墓碑 TTL、录制开关（与 `L` 键同路径）、日志
 间隔/保留、扫描间隔、默认排序/过滤、`theme`、`lang`、
 `proc_expand_default`（进程组默认展开）、`proc_exit_retention_min`、
-`allow_global_kill`（暴露 `k` 键，默认关）。
+`allow_global_kill`（暴露 `k` 键，默认关）、`allow_global_log`（暴露 `L` 录制
+热键，默认关）。
