@@ -298,9 +298,9 @@ fn osc52_copy(text: &str) {
 }
 
 /// Settings 菜单:循环改第 sel 项的值(forward=下一个值/反向=上一个值;
-/// 布尔项两向同效)。返回是否发生变更(需存盘)。
+/// 布尔项两向同效)。返回是否发生变更(需存盘)。行序必须与
+/// draw_settings_popup 的 rows 一致,见测试 settings_rows_map_to_their_values
 fn cycle_setting(app: &mut App, sel: usize, forward: bool) -> bool {
-    const ROWS: usize = 12;
     const TICKS: [u64; 5] = [250, 500, 1000, 2000, 5000];
     const LOGS: [u64; 5] = [10_000, 30_000, 60_000, 300_000, 600_000];
     const RETENTION: [u32; 3] = [7, 30, 0];
@@ -324,7 +324,6 @@ fn cycle_setting(app: &mut App, sel: usize, forward: bool) -> bool {
             (i + n - 1) % n
         }]
     }
-    let _ = ROWS;
     match sel {
         0 => {
             app.lang = app.lang.next();
@@ -360,34 +359,39 @@ fn cycle_setting(app: &mut App, sel: usize, forward: bool) -> bool {
             true
         }
         5 => {
+            // 录制开关(与 L 键同路径):开=建文件写表头,关=flush 收尾
+            app.log.toggle();
+            true
+        }
+        6 => {
             let ms = step_in(&LOGS, app.log.interval.as_millis() as u64, forward);
             app.log.interval = Duration::from_millis(ms);
             true
         }
-        6 => {
+        7 => {
             let d = step_u32(&RETENTION, app.log.retention_days, forward);
             app.log.retention_days = d;
             let _ = app.log.purge_old();
             true
         }
-        7 => {
+        8 => {
             let s = step_in(&SWEEPS, app.lan.sweep_interval.as_secs(), forward);
             app.lan.sweep_interval = Duration::from_secs(s);
             true
         }
-        8 => {
+        9 => {
             app.lan.sweep_enabled = !app.lan.sweep_enabled;
             true
         }
-        9 => {
+        10 => {
             app.log_tracked_only = !app.log_tracked_only;
             true
         }
-        10 => {
+        11 => {
             app.allow_global_kill = !app.allow_global_kill;
             true
         }
-        11 => {
+        12 => {
             let cur = app.conn.tombstone_ttl.as_millis() as u64;
             let i = TOMBS.iter().position(|&v| v == cur).map_or(0, |i| {
                 if forward {
@@ -399,7 +403,7 @@ fn cycle_setting(app: &mut App, sel: usize, forward: bool) -> bool {
             app.conn.tombstone_ttl = std::time::Duration::from_millis(TOMBS[i]);
             true
         }
-        12 => {
+        13 => {
             app.proc_expand_default = !app.proc_expand_default;
             true
         }
@@ -658,7 +662,10 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
             }
         }
         MenuState::Settings(sel) => {
-            const ROWS: usize = 13;
+            // 与 draw_settings_popup 的 rows 数、cycle_setting 的分支一一对应:
+            // 三处不同步曾把 5 号录制行之后全部错位一格(按录制行改的是日志
+            // 间隔、按 global_kill 行改的是墓碑时长、末行失效)
+            const ROWS: usize = 14;
             let changed = match code {
                 KeyCode::Up | KeyCode::Char('k') => {
                     app.menu = MenuState::Settings(sel.saturating_sub(1));
@@ -1907,6 +1914,40 @@ mod tests {
         ])
         .is_none());
         assert!(early_exit(&["ltop".to_string(), "--typo".to_string()]).is_some());
+    }
+
+    /// settings 行号 ↔ cycle_setting 分支一一对应:recording 行(5)插入后
+    /// 分支没跟着移,曾把 5 号之后全部错位一格——按录制行改的是日志间隔、
+    /// 按 global_kill 行改的是墓碑时长、末行 proc_groups 是死行
+    #[test]
+    fn settings_rows_map_to_their_values() {
+        // 录制开关测试不许往真实 state 目录写文件
+        let dir = std::env::temp_dir().join(format!("ltop-settings-{}", std::process::id()));
+        std::env::set_var("XDG_STATE_HOME", &dir);
+        // 全部 14 行都有处理分支(死行在此暴露)
+        for sel in 0..14 {
+            let mut probe = App::new(None);
+            assert!(cycle_setting(&mut probe, sel, true), "第 {sel} 行无分支");
+        }
+        // 5 号行开关录制本身,不串扰日志间隔
+        let mut a = App::new(None);
+        let iv = a.log.interval;
+        assert!(cycle_setting(&mut a, 5, true));
+        assert!(a.log.enabled, "5 号行必须开启录制");
+        assert_eq!(a.log.interval, iv, "5 号行不得改动日志间隔(错位)");
+        // 11 号行开 global kill,不动墓碑时长
+        let mut b = App::new(None);
+        let tomb = b.conn.tombstone_ttl;
+        assert!(cycle_setting(&mut b, 11, true));
+        assert!(b.allow_global_kill, "11 号行必须开 global kill");
+        assert_eq!(b.conn.tombstone_ttl, tomb, "11 号行不得改动墓碑时长(错位)");
+        // 末行(13,conns 进程分组)可循环
+        let mut c = App::new(None);
+        let exp = c.proc_expand_default;
+        assert!(cycle_setting(&mut c, 13, true));
+        assert_ne!(c.proc_expand_default, exp, "末行必须可循环");
+        std::env::remove_var("XDG_STATE_HOME");
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     /// update() 必须把 LAN 选中纳入每 tick 锚定:数据驱动的重排只发生

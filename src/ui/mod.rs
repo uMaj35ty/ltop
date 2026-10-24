@@ -140,7 +140,7 @@ pub fn draw(f: &mut Frame, app: &App) {
             let lang = app.lang;
             let key = |k: &str, label: &str| footer_key(k, label);
             let mut spans: Vec<Span> = vec![Span::styled(" ", dim())];
-            spans.extend(key("z / esc", "exit zoom"));
+            spans.extend(key("z / esc", lang.tr("exit_zoom")));
             spans.extend(key("enter", lang.tr("detail_desc")));
             spans.extend(key("space", lang.tr("pause")));
             spans.extend(key("/", lang.tr("search")));
@@ -2444,12 +2444,17 @@ fn draw_settings_popup(f: &mut Frame, area: Rect, app: &App, sel: usize) {
     } else {
         format!("{}d", app.log.retention_days)
     };
-    let rows: [(&str, String); 13] = [
+    let rows: [(&str, String); 14] = [
         (lang.tr("language"), lang.label().to_string()),
         (lang.tr("refresh"), fmt_interval(app.tick)),
         (lang.tr("layout"), app.layout.label().to_string()),
         (lang.tr("net"), app.graph_net.label().to_string()),
         (lang.tr("disk"), app.graph_disk.label().to_string()),
+        (
+            lang.tr("recording"),
+            lang.tr(if app.log.enabled { "on" } else { "off" })
+                .to_string(),
+        ),
         (lang.tr("log_interval"), fmt_interval(app.log.interval)),
         (lang.tr("log_retention"), retention),
         (
@@ -2489,7 +2494,7 @@ fn draw_settings_popup(f: &mut Frame, area: Rect, app: &App, sel: usize) {
             .to_string(),
         ),
     ];
-    let (w, h) = (60.min(area.width), 19.min(area.height));
+    let (w, h) = (60.min(area.width), 20.min(area.height));
     let popup = centered(area, w, h);
     f.render_widget(Clear, popup);
     let block = Block::bordered()
@@ -2569,16 +2574,16 @@ fn val_style(s: ValStyle) -> Style {
     }
 }
 
-fn proc_status_fields(p: &crate::collect::proc::ProcRow) -> Vec<Field> {
+fn proc_status_fields(p: &crate::collect::proc::ProcRow, lang: crate::config::Lang) -> Vec<Field> {
     let mut out: Vec<Field> = Vec::new();
     let pid = p.pid;
     // explicit running/exited banner first — the whole point of the field
     out.push((
         "state",
         if p.alive {
-            "running".into()
+            lang.tr("running").into()
         } else {
-            "exited".into()
+            lang.tr("exited").into()
         },
     ));
     if !p.alive {
@@ -2586,7 +2591,10 @@ fn proc_status_fields(p: &crate::collect::proc::ProcRow) -> Vec<Field> {
         // live fields
         if let Some(cmd) = &p.cmdline {
             out.push(("cmd", cmd.join(" ")));
-            out.push(("start", format!("s restarts `{}`", cmd[0])));
+            out.push((
+                "start",
+                lang.tr("restarts_cmd").replace("{cmd}", &cmd[0]),
+            ));
         }
         return out;
     }
@@ -2669,7 +2677,7 @@ fn detail_data(app: &App, box_idx: usize, id: u64) -> DetailData {
                     (("pid", p.pid.to_string()), ValStyle::Text),
                 ];
                 identity.extend(
-                    proc_status_fields(p)
+                    proc_status_fields(p, app.lang)
                         .into_iter()
                         .map(|f| (f, ValStyle::Text)),
                 );
@@ -2854,20 +2862,25 @@ fn detail_content(app: &App, box_idx: usize, id: u64, width: u16) -> DetailConte
         start_hint,
     } = detail_data(app, box_idx, id);
     let track_hint = if tracked {
-        "[space] [x] tracked"
+        app.lang.tr("hint_track_on")
     } else {
-        "[space] [ ] track"
+        app.lang.tr("hint_track_off")
     };
     let mut hints = vec![
         track_hint.to_string(),
-        "[y] copy".to_string(),
-        "[esc] close".to_string(),
+        app.lang.tr("hint_copy").to_string(),
+        app.lang.tr("hint_close").to_string(),
     ];
     if let Some(p) = pid {
-        hints.insert(2, format!("[k] kill pid {p}"));
+        hints.insert(
+            2,
+            app.lang
+                .tr("hint_kill")
+                .replace("{p}", &p.to_string()),
+        );
     }
     if start_hint {
-        hints.insert(2, "[s] start/restart".to_string());
+        hints.insert(2, app.lang.tr("hint_start").to_string());
     }
 
     let lbl_w = groups
@@ -3130,19 +3143,22 @@ fn draw_confirm_popup(f: &mut Frame, area: Rect, app: &App, pid: u32, restart: b
         ));
     let inner = block.inner(popup);
     f.render_widget(block, popup);
-    let question = if restart {
-        format!(" Restart {name} (pid {pid})? SIGTERM, then relaunch its command line.")
+    let tpl = app.lang.tr(if restart {
+        "confirm_restart"
     } else {
-        format!(" Send SIGTERM to {name} (pid {pid})?")
-    };
+        "confirm_kill"
+    });
+    let question = tpl
+        .replace("{name}", &name)
+        .replace("{pid}", &pid.to_string());
     let lines = vec![
         Line::from(question),
         Line::from(""),
         Line::from(vec![
             Span::styled(" [y] ", bold(hi())),
-            Span::styled("yes    ", text()),
+            Span::styled(format!("{}    ", app.lang.tr("yes")), text()),
             Span::styled("[n] ", bold(hi())),
-            Span::styled("no", text()),
+            Span::styled(app.lang.tr("no").to_string(), text()),
         ]),
     ];
     f.render_widget(Paragraph::new(lines), inner);
@@ -3207,7 +3223,7 @@ fn draw_help_popup(f: &mut Frame, area: Rect, app: &App) {
         Span::styled("  by uMaj35ty", dim()),
     ]));
     lines.push(Line::from(Span::styled(
-        " local list monitor: net / lan / disk io / conns / procs",
+        app.lang.tr("about_line").to_string(),
         dim(),
     )));
     lines.push(Line::from(Span::styled(
@@ -3228,7 +3244,7 @@ fn draw_help_popup(f: &mut Frame, area: Rect, app: &App) {
     }
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
-        " \u{2500}\u{2500} keys \u{2500}\u{2500}",
+        app.lang.tr("keys_header"),
         bold(hi()),
     )));
     let col_spans = |(k, d): &(String, String), dw: usize| -> Vec<Span<'static>> {

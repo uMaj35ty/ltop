@@ -5,84 +5,117 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [0.2.7] - 2026-10-24
 
-0.2.6 双端(macOS 原生 + Lima Linux)全面测评后的集中修复版:苹果端报告
-30 项发现全部复核(26 项实锤、3 项行号漂移、0 项不成立),另由二轮对抗
-评审补出 8 项新发现,全部合入。
+macOS bug fixes.
 
 ### Fixed
 
-- **`--replay` 对自家产物全面兼容(同根因三连修)**
-  - 裸 `--replay` 现在能发现全部三类会话文件:watch 采集
-    (`ltop-session-*`)、TUI monlog(`ltop-log-*`)、旧版裸 `session-*`;
-    目录解析复用 `log::log_dir`,删除逐字节复制的 `replay::log_dir`
-  - 表头同时识别 `watch_start`(watch)与 `session_start`(monlog):
-    watch 产物不再显示 host `—`、起始 1970-01-01、间隔 0s
-  - 盘挂键兼容 `disk_read`/`disk_written`(现 schema)与旧
-    `disk_r`/`disk_w`:回放/CSV 的 Σ读盘/Σ写盘列不再恒 0
-  - 新增以 watch 真实输出为 fixture 的端到端回放测试(旧测试只钉旧格式
-    fixture,对此类回归永久失明)
-- **`--theme <file>` 死旗标复活**:CLI 白名单收录 `--theme` 并补进
-  usage;直载主题优先于启动主题恢复(0.2.6 中该旗标直接报
-  `unknown option`,README 宣传的功能不可达)
-- **`parse_hex` 拒绝非 ASCII 主题值**:损坏/恶意主题文件不再能在 panic
-  钩子安装前触发 char boundary panic
-- **全局 kill 键 `k` 受 `allow_global_kill` 约束**(默认关):关闭时不再
-  能对选中行无确认 SIGTERM——底栏提示本就随开关隐藏,行为终于一致;
-  详情页 `k` → 确认路径不受影响
-- **Hybrid 图首段以首样本 y 播种**(对齐 Line 分支):降序首样本不再把
-  区域轮廓削出凹口;补降序首样本回归测试(旧测试 `[0,100]` 首点恰为 0,
-  完全掩盖)
-- **网格余量路由修正**:spare 高度发给 CONNS/PROCS 盒的全局下标(旧代码
-  把 pair 内列下标当网格行号用,隐藏 CONNS 后余量错发给 DISKS 行)
-- **`cargo clippy --all-targets` 回到零警告**:修复重复/丢失的 `#[test]`
-  注册——Solid 模式回归测试此前从未执行;另清两处测试代码警告
-- **Linux CONNS 采集失败可见化**:netlink dump 被拒(缺 INET_DIAG/UDP_DIAG
-  编译、SELinux 策略)时 CONNS 标题亮 ⚠ 徽标并带内核错误码,不再静默
-  清空、与"没有连接"不可区分
-- **mac CONNS/PROCS 采集失败可见化**:nettop spawn 失败即清空旧流行并亮
-  stale 徽标(此前沿用上一轮数据:连接行冻结、速率归零、无任何信号)
-- **watch `--stop` 哨兵按 200ms 切片粒度响应**:`--interval 3600` 时
-  "出现即停"不再最多晚 1 小时(帮助文本承诺如实兑现)
-- **会话文件名加 `-<pid>` 后缀**:同秒双实例不再互相截断(截断者继续写
-  旧偏移会产生 NUL 稀疏文件,report 计为 skipped,静默腐蚀);新旧文件名
-  解析/清理/发现全兼容
-- **report 活跃时长口径修正**:每快照每名字至多计 1——同名多进程
-  (chrome/nginx worker)不再按行把 active_s 倍增进程数倍;active_s =
-  (samples−1) × interval(首见快照是基线),不再超过窗口墙钟时长
-- **replay 最忙时段改用实际 dt 作分母**:录制中暂停/采集停滞的区间不再
-  按名义 interval 成倍虚高,与逐进程 peak_net_bps 同口径
-- **mac netstat 泄漏**:500ms 预算超时后 SIGKILL 未完成的子进程(此前每
-  tick 每卡死接口泄漏一个线程 + netstat 子进程,长会话无上界)
-- **LAN 大网段钳制**:host 扫描枚举按 /22 截断——/8 VPN 场景不再构造
-  1670 万地址的 Vec + 每周期近死循环;网关归属判断改掩码位运算
-- **mac RTM 子网扫描只在 ARP 表被隐私机制拦截时运行**,且 drain 时不再
-  清除已有真实 MAC(MAC 列不再随扫描周期闪烁)
-- **arp 广播条目按全 f MAC 判定**:/23+/8 网段下 `.255` 是合法主机,
-  不再按 IP 末字节误杀
-- **双击打开详情补守卫**:CONNS 聚合父行(首击已切换展开)与 LAN 行不再
-  弹出 "connection is gone"/空详情;打开前字段游标归零
-- **搜索强制展开 CONNS 分组仅在搜索目标是 CONNS 时**:目标是 procs 时
-  conns 未被过滤却照样摊平,白降信息密度
-- **FS 黑名单补 afp/webdav/glusterfs/ceph/cephfs/lustre/ocfs2**:陈旧
-  网络挂载的 statvfs(分钟级阻塞)不再能冻结整个 UI tick
-- **watch `--duration` 单位倍乘 checked**:超大值在 release 下不再回绕成
-  错误的短时长静默提前结束
-- **ltop-bpf 单实例锁提前到 load/attach 之前**,锁文件按输出文件名区分:
-  systemd 与手动实例竞态不再瞬态双挂载;写不同快照文件的合法实例可并存
+- **`--replay` now understands every session log the app itself writes**
+  - Bare `--replay` discovers all three session-file prefixes: watch captures
+    (`ltop-session-*`), TUI monlog (`ltop-log-*`) and legacy bare `session-*`;
+    the state dir now comes from `log::log_dir`, deleting the byte-identical
+    `replay::log_dir` copy
+  - Headers accept both `watch_start` (watch) and `session_start` (monlog):
+    watch captures no longer show host `—`, start 1970-01-01, interval 0s
+  - Disk keys accept `disk_read`/`disk_written` (current schema) alongside
+    legacy `disk_r`/`disk_w`: the Σ read/Σ written columns no longer stay 0
+  - New end-to-end test feeding real `watch` output through `--replay` (the
+    old tests pinned legacy-format fixtures only and could never catch this)
+- **`--theme <file>` actually works again**: the flag is whitelisted in the
+  CLI and documented in usage; a file passed this way takes priority over the
+  saved-theme restore (in 0.2.6 the flag exited with `unknown option` while
+  the README advertised it)
+- **`parse_hex` rejects non-ASCII theme values**: a corrupt or hostile theme
+  file can no longer trigger a char-boundary panic before the panic hook is
+  installed
+- **Global kill key `k` respects `allow_global_kill`** (default off): with
+  the toggle off, the key can no longer SIGTERM the selected row without
+  confirmation — the footer hint already hid with the toggle, behaviour now
+  matches; the detail-panel `k` → confirm path is unaffected
+- **Settings panel row misalignment**: inserting the recording row shifted
+  every handler below it by one — cycling "recording" changed the log
+  interval, cycling "global kill key" changed the tombstone TTL, and the last
+  row (conns proc groups) did nothing. All 14 rows now act on their own
+  value, recording (same path as the `L` key) and global kill are operable
+  from settings, and a regression test pins the mapping
+- **Hybrid graph seeds the first segment from the first sample** (matching
+  the Line branch): a descending first sample no longer notches the area
+  outline; regression test added (the old `[0,100]` fixtures started at 0
+  and masked it)
+- **Grid spare-height routing fixed**: spare rows go to the CONNS/PROCS boxes
+  themselves (the old code used a within-pair column index as a grid row
+  index, sending spare height to the wrong box once CONNS was hidden)
+- **`cargo clippy --all-targets` back to zero warnings**: a duplicated and a
+  missing `#[test]` attribute fixed — the Solid-mode regression test had
+  never been running; two more test-code warnings cleaned up
+- **Linux CONNS degradation is visible**: a rejected netlink dump (missing
+  INET_DIAG/UDP_DIAG config, SELinux policy) lights a ⚠ badge with the
+  kernel errno in the CONNS title instead of silently emptying the box
+- **mac CONNS/PROCS degradation is visible**: a failed nettop spawn clears
+  the stale flows and lights a stale badge (it used to freeze last round's
+  rows with zeroed rates and no signal)
+- **`watch --stop` sentinel responds at slice granularity**: with
+  `--interval 3600`, "stop as soon as it appears" no longer lags up to a full
+  hour (help text now holds)
+- **Session file names get a `-<pid>` suffix**: two instances started within
+  the same second no longer truncate each other's file (the truncated writer
+  kept writing at its old offsets, producing NUL-sparse files that report
+  counts as skipped); parsers, purge and discovery accept old and new names
+- **report active-time caliber corrected**: a name counts once per snapshot —
+  same-named multi-process sets (chrome/nginx workers) no longer multiply
+  `active_s` by the worker count; `active_s` = (samples − 1) × interval
+  (the first sighting is the baseline), so it can no longer exceed the
+  window's wall-clock span
+- **replay busiest intervals divide by actual dt**: paused/stalled stretches
+  no longer inflate the rate by the pause factor, aligning the column with
+  the per-process peak (`peak_net_bps`) caliber
+- **mac netstat leak fixed**: unfinished `netstat -I` children are SIGKILLed
+  when the 500 ms budget expires (previously every stalled interface leaked
+  one thread + child per tick, unbounded over long sessions)
+- **LAN sweeps clamp huge subnets**: host enumeration truncates to a /22 —
+  a /8 VPN no longer builds a 16.7-million-address Vec and near-deadloops the
+  sweep thread each interval; gateway membership now uses mask arithmetic
+- **mac RTM subnet scan runs only when the ARP table is privacy-blocked**, and
+  no longer clears MACs it already has (the MAC column stopped flickering on
+  every scan cycle)
+- **ARP broadcast entries detected by the all-f MAC**: on /23+/8 subnets
+  `.255` is a legal host and is no longer dropped by the last-octet
+  heuristic
+- **Double-click detail guarded**: aggregate parent rows (already toggled by
+  the first click, id is a hash) and LAN rows no longer open a bogus
+  "connection is gone" / empty detail popup; the field cursor resets on open
+- **Search expands CONNS groups only when CONNS is the search target**: a
+  procs-targeted search no longer flattens unfiltered CONNS groups
+- **FS blacklist adds afp/webdav/glusterfs/ceph/cephfs/lustre/ocfs2**: a
+  stale network mount's minute-long `statvfs` can no longer freeze the whole
+  UI tick (disk sampling runs on the UI path)
+- **`watch --duration` unit multiplication is checked**: an oversized value
+  no longer wraps into a wrong short duration and exits silently (release
+  builds have no overflow checks)
+- **ltop-bpf single-instance lock moves ahead of load/attach**, keyed by the
+  output file name: a systemd/manual race no longer transiently double-attaches
+  every probe, and two instances writing different snapshot files can coexist
+- **Chinese translations completed** for the confirm kill/restart dialogs,
+  help panel intro and keys header, zoom footer, detail panel hints
+  (track/copy/close/kill/start) and process state fields (running/exited)
 
 ### Changed
 
-- 未开启录制时不再每 tick 构建完整快照(from_app 的全量格式化与 String
-  克隆只在 `--log`/`L` 录制时发生;默认 250ms tick 下省一轮热路径分配)
-- eBPF `sk_ino` LRU 的已知局限(SLAB 地址复用后的低概率错账)在源码注明,
-  功能修复(失效探针或逐包重验)入路线图
-- README/book/skill 文档与实现对齐:quickstart 改单文件示例(report 只收
-  单文件,通配示例在 ≥2 个文件时报错);crash-safe 措辞收敛为"进程崩溃
-  安全(逐行追加)"——无 fsync,断电不保证;`active_s` 口径描述同步
+- The full snapshot is only built while recording: `from_app`'s per-connection
+  formatting and String clones no longer run every tick with `--log` off
+  (a wasted full round of allocations at the default 250 ms tick)
+- The eBPF `sk_ino` LRU's known limitation (low-probability mis-attribution
+  after SLAB address reuse) is documented in source; the functional fix
+  (invalidation probe or per-packet revalidation) is tracked in the roadmap
+- Docs aligned with the implementation: quickstart uses a single-file report
+  example (report takes exactly one file — the glob example errored on its
+  own once a directory held two logs); crash-safe wording narrowed to
+  process-crash-safe (per-line appends, no fsync — power loss is not
+  covered); the `active_s` description matches the new caliber
 
 ### Internal
 
-- Tests: 140 passing (0.2.6 为 132),`cargo clippy --all-targets` 零警告
+- Tests: 141 passing (132 in 0.2.6), `cargo clippy --all-targets` zero
+  warnings
 
 ## [0.2.6] - 2026-10-23
 
