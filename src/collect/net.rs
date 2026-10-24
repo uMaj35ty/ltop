@@ -29,6 +29,9 @@ pub struct NetCollector {
     base_totals: HashMap<String, (u64, u64)>,
     /// 接口连续缺席轮数(宽限淘汰计数)
     missed_rounds: HashMap<String, u32>,
+    /// 图表缩放峰值(阻尼:即时跟涨、每样本慢速回落)
+    peak_rx: HashMap<String, f64>,
+    peak_tx: HashMap<String, f64>,
     pub ifaces: BTreeMap<String, IfaceInfo>,
     pub rates: HashMap<String, IfaceRates>,
     pub history_rx: HashMap<String, VecDeque<f64>>,
@@ -41,12 +44,19 @@ pub struct NetCollector {
 /// (旧逻辑单轮缺席即整组状态清除——图表无端重置的直接来源)
 const IFACE_GRACE_ROUNDS: u32 = 20;
 
+/// 图表缩放峰值的衰减系数:单帧尖峰(重连突发等)会把可见窗口的 max
+/// 抬高数倍,旧波形瞬间被压扁贴地、直到尖峰滑出窗口才恢复——峰值即时
+/// 跟涨、按样本 ×0.97 慢落,尖峰影响约 23 个样本减半
+const PEAK_DECAY: f64 = 0.97;
+
 impl NetCollector {
     pub fn new() -> Self {
         Self {
             last_totals: HashMap::new(),
             base_totals: HashMap::new(),
             missed_rounds: HashMap::new(),
+            peak_rx: HashMap::new(),
+            peak_tx: HashMap::new(),
             ifaces: BTreeMap::new(),
             rates: HashMap::new(),
             history_rx: HashMap::new(),
@@ -101,6 +111,10 @@ impl NetCollector {
                 let txb = tx.saturating_sub(ptx) as f64 / dt;
                 push_hist(self.history_rx.entry(name.clone()).or_default(), rxb);
                 push_hist(self.history_tx.entry(name.clone()).or_default(), txb);
+                let pr = self.peak_rx.entry(name.clone()).or_insert(0.0);
+                *pr = rxb.max(*pr * PEAK_DECAY);
+                let pt = self.peak_tx.entry(name.clone()).or_insert(0.0);
+                *pt = txb.max(*pt * PEAK_DECAY);
                 self.rates.insert(
                     name.clone(),
                     IfaceRates {
@@ -138,6 +152,8 @@ impl NetCollector {
             self.history_rx.remove(name);
             self.history_tx.remove(name);
             self.base_totals.remove(name);
+            self.peak_rx.remove(name);
+            self.peak_tx.remove(name);
             self.missed_rounds.remove(name);
         }
 
@@ -221,6 +237,18 @@ impl NetCollector {
                     .unwrap_or_default(),
             ),
             None => (Vec::new(), Vec::new()),
+        }
+    }
+
+    /// 选中接口的阻尼缩放峰值(rx, tx):图表用它做比例上限,单帧尖峰
+    /// 不再把整个窗口的波形压扁
+    pub fn selected_peaks(&self) -> (f64, f64) {
+        match &self.selected {
+            Some(name) => (
+                *self.peak_rx.get(name).unwrap_or(&0.0),
+                *self.peak_tx.get(name).unwrap_or(&0.0),
+            ),
+            None => (0.0, 0.0),
         }
     }
 }
@@ -584,5 +612,23 @@ utun7      1380  <Link#41>   <#41>                     0     0           0      
         assert!(!n.last_totals.contains_key("en0"));
         assert!(!n.base_totals.contains_key("en0"), "base 一并修剪");
         assert_eq!(n.selected.as_deref(), Some("en1"), "淘汰后重选在场接口");
+    }
+
+    /// 阻尼缩放峰值:尖峰即时跟涨(图表比例立刻让位),安静后按样本衰减
+    /// 回落——单帧尖峰不再把整窗波形压扁几十秒
+    #[test]
+    fn scale_peak_rises_fast_decays_slow() {
+        let mut n = NetCollector::new();
+        n.ingest(vec![dev("en0", 0, 0)], Instant::now());
+        n.ingest(vec![dev("en0", 1_000_000, 0)], Instant::now());
+        let spike = n.selected_peaks().0;
+        assert!(spike > 0.0, "尖峰即时入峰");
+        // 尖峰后 60 轮安静:峰值应显著回落(0.97^60 ≈ 0.16)
+        for _ in 0..60 {
+            n.ingest(vec![dev("en0", 1_001_000, 0)], Instant::now());
+        }
+        let p = n.selected_peaks().0;
+        assert!(p < spike * 0.3, "峰值应回落: spike={spike} now={p}");
+        assert!(p > 0.0);
     }
 }

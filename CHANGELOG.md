@@ -36,6 +36,14 @@ transient sampling miss.
     and re-joins with a true counter delta across the gap
   - sustained absence (> 20 rounds) still evicts state — including
     `base_totals`, which previously never pruned
+- **Rate charts scale to a damped peak (NET & DISK I/O, both platforms)**:
+  the auto-scale used the visible-window maximum, so a single spike sample
+  (reconnect burst, IOPS flurry) multiplied the scale several times and
+  flattened the whole existing trace to the floor until the spike slid out
+  of the window — reading as "the chart suddenly resets" or "the left side
+  vanishes while a new chart jumps in". All four charts now scale to a
+  damped peak that rises instantly and decays ×0.97 per sample, so a spike
+  towers briefly and the baseline rescales back smoothly
 
 ### Internal
 
