@@ -5,6 +5,9 @@ use std::fs;
 use std::time::Instant;
 
 const HIST_CAP: usize = 900;
+
+/// 图表缩放峰值衰减(与 net.rs PEAK_DECAY 同值):即时跟涨、每样本慢落
+const PEAK_DECAY: f64 = 0.97;
 /// Linux:计数器单位是扇区;mac(IOKit)已是字节
 #[cfg(target_os = "linux")]
 const SECTOR: f64 = 512.0;
@@ -91,6 +94,9 @@ pub struct DiskCollector {
     pub tree: Vec<TreeNode>,
     pub hist_r: VecDeque<f64>,
     pub hist_w: VecDeque<f64>,
+    /// 图表缩放峰值(阻尼:即时跟涨、每样本慢速回落,见 net.rs PEAK_DECAY)
+    peak_r: f64,
+    peak_w: f64,
     last_t: Instant,
     /// session cumulative bytes (independently resettable)
     session_r: f64,
@@ -105,6 +111,8 @@ impl DiskCollector {
             tree: Vec::new(),
             hist_r: VecDeque::new(),
             hist_w: VecDeque::new(),
+            peak_r: 0.0,
+            peak_w: 0.0,
             last_t: Instant::now(),
             session_r: 0.0,
             session_w: 0.0,
@@ -232,6 +240,15 @@ impl DiskCollector {
         self.session_w += tw * dt_g;
         push_hist(&mut self.hist_r, tr);
         push_hist(&mut self.hist_w, tw);
+        // 阻尼峰值:即时跟涨、每样本 ×0.97 慢落(单帧 IOPS 尖峰不再把
+        // 整窗波形压扁到贴地)
+        self.peak_r = tr.max(self.peak_r * PEAK_DECAY);
+        self.peak_w = tw.max(self.peak_w * PEAK_DECAY);
+    }
+
+    /// 图表缩放峰值(read, write):draw 侧以 GRAPH_FLOOR.max(peak) 做比例
+    pub fn peaks(&self) -> (f64, f64) {
+        (self.peak_r, self.peak_w)
     }
 
     /// (read B/s, write B/s, iops, session read bytes, session write bytes)

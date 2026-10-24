@@ -1242,15 +1242,15 @@ fn draw_net(f: &mut Frame, area: Rect, app: &App, focused: bool) {
 
     let rates = app.net.selected_rates();
     let (hrx, htx) = app.net.selected_hist();
+    // 阻尼缩放峰值:即时跟涨、慢速回落——单帧尖峰不再把整窗波形压扁
+    let (prx, ptx) = app.net.selected_peaks();
     // coupled scaling (opt-in): when one direction dwarfs the other, draw the
     // small side at its true fraction of the chart height instead of letting
     // auto-scale blow a tiny waveform up to full height
     let rows = chunks[2].height;
     let (rx_frac, tx_frac) = if app.net_graph_coupled {
-        let rx_peak = hrx.iter().copied().fold(0.0f64, f64::max);
-        let tx_peak = htx.iter().copied().fold(0.0f64, f64::max);
-        let f = graph::coupled_frac(tx_peak, rx_peak, rows, app.net_graph_scale_ratio);
-        if tx_peak < rx_peak { (1.0, f) } else { (f, 1.0) }
+        let f = graph::coupled_frac(ptx, prx, rows, app.net_graph_scale_ratio);
+        if ptx < prx { (1.0, f) } else { (f, 1.0) }
     } else {
         (1.0, 1.0)
     };
@@ -1337,7 +1337,7 @@ fn draw_net(f: &mut Frame, area: Rect, app: &App, focused: bool) {
             &hrx,
             chunks[2].width as usize,
             chunks[2].height as usize,
-            GRAPH_FLOOR,
+            GRAPH_FLOOR.max(prx),
             download(),
             app.graph_net,
             rx_frac,
@@ -1350,7 +1350,7 @@ fn draw_net(f: &mut Frame, area: Rect, app: &App, focused: bool) {
             &htx,
             chunks[4].width as usize,
             chunks[4].height as usize,
-            GRAPH_FLOOR,
+            GRAPH_FLOOR.max(ptx),
             upload(),
             app.graph_net,
             tx_frac,
@@ -1542,12 +1542,17 @@ fn draw_diskio(f: &mut Frame, area: Rect, app: &App, focused: bool) {
         return;
     }
     let (hr, hw) = app.disk.hist();
+    let (pr, pw) = app.disk.peaks();
     match app.io_graph {
         IoGraphMode::Both => {
             let g = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)])
                 .split(inner);
-            graph_section(f, g[0], " ▼ READ ", download(), &hr, tr, sr, app.graph_disk);
-            graph_section(f, g[1], " ▲ WRITE ", upload(), &hw, tw, sw, app.graph_disk);
+            graph_section(
+                f, g[0], " ▼ READ ", download(), &hr, tr, sr, app.graph_disk, pr,
+            );
+            graph_section(
+                f, g[1], " ▲ WRITE ", upload(), &hw, tw, sw, app.graph_disk, pw,
+            );
         }
         IoGraphMode::Read => graph_section(
             f,
@@ -1558,9 +1563,10 @@ fn draw_diskio(f: &mut Frame, area: Rect, app: &App, focused: bool) {
             tr,
             sr,
             app.graph_disk,
+            pr,
         ),
         IoGraphMode::Write => {
-            graph_section(f, inner, " ▲ WRITE ", upload(), &hw, tw, sw, app.graph_disk)
+            graph_section(f, inner, " ▲ WRITE ", upload(), &hw, tw, sw, app.graph_disk, pw)
         }
     }
 }
@@ -1575,6 +1581,7 @@ fn graph_section(
     total: f64,
     sum: u64,
     mode: GraphMode,
+    peak: f64,
 ) {
     let g = Layout::vertical([Constraint::Length(1), Constraint::Min(2)]).split(area);
     f.render_widget(
@@ -1591,7 +1598,8 @@ fn graph_section(
             data,
             g[1].width as usize,
             g[1].height as usize,
-            GRAPH_FLOOR,
+            // 阻尼峰值做比例下限:单帧尖峰不压扁整窗波形
+            GRAPH_FLOOR.max(peak),
             grad,
             mode,
             1.0,
