@@ -140,7 +140,8 @@ pub fn draw(f: &mut Frame, app: &App) {
             let lang = app.lang;
             let key = |k: &str, label: &str| footer_key(k, label);
             let mut spans: Vec<Span> = vec![Span::styled(" ", dim())];
-            spans.extend(key("z / esc", lang.tr("exit_zoom")));
+            spans.extend(key("z", lang.tr("exit_zoom")));
+            spans.extend(key("esc", lang.tr("unfocus")));
             spans.extend(key("enter", lang.tr("detail_desc")));
             spans.extend(key("space", lang.tr("pause")));
             spans.extend(key("/", lang.tr("search")));

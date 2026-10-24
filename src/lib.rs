@@ -437,7 +437,7 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
         MenuState::None => match code {
             KeyCode::Char('q') => app.quit = true,
             // z:焦点盒(LAN/CONNS/PROCS)全屏 zoom;再按退出。esc 在 zoom
-            // 中也只退出 zoom(不触发清 focus/选中)
+            // 中只取消聚焦(zoom 本体仅 z 可退,见下方 esc 分支)
             KeyCode::Char('z') => {
                 if app.zoom.is_some() {
                     app.zoom = None;
@@ -449,7 +449,13 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
                     app.zoom = Some(app.last_focus);
                 }
             }
-            KeyCode::Esc if app.zoom.is_some() => app.zoom = None,
+            // zoom 本体只由 z 退出;esc 在 zoom 内只取消聚焦(留在全屏)——
+            // 此前 esc 直接退整个 zoom,想只摘掉聚焦就得连全屏一起退
+            KeyCode::Esc if app.zoom.is_some() => {
+                for f in app.focus.iter_mut() {
+                    *f = false;
+                }
+            }
             KeyCode::Char(' ') => app.paused = !app.paused,
             KeyCode::Char('/') => {
                 // 打开时载入当前过滤,可直接编辑;清空后 enter 即重置
@@ -1910,6 +1916,23 @@ mod tests {
             usage_text("myalias").contains("myalias [OPTIONS]"),
             "自建软链别名同版帮助(调用名跟随机制保留)"
         );
+    }
+
+    /// zoom 只由 z 退出;esc 在 zoom 内只取消聚焦(留在全屏)——旧语义
+    /// esc 直接退整个 zoom,聚焦无法单独摘除
+    #[test]
+    fn zoom_esc_clears_focus_only() {
+        let mut app = App::new(None);
+        app.focus[app::BOX_PROCS] = true;
+        app.last_focus = app::BOX_PROCS;
+        app.visible[app::BOX_PROCS] = true;
+        handle_key(&mut app, KeyCode::Char('z'), KeyModifiers::NONE);
+        assert_eq!(app.zoom, Some(app::BOX_PROCS), "z 进入 zoom");
+        handle_key(&mut app, KeyCode::Esc, KeyModifiers::NONE);
+        assert!(!app.focus[app::BOX_PROCS], "esc 只取消聚焦");
+        assert_eq!(app.zoom, Some(app::BOX_PROCS), "esc 不得退出 zoom");
+        handle_key(&mut app, KeyCode::Char('z'), KeyModifiers::NONE);
+        assert!(app.zoom.is_none(), "z 退出 zoom");
     }
 
     /// --theme 已进白名单:带文件参数不再被 early_exit 拒绝
