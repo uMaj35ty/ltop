@@ -193,6 +193,8 @@ impl UdpCollector {
             self.pids.diff(ts, pids);
             self.upids.diff(ts, upids);
             self.sks.diff(ts, sks);
+            // 旧写者留下的 last_inodes 一并作废(detail 面板不陈列旧时代行)
+            self.last_inodes.clear();
             return UdpSample::default();
         }
         let Snap {
@@ -451,6 +453,36 @@ mod tests {
         assert!(sample.net.is_empty());
         // the last round stays visible for --dump
         assert_eq!(c.last_inodes, sample.inodes);
+    }
+
+    #[test]
+    fn writer_switch_clears_last_inodes() {
+        let mut c = UdpCollector::new();
+        // 先攒一轮真实 socket 增量,last_inodes 有内容(detail 面板数据源)
+        assert!(
+            c.ingest(Snap {
+                ts: 1000,
+                inst: Some("A".into()),
+                pids: Counters::new(),
+                upids: Counters::new(),
+                sks: map(&[(9, 10, 0)]),
+            })
+            .inodes
+            .is_empty()
+        );
+        let s = c.ingest(Snap {
+            ts: 2000,
+            inst: Some("A".into()),
+            pids: Counters::new(),
+            upids: Counters::new(),
+            sks: map(&[(9, 20, 5)]),
+        });
+        assert!(!s.inodes.is_empty());
+        assert!(!c.last_inodes.is_empty());
+        // 写者切换:default 返回同时必须清 last_inodes,否则 detail 面板
+        // 继续陈列旧写者时代的 inode 行
+        assert!(c.ingest(snap("B", 3000, &[(7, 1, 0)])).inodes.is_empty());
+        assert!(c.last_inodes.is_empty());
     }
 
     #[test]
