@@ -220,6 +220,8 @@ pub struct App {
     pub tracked: Tracked,
     pub log_tracked_only: bool,
     pub allow_global_kill: bool,
+    /// expose the global record hotkey `L` (default off; 防误触)
+    pub allow_global_log: bool,
     pub layout: LayoutMode,
     /// box visibility toggled by number keys (btop 1-4 style)
     pub visible: [bool; BOX_COUNT],
@@ -274,6 +276,7 @@ impl App {
             tracked: Tracked::default(),
             log_tracked_only: cfg.log_tracked_only,
             allow_global_kill: cfg.allow_global_kill,
+            allow_global_log: cfg.allow_global_log,
             layout: cfg.layout,
             visible: cfg.boxes,
             scroll: [0; BOX_COUNT],
@@ -319,6 +322,7 @@ impl App {
             log_interval_ms: self.log.interval.as_millis() as u64,
             log_tracked_only: self.log_tracked_only,
             allow_global_kill: self.allow_global_kill,
+            allow_global_log: self.allow_global_log,
             log_retention_days: self.log.retention_days,
             sweep_interval_s: self.lan.sweep_interval.as_secs(),
             sweep: self.lan.sweep_enabled,

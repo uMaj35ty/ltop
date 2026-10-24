@@ -128,6 +128,14 @@ impl Lang {
                 "about_line" => " local list monitor: net / lan / disk io / conns / procs",
                 "keys_header" => " \u{2500}\u{2500} keys \u{2500}\u{2500}",
                 "exit_zoom" => "exit zoom",
+                "zoom" => "zoom",
+                "kill" => "kill",
+                "global_log" => "global record key",
+                "group_general" => "general",
+                "group_graphs" => "graphs",
+                "group_recording" => "recording",
+                "group_lan" => "lan",
+                "group_procs" => "conns & procs",
                 "hint_track_on" => "[space] [x] tracked",
                 "hint_track_off" => "[space] [ ] track",
                 "hint_copy" => "[y] copy",
@@ -220,6 +228,14 @@ impl Lang {
                 "about_line" => " 本机监控:网络 / 局域网 / 磁盘 I/O / 连接 / 进程",
                 "keys_header" => " \u{2500}\u{2500} 键位 \u{2500}\u{2500}",
                 "exit_zoom" => "退出全屏",
+                "zoom" => "全屏",
+                "kill" => "终止",
+                "global_log" => "全局录制键",
+                "group_general" => "通用",
+                "group_graphs" => "图表",
+                "group_recording" => "录制",
+                "group_lan" => "局域网",
+                "group_procs" => "连接与进程",
                 "hint_track_on" => "[space] [x] 已跟踪",
                 "hint_track_off" => "[space] [ ] 跟踪",
                 "hint_copy" => "[y] 复制",
@@ -251,6 +267,10 @@ pub struct Config {
     pub log_tracked_only: bool,
     /// expose the global kill key (advanced)
     pub allow_global_kill: bool,
+    /// expose the global record hotkey `L` (advanced; default off so an
+    /// accidental Shift+L never starts writing a log). Recording stays
+    /// available via `--log` and the settings panel
+    pub allow_global_log: bool,
     pub lan_sort: LanSort,
     pub conn_filter: ConnFilter,
     /// CONNS 墓碑行保留时长;0 = 关闭墓碑
@@ -296,6 +316,7 @@ impl Default for Config {
             net_graph_scale_ratio: 5,
             conn_sort: ConnSort::Proc,
             proc_sort: ProcSort::NetSum,
+            allow_global_log: false,
         }
     }
 }
@@ -447,6 +468,7 @@ impl Config {
                 "sweep" => cfg.sweep = v == "true",
                 "log_tracked_only" => cfg.log_tracked_only = v == "true",
                 "allow_global_kill" => cfg.allow_global_kill = v == "true",
+                "allow_global_log" => cfg.allow_global_log = v == "true",
                 "lan_sort" => {
                     cfg.lan_sort = match v {
                         "ip" => LanSort::Ip,
@@ -519,7 +541,7 @@ impl Config {
             .map(|&b| if b { '1' } else { '0' })
             .collect();
         format!(
-            "lang = {}\nlayout = {}\ntick_ms = {}\ngraph_net = {}\ngraph_disk = {}\nboxes = {}\nlog_interval_ms = {}\nlog_retention_days = {}\nsweep_interval_s = {}\nsweep = {}\nlog_tracked_only = {}\nallow_global_kill = {}\nlan_sort = {}\nconn_filter = {}\nconn_sort = {}\nproc_sort = {}\ntombstone_ttl_ms = {}\ntheme = {}\ntheme_live_follow = {}\nproc_expand_default = {}\nproc_exit_retention_min = {}\nnet_graph_coupled = {}\nnet_graph_scale_ratio = {}\n",
+            "lang = {}\nlayout = {}\ntick_ms = {}\ngraph_net = {}\ngraph_disk = {}\nboxes = {}\nlog_interval_ms = {}\nlog_retention_days = {}\nsweep_interval_s = {}\nsweep = {}\nlog_tracked_only = {}\nallow_global_kill = {}\nallow_global_log = {}\nlan_sort = {}\nconn_filter = {}\nconn_sort = {}\nproc_sort = {}\ntombstone_ttl_ms = {}\ntheme = {}\ntheme_live_follow = {}\nproc_expand_default = {}\nproc_exit_retention_min = {}\nnet_graph_coupled = {}\nnet_graph_scale_ratio = {}\n",
             self.lang.label(),
             match self.layout {
                 LayoutMode::Classic => "classic",
@@ -536,6 +558,7 @@ impl Config {
             self.sweep,
             self.log_tracked_only,
             self.allow_global_kill,
+            self.allow_global_log,
             self.lan_sort.label(),
             self.conn_filter.label(),
             self.conn_sort.label(),
