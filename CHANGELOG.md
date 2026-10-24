@@ -105,6 +105,16 @@ macOS bug fixes.
   width includes the data-caliber header lines — Chinese text no longer
   overflows and gets clipped (the "help panel shows half the information"
   case)
+- **CONNS proc groups no longer fragment when connections are tracked**: the
+  tracked-row pinning floated individual connections to the top in pin
+  order, shredding same-name process groups into several separate trees
+  (each with its own Σ header); a tracked connection that had since closed
+  floated its tombstone — carrying the process's stale comm — into the mix.
+  Under Proc sort the display now works on whole groups: a group containing
+  tracked connections is hoisted as one unit, tracked rows stay highlighted
+  inside their group, and same-key tombstones merge back into their group;
+  other sort orders keep the old pin-to-top behavior. Regression test
+  included
 
 ### Added
 
