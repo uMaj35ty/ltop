@@ -19,7 +19,7 @@ ltop --schema    # 权威字段表——随二进制版本化，永不漂移
 快照覆盖五个域: `meta`（版本、os、arch、`udp_helper` 标志）、`net`
 （每接口速率与累计计数）、`procs`（每进程网络+磁盘计费，带 UDP 分解）、
 `conns`（逐连接 socket）、`disk`（容量/吞吐）、`lan`（邻居）。值得知道的
-语义直接标在输出里——比如 macOS 的 MAC 脱敏。
+语义直接标在输出里——比如 macOS 的 MAC 脱敏（启用 `ltop lan-setup` 后即为真值）。
 
 ## 监控日志（TUI）
 

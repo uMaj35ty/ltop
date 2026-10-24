@@ -13,14 +13,16 @@ LAN 盒回答"我网上有谁"——不要 root、不用 nmap、不出 TUI。发
 两路结果按（接口, IP）合并。主机名走尽力而为的三级解析——mDNS 反查 →
 NetBIOS node status → 反向 DNS；网关有标记；macOS 的邻居表脱敏绕过方式是
 经路由 socket 逐条探测内核缓存——那边哪些可见哪些不可见见
-[兼容性 → macOS](compat.md#macos)。
+[兼容性 → macOS](compat.md#macos)。真实 MAC 来自 `ltop lan-setup`：一个
+每用户 launchd 代理，经 Apple 平台签名工具轮转 `arp`/`ifconfig` 快照
+（免 root、免 entitlement）——未启用时 MAC 显示 `—`。
 
 ## 每个邻居显示什么
 
 | 列 | 含义 |
 |---|---|
 | IP / hostname | 地址，能解析就带 mDNS 名 |
-| MAC | 硬件地址（macOS 显示 —，系统脱敏） |
+| MAC | 硬件地址（macOS 未启用 `ltop lan-setup` 时显示 —） |
 | iface | 从本机哪块网卡可达 |
 | Σ conns | CONNS 里指向这个对端的活跃连接数 |
 | rate | 到这个对端的当前 rx+tx |
