@@ -24,6 +24,8 @@ use std::time::{Duration, SystemTime};
 const STALE_AFTER: Duration = Duration::from_secs(120);
 /// 防御性解析上限(正常 ARP 表几十至几百行)
 const MAX_LINES: usize = 4096;
+/// 快照文件大小上限:损坏文件(或被塞垃圾)也不至于整读进内存
+const MAX_SNAPSHOT_BYTES: u64 = 1 << 20;
 
 pub const ARP_FILE: &str = "lan-arp.txt";
 pub const IF_FILE: &str = "lan-if.txt";
@@ -50,6 +52,10 @@ pub fn parse_arp_line(line: &str) -> Option<(Ipv4Addr, String, String)> {
         return None;
     }
     let ip: Ipv4Addr = line[lp + 1..rp].trim().parse().ok()?;
+    // 组播/广播条目(IGMP、mDNS 组、255.255.255.255)与进程内路径同滤
+    if ip.is_multicast() || ip.is_broadcast() {
+        return None;
+    }
     let rest = line[rp + 1..]
         .trim_start()
         .strip_prefix("at ")?
@@ -127,7 +133,11 @@ fn cached<T: Send + Sync + 'static>(
     path: &Path,
     parse: fn(&str) -> T,
 ) -> Option<Arc<T>> {
-    let mtime = std::fs::metadata(path).ok()?.modified().ok()?;
+    let md = std::fs::metadata(path).ok()?;
+    if md.len() > MAX_SNAPSHOT_BYTES {
+        return None;
+    }
+    let mtime = md.modified().ok()?;
     if SystemTime::now()
         .duration_since(mtime)
         .ok()?
@@ -191,6 +201,9 @@ mod tests {
             "? (192.168.121.255) at ff:ff:ff:ff:ff:ff on en0 ifscope [ethernet]"
         )
         .is_none());
+        assert!(
+            parse_arp_line("? (224.0.0.251) at 1:0:5e:0:0:fb on en0 ifscope [ethernet]").is_none()
+        );
         assert!(parse_arp_line("").is_none());
         assert!(parse_arp_line("garbage line").is_none());
         assert!(parse_arp_line("? (not.an.ip) at c0:4a:9:30:d3:af on en0").is_none());

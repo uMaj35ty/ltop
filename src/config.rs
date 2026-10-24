@@ -32,7 +32,7 @@ impl Lang {
         }
     }
 
-        fn parse(s: &str) -> Option<Self> {
+    fn parse(s: &str) -> Option<Self> {
         match s {
             "en" => Some(Self::En),
             "zh" => Some(Self::Zh),
@@ -603,12 +603,23 @@ impl Config {
         }
     }
 
-    /// 原子写:同目录 tmp + rename,断电/崩溃不会留下半截 config
+    /// 原子写:同目录 tmp + rename,断电/崩溃不会留下半截 config。
+    /// tmp 带 pid 且 create_new:并发实例互不踩踏、不跟随预置的同名链接;
+    /// 既有文件的自定义权限(如 600)经 rename 存续
     fn write_atomic(path: &std::path::Path, content: &str) -> std::io::Result<()> {
-        let mut tmp = path.as_os_str().to_os_string();
-        tmp.push(".tmp");
-        let tmp = std::path::PathBuf::from(tmp);
-        fs::write(&tmp, content)?;
+        use std::io::Write;
+        let tmp = path.with_extension(format!("tmp.{}", std::process::id()));
+        let mode = fs::metadata(path).ok().map(|m| m.permissions());
+        {
+            let mut f = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&tmp)?;
+            f.write_all(content.as_bytes())?;
+        }
+        if let Some(p) = mode {
+            let _ = fs::set_permissions(&tmp, p);
+        }
         match fs::rename(&tmp, path) {
             Ok(()) => Ok(()),
             Err(e) => {
