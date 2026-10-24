@@ -988,6 +988,29 @@ pub fn procs_display(app: &App) -> Vec<&crate::collect::proc::ProcRow> {
 }
 /// Connection list in display order: tracked pinned first, then the rest.
 pub fn conns_display(app: &App) -> Vec<&Conn> {
+    // Proc 排序下不按追踪单行置顶——单行浮到顶部会在 pin 顺序下把同名
+    // 进程的分组撕成多个碎组(死亡的追踪行还以墓碑身份带着旧进程名混在
+    // 最前);改为整组提升,见 proc_grouped_display
+    if app.conn.sort == ConnSort::Proc {
+        let mut out = proc_grouped_display(app);
+        out = match app.conn.filter {
+            ConnFilter::All => out,
+            ConnFilter::Lan => out
+                .into_iter()
+                .filter(|c| matches!(c.remote.0, std::net::IpAddr::V4(v4) if v4.is_private()))
+                .collect(),
+            ConnFilter::Tcp => out.into_iter().filter(|c| c.is_tcp()).collect(),
+            ConnFilter::Udp => out.into_iter().filter(|c| !c.is_tcp()).collect(),
+        };
+        if let Some(ip) = app.conn.peer_filter {
+            out.retain(|c| c.remote.0 == std::net::IpAddr::V4(ip));
+        }
+        if app.search_box == BOX_CONNS && !app.search.is_empty() {
+            let q = app.search.to_lowercase();
+            out.retain(|c| c.proc.as_deref().unwrap_or("").to_lowercase().contains(&q));
+        }
+        return out;
+    }
     let mut out = Vec::new();
     for ino in &app.tracked.conns {
         if let Some(c) = app.conn.conns.iter().find(|c| c.inode == *ino) {
@@ -1016,6 +1039,36 @@ pub fn conns_display(app: &App) -> Vec<&Conn> {
     if app.search_box == BOX_CONNS && !app.search.is_empty() {
         let q = app.search.to_lowercase();
         out.retain(|c| c.proc.as_deref().unwrap_or("").to_lowercase().contains(&q));
+    }
+    out
+}
+
+/// Proc 排序的显示序:按归属键整组为单位,含追踪行的组整体提升到最前,
+/// 其余组保持排序给出的流量降序;组内相邻永不打散(活行在原位,同键墓碑
+/// 从尾部并回本组、排在活行之后)。conn_items 的连续同键分组因此恒定
+/// 每键一组
+fn proc_grouped_display(app: &App) -> Vec<&Conn> {
+    let all = &app.conn.conns;
+    // 保序归组:排序后的活行同键相邻;墓碑追加在尾部,同键可能再次出现
+    // ——并入已存在的组(排在该组活行之后)
+    let mut groups: Vec<(String, Vec<usize>)> = Vec::new();
+    for (i, c) in all.iter().enumerate() {
+        let k = crate::collect::conn::owner_key(c);
+        match groups.iter_mut().find(|(kk, _)| *kk == k) {
+            Some((_, v)) => v.push(i),
+            None => groups.push((k, vec![i])),
+        }
+    }
+    let tracked: std::collections::HashSet<u64> = app.tracked.conns.iter().copied().collect();
+    let has_tracked =
+        |v: &Vec<usize>| v.iter().any(|&i| tracked.contains(&all[i].inode));
+    // 稳定排序:含追踪的组提前,组间相对顺序不变
+    groups.sort_by_key(|(_, v)| !has_tracked(v));
+    let mut out = Vec::with_capacity(all.len());
+    for (_, v) in &groups {
+        for &i in v {
+            out.push(&all[i]);
+        }
     }
     out
 }
@@ -4011,6 +4064,58 @@ mod tests {
             !rows_containing(&buf, "127.0.0.1:1001", 3),
             "成员 IP 不应出现在摘要里"
         );
+    }
+
+    /// proc 排序下追踪行不单行置顶:含追踪的组整组提升,组内相邻(尾部
+    /// 墓碑并回本组)——单行置顶曾把同名进程撕成多个碎组、死亡追踪行还
+    /// 以旧进程名的墓碑身份混进最前
+    #[test]
+    fn proc_sort_keeps_tracked_rows_inside_their_group() {
+        let mut app = crate::app::App::new(None);
+        let mk = |inode: u64, name: &str, dead: bool| crate::collect::conn::Conn {
+            proto: crate::collect::conn::IPPROTO_TCP,
+            local: ("127.0.0.1".parse().unwrap(), 1000 + inode as u16),
+            remote: ("127.0.0.1".parse().unwrap(), 443),
+            state: 1,
+            uid: 0,
+            inode,
+            bytes_recv: 100,
+            bytes_sent: 0,
+            rate_recv: 0.0,
+            rate_sent: 0.0,
+            pid: Some(1000 + inode as u32),
+            proc: Some(name.to_string()),
+            dead,
+            first_seen: None,
+            dead_at: None,
+        };
+        // other 组在前、steam 在后;只追踪 steam 的尾部墓碑:
+        // steam 墓碑必须并回 steam 组(而不是在顶部自成一组),
+        // 且含追踪的 steam 组整组提升到 other 之前
+        app.conn.conns = vec![
+            mk(3, "other", false),
+            mk(1, "steam", false),
+            mk(2, "steam", false),
+            mk(4, "steam", true),
+        ];
+        app.tracked.conns = vec![4];
+        app.conn.sort = crate::collect::conn::ConnSort::Proc;
+        let keys: Vec<String> = conn_list(&app)
+            .iter()
+            .map(|c| crate::collect::conn::owner_key(c))
+            .collect();
+        assert_eq!(
+            keys,
+            vec!["steam", "steam", "steam", "other"],
+            "同名行必须同组相邻(墓碑并回),追踪只提升整组: {keys:?}"
+        );
+        // 不追踪时保持原有组序(稳定,不打散)
+        app.tracked.conns = Vec::new();
+        let keys: Vec<String> = conn_list(&app)
+            .iter()
+            .map(|c| crate::collect::conn::owner_key(c))
+            .collect();
+        assert_eq!(keys, vec!["other", "steam", "steam", "steam"]);
     }
 
     #[test]
