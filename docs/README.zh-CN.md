@@ -148,5 +148,14 @@ clang 构建照样成功,只有 UDP 计费静默降级。诊断脚本在 `script
 (`udp-smoke.sh`、`snap-diff.py`、`soak.sh`);eBPF 程序是 `bpf/net_bpf.c`;
 采集器在 `src/collect/`;systemd 单元在 `deploy/`。
 
-主题移植自 [btop](https://github.com/aristocratos/btop)(Apache-2.0);
-其余代码与文档以 MIT 协议发布(见 [LICENSE](../LICENSE))。
+## 特别致谢
+
+特别感谢 **Aristocratos**
+([btop](https://github.com/aristocratos/btop)) 与 btop 官方主题集的作者
+们——ltop 的主题格式就是 btop 格式,内嵌 41 套主题转换自该主题集;同样
+感谢 **DHH**([Omarchy](https://github.com/dhh/omarchy))与 Omarchy 内置
+主题的创作者们,另外 31 套来自那里。每一套主题都是其作者的成果;详见
+[主题 → 致谢](https://umaj35ty.github.io/ltop/docs/zh/themes.html#致谢)。
+
+主题移植自 btop(Apache-2.0);其余代码与文档以 MIT 协议发布
+(见 [LICENSE](../LICENSE))。

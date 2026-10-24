@@ -166,6 +166,16 @@ silently. Diagnostics live in `scripts/` (`udp-smoke.sh`, `snap-diff.py`,
 `soak.sh`); the eBPF program is `bpf/net_bpf.c`; collectors under
 `src/collect/`; the systemd unit in `deploy/`.
 
-Themes are ported from [btop](https://github.com/aristocratos/btop)
-(Apache-2.0); all other code and docs are released under the MIT license
-(see [LICENSE](LICENSE)).
+## Acknowledgements
+
+Special thanks to **Aristocratos**
+([btop](https://github.com/aristocratos/btop)) and the authors of btop's
+official theme collection — ltop's theme format is btop's and 41 of the
+built-in themes are converted from that collection — and to **DHH**
+([Omarchy](https://github.com/dhh/omarchy)) and the creators of Omarchy's
+bundled themes, from which the other 31 come. Every one of those themes
+remains the work of its author; see
+[Themes → Acknowledgements](https://umaj35ty.github.io/ltop/docs/themes.html#acknowledgements).
+
+Themes are ported from btop (Apache-2.0); all other code and docs are
+released under the MIT license (see [LICENSE](LICENSE)).
