@@ -221,10 +221,12 @@ impl ProcCollector {
 
         // --- network: fold per-pid eBPF deltas into per-process totals ---
         let mut net_rates: HashMap<u32, (f64, f64)> = HashMap::new();
+        // start 读取按 tick 记忆化:net/udp 两轮对同一 pid 只读一次 /proc
+        let mut start_cache: HashMap<u32, Option<u64>> = HashMap::new();
         for d in net {
             let name = self.udp_name(d.pid);
             #[cfg(target_os = "linux")]
-            let cur_start = read_pid_start(d.pid);
+            let cur_start = cached_start(&mut start_cache, d.pid);
             #[cfg(target_os = "macos")]
             let cur_start = self.mac_starts.get(&d.pid).map(|e| e.max(0) as u64);
             let st = self.ledger_entry(d.pid, &name, cur_start);
@@ -299,7 +301,7 @@ impl ProcCollector {
             for d in udp {
                 let name = self.udp_name(d.pid);
                 #[cfg(target_os = "linux")]
-                let cur_start = read_pid_start(d.pid);
+                let cur_start = cached_start(&mut start_cache, d.pid);
                 #[cfg(target_os = "macos")]
                 let cur_start = self.mac_starts.get(&d.pid).map(|e| e.max(0) as u64);
                 let st = self.ledger_entry(d.pid, &name, cur_start);
@@ -394,9 +396,12 @@ impl ProcCollector {
     /// pid 复用(start_ticks 变了)→ 旧世代账本清零重计,不串账。
     /// 旧键的两个病一起治:改名拆行、复用静默毒化。
     fn ledger_entry(&mut self, pid: u32, name: &str, cur_start: Option<u64>) -> &mut ProcState {
-        let stale = match self.acc.get(&pid) {
-            Some(st) => st.start_ticks.is_some() && st.start_ticks != cur_start,
-            None => false,
+        // 只在「正向证据」下判世代更替:两侧都有 start 且不等。cur_start
+        // 为 None(/proc 消失 = 进程刚退出,最后的 delta 正在到达)必须保留
+        // 账本——退出保留行的生命周期总量就靠这一拍
+        let stale = match (self.acc.get(&pid).map(|st| st.start_ticks), cur_start) {
+            (Some(Some(old)), Some(cur)) => old != cur,
+            _ => false,
         };
         if stale {
             self.acc.remove(&pid);
@@ -411,7 +416,10 @@ impl ProcCollector {
             let start = self.mac_starts.get(&pid).copied();
             ProcState::first_sight_mac(pid, start)
         });
-        st.name = name.to_string();
+        // "(gone)"(pid 已退出且缓存无名字)不得覆盖保留行的真名
+        if name != "(gone)" || st.name.is_empty() {
+            st.name = name.to_string();
+        }
         st
     }
 
@@ -496,6 +504,18 @@ fn read_pid_uptime_s(pid: u32) -> Option<u64> {
 }
 
 #[cfg(target_os = "linux")]
+/// sample() 内的 start 记忆化(net 与 udp 两轮共享,同一 pid 一次 /proc 读)
+fn cached_start(cache: &mut HashMap<u32, Option<u64>>, pid: u32) -> Option<u64> {
+    match cache.entry(pid) {
+        std::collections::hash_map::Entry::Occupied(e) => *e.get(),
+        std::collections::hash_map::Entry::Vacant(e) => {
+            let v = read_pid_start(pid);
+            e.insert(v);
+            v
+        }
+    }
+}
+
 fn read_pid_start(pid: u32) -> Option<u64> {
     let stat = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
     let after = stat.rsplit_once(')')?.1;
@@ -534,6 +554,35 @@ mod tests {
     #[cfg(target_os = "macos")]
     use std::fs;
 
+    #[test]
+    fn ledger_none_start_keeps_retained_row() {
+        let mut c = ProcCollector::new();
+        let mut st = ProcState::zero();
+        st.start_ticks = Some(999);
+        st.net_recv = 5000;
+        c.acc.insert(424242, st);
+        // pid 已退出:cur_start=None(读不到)不是世代更替,保留行必须原样
+        let st = c.ledger_entry(424242, "x", None);
+        assert_eq!(
+            st.net_recv, 5000,
+            "退出瞬间的最后 delta 不能清掉生命周期总量"
+        );
+    }
+
+    #[test]
+    fn ledger_resets_on_positive_generation_change() {
+        let mut c = ProcCollector::new();
+        let mut st = ProcState::zero();
+        st.start_ticks = Some(1);
+        st.net_recv = 5000;
+        c.acc.insert(424242, st);
+        // start 变了:正向证据,旧世代清零,名字跟随新进程
+        let st = c.ledger_entry(424242, "newname", Some(2));
+        assert_eq!(st.net_recv, 0, "世代更替必须清零");
+        assert_eq!(st.name, "newname");
+    }
+
+    #[cfg(target_os = "linux")]
     #[test]
     fn rename_follows_and_keeps_ledger() {
         let mut c = ProcCollector::new();
