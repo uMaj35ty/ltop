@@ -3,6 +3,45 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+Tech-debt and QoL line: long-window `report` no longer loads whole capture
+files, real MAC addresses on macOS behind the 27 privacy gate, ledger and
+config hygiene.
+
+### Added
+
+- **`ltop lan-setup` (macOS)** — installs a per-user launchd agent that
+  rotates `arp -a -n` / `ifconfig` snapshots every 30 s via Apple platform
+  binaries, so the LAN and NET boxes show real neighbour and interface MACs
+  on macOS 27 (which gates that data by responsible-process attribution ×
+  platform signature: even Apple-signed `arp` run from an app comes back
+  empty, and `getifaddrs` MACs read `02:00:00:00:00:00`). No root, no
+  entitlements; `--remove` undoes it; missing/stale snapshots fall back to
+  the previous in-process paths. `ltop lan-setup --remove` reverts cleanly
+- **eBPF sk_ino invalidation** — `kprobe/inet_sock_destruct` clears the
+  sk→inode cache when a socket dies, closing the low-probability
+  mis-attribution after SLAB address reuse that the 0.2.7 audit documented
+  (kernels without the symbol fall back to the old LRU-eviction semantics)
+
+### Changed
+
+- **`ltop report` streams** — snapshots are aggregated line-by-line instead
+  of materialized; a 7-day × 5 s window (~120 k snapshots) no longer sits
+  fully in RAM (OOM risk on long watch captures). Output is byte-identical
+  (equivalence test pins both paths)
+- **proc ledger keyed by pid with generation reset** — a process renaming
+  itself no longer splits into two ledger rows (name follows the latest
+  comm), and a pid reuse zeroes the old generation's counters instead of
+  silently mixing them
+- **config writes are atomic** (same-dir tmp + rename) and unknown keys /
+  comment lines are preserved verbatim across saves instead of being
+  silently dropped
+- **CLI usage errors follow one convention** — `ltop[ sub]: <message>
+  (try --help)`, bilingual per the user's language setting, exit code 1
+- **udp writer switch clears `last_inodes`** — the detail panel no longer
+  lists inode rows from a previous ltop-bpf generation after it takes over
+
 ## [0.2.9] - 2026-10-24
 
 Network & security audit across all four release targets (Linux/macOS ×
