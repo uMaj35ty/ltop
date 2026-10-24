@@ -1,6 +1,6 @@
 # Maintainer: uMaj35ty <arcadelogic@foxmail.com>
 pkgname=ltop-bin
-pkgver=0.2.6
+pkgver=0.2.7
 pkgrel=1
 pkgdesc="btop-styled TUI monitoring for local network, LAN neighbours and disk I/O"
 arch=($CARCH)
@@ -13,7 +13,7 @@ provides=('ltop' 'ltop-bpf')
 conflicts=('localist-top' 'localist-top-bin')
 source=("ltop-$pkgver-x86_64-linux.tar.gz::$url/releases/download/v$pkgver/ltop-$pkgver-x86_64-linux.tar.gz"
         "ltop-bpf.service::$url/raw/v$pkgver/deploy/ltop-bpf.service")
-sha256sums=('567c349a42a32e001cdfd6261b440cbb91181e4caf0fd89a79ebae34ea637beb'
+sha256sums=('38551216297e530be2fd93ae64c610e5b877a5729d34985e71f05f66829b06f8'
             '7ef2417602547e639140fa27e6d61bbb5a1fcde3fdbdc0e7b07f4ab453494676')
 options=('!strip')
 
