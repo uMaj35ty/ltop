@@ -260,7 +260,7 @@ fn netstat_counters_output<'a>(ifaces: impl Iterator<Item = &'a String>) -> Stri
         let name = name.clone();
         let pending = pending.clone();
         std::thread::spawn(move || {
-            let Ok(mut child) = std::process::Command::new("netstat")
+            let Ok(child) = std::process::Command::new("netstat")
                 .args(["-I", &name, "-b"])
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::null())
