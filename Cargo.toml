@@ -1,6 +1,6 @@
 [package]
 name = "ltop"
-version = "0.2.9"
+version = "0.2.10"
 edition = "2021"
 description = "btop-styled TUI monitoring only local network, LAN neighbours and disk I/O"
 license = "MIT"
