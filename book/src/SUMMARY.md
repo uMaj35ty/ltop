@@ -12,3 +12,5 @@
 - [Compatibility](compat.md)
 - [Compared to other tools](comparison.md)
 - [FAQ](faq.md)
+- [Security](security.md)
+- [Contributing](contributing.md)
