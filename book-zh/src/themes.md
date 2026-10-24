@@ -7,8 +7,9 @@ ltop 读 **btop 兼容的主题文件**: 任何 btop 主题直接可用，自己
 
 ## 主题放哪
 
-- **内嵌**: 72 套从 btop 转换的主题，主题菜单（`m` → theme）或命令行
-  `--theme <name>` 选择。
+- **内嵌**: 72 套主题——41 套来自 btop 官方主题集，31 套来自 Omarchy
+  内置主题——主题菜单（`m` → theme）或命令行 `--theme <name>` 选择
+  （见[致谢](#致谢)）。
 - **Omarchy**: 若存在 `~/.local/state/omarchy/current/theme/btop.theme`，
   菜单会多出 `omarchy` 条目——选中即跟随桌面主题，桌面换主题时热重载。
 - **`--follow-theme`:** 启动时读到的是*当时的*快照；加 `--follow-theme`
@@ -32,6 +33,20 @@ ltop --theme ~/my-colors.theme
 theme[main_fg] = "#c0caf5"
 theme[inactive_fg] = "#565f89"
 ```
+
+## 致谢
+
+内嵌主题库建立在以下项目的成果之上，在此致谢：
+
+- **btop**（[aristocratos/btop](https://github.com/aristocratos/btop)，
+  Aristocratos 作品）——ltop 的主题格式*就是* btop 格式，内嵌 41 套主题
+  转换自 btop 官方主题集。感谢 Aristocratos 与该主题集的每一位作者。
+- **Omarchy**（[dhh/omarchy](https://github.com/dhh/omarchy)，DHH 作品）
+  ——内嵌 31 套主题来自 Omarchy 内置主题集。感谢 DHH 与这些主题的
+  创作者。
+
+为 btop 或 Omarchy 写的主题在这里继续可用——成果属于创作者，内嵌时
+保留出处。
 
 ## 变量参考
 

@@ -47,3 +47,16 @@ PR 的标准。
 页面的任何内容,请在 PR 描述里明确指出。审计基线在仓库历史里(0.2.9);
 请把你所保持的性质显式写出来——例如"LAN 提供的字符串永远不会未经
 过滤地到达终端"。
+
+## 致谢
+
+ltop 的外观带着感激与出处,借用自两个项目与其背后的作者:
+
+- **btop**([aristocratos/btop](https://github.com/aristocratos/btop),
+  Aristocratos 作品):主题格式与 btop 兼容,内嵌 41 套主题来自 btop
+  官方主题集;
+- **Omarchy**([dhh/omarchy](https://github.com/dhh/omarchy),DHH 作品):
+  内嵌 31 套主题来自其内置主题集。
+
+感谢 Aristocratos、DHH 与每一位主题创作者——见
+[主题 → 致谢](themes.md#致谢)。
