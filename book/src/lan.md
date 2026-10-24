@@ -19,14 +19,16 @@ best-effort chain — mDNS reverse lookup → NetBIOS node status → reverse DN
 gateways are flagged, and macOS's neighbour-table sanitization is
 worked around by probing kernel cache entries through the route socket — see
 [Compatibility → macOS](compat.md#macos) for what is and is not visible
-there.
+there. Real MAC addresses come from `ltop lan-setup`, a per-user launchd
+agent that rotates `arp`/`ifconfig` snapshots through Apple platform
+binaries (no root, no entitlements) — without it MACs show `—`.
 
 ## What each neighbour shows
 
 | Column | Meaning |
 |---|---|
 | IP / hostname | resolved address, mDNS name when available |
-| MAC | hardware address (— on macOS, system-sanitized) |
+| MAC | hardware address (`—` on macOS unless `ltop lan-setup` is installed) |
 | iface | which local NIC the neighbour is reachable through |
 | Σ conns | live connection count from CONNS to this peer |
 | rate | current rx+tx to this peer |

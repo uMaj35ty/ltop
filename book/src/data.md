@@ -23,8 +23,8 @@ The snapshot covers five domains: `meta` (version, os, arch,
 `udp_helper` flag), `net` (per-interface rates and cumulative counters),
 `procs` (per-process network + disk accounting with UDP breakdown),
 `conns` (per-connection sockets), `disk` (capacity/throughput), and `lan`
-(neighbours). Semantics worth knowing are marked right in the output — e.g.
-macOS MAC sanitization.
+(neighbours). Semantics worth knowing are marked right in the output — e.g. macOS MAC
+sanitization (real values once `ltop lan-setup` is installed).
 
 ## Monitoring log (TUI)
 
