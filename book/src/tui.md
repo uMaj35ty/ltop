@@ -125,6 +125,7 @@ export: `--replay [--csv OUT]`. Details in [The data plane](data.md).
 
 Settings worth knowing (all in `m` → settings, persisted to
 `~/.config/ltop/config.conf`): refresh `tick_ms` (default 1000), tombstone
-TTL, log interval/retention, sweep interval, default sort/filter modes,
-`theme`, `lang`, `proc_expand_default` (groups expanded by default),
-`proc_exit_retention_min`.
+TTL, the recording toggle (same as the `L` key), log interval/retention,
+sweep interval, default sort/filter modes, `theme`, `lang`,
+`proc_expand_default` (groups expanded by default), `proc_exit_retention_min`,
+`allow_global_kill` (exposes the `k` key; default off).

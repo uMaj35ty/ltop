@@ -9,7 +9,10 @@ rate one-to-one. The tx/rx ratio you'll see is ~1/30 — exactly the expected
 ACK share (one ACK per ~2 segments, ~66 bytes per ~2900 bytes of data); the
 graph then blows that tiny waveform up to full height, so the two curves
 look like siblings. When the two directions differ this much, read the
-header numbers, or switch the graph mode to Block (`m` → graphs).
+header numbers, switch the graph mode to Block (`m` → graphs), or turn on
+coupled scaling so the small side renders at its true fraction of the chart
+height: `m` → graphs → `c` (persist with `net_graph_coupled = true`; the
+trigger ratio is `net_graph_scale_ratio`, default 5×).
 
 ## PROCS totals are lower than the NET box
 
