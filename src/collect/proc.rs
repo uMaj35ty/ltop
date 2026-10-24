@@ -93,6 +93,8 @@ impl ProcRow {
 
 #[derive(Clone)]
 struct ProcState {
+    /// 最近一次见到的 comm(改名跟随;pid 复用重置时随之清空)
+    name: String,
     net_recv: u64,
     net_sent: u64,
     udp_recv: u64,
@@ -112,6 +114,7 @@ struct ProcState {
 impl ProcState {
     fn zero() -> Self {
         Self {
+            name: String::new(),
             net_recv: 0,
             net_sent: 0,
             udp_recv: 0,
@@ -156,7 +159,7 @@ impl ProcState {
 }
 
 pub struct ProcCollector {
-    acc: HashMap<(u32, String), ProcState>,
+    acc: HashMap<u32, ProcState>,
     io_prev: HashMap<u32, (u64, u64)>,
     /// last readable /proc/<pid>/comm per pid, so UDP deltas of a process
     /// that just exited still land under its name
@@ -217,22 +220,17 @@ impl ProcCollector {
         };
 
         // --- network: fold per-pid eBPF deltas into per-process totals ---
-        let mut net_rates: HashMap<(u32, String), (f64, f64)> = HashMap::new();
+        let mut net_rates: HashMap<u32, (f64, f64)> = HashMap::new();
         for d in net {
-            let key = (d.pid, self.udp_name(d.pid));
+            let name = self.udp_name(d.pid);
             #[cfg(target_os = "linux")]
-            let st = self
-                .acc
-                .entry(key.clone())
-                .or_insert_with(|| ProcState::first_sight(d.pid));
+            let cur_start = read_pid_start(d.pid);
             #[cfg(target_os = "macos")]
-            let st = self.acc.entry(key.clone()).or_insert_with(|| {
-                let start = self.mac_starts.get(&d.pid).copied();
-                ProcState::first_sight_mac(d.pid, start)
-            });
+            let cur_start = self.mac_starts.get(&d.pid).map(|e| e.max(0) as u64);
+            let st = self.ledger_entry(d.pid, &name, cur_start);
             st.net_recv += d.recv;
             st.net_sent += d.sent;
-            let r = net_rates.entry(key).or_insert((0.0, 0.0));
+            let r = net_rates.entry(d.pid).or_insert((0.0, 0.0));
             r.0 += d.recv as f64 / d.dt;
             r.1 += d.sent as f64 / d.dt;
         }
@@ -248,8 +246,10 @@ impl ProcCollector {
                     let Ok(pid) = p.file_name().to_string_lossy().parse::<u32>() else {
                         continue;
                     };
-                    if let Some(start) = read_pid_start(pid) {
-                        pids_now.insert(pid, start);
+                    let mut start = None;
+                    if let Some(st) = read_pid_start(pid) {
+                        pids_now.insert(pid, st);
+                        start = Some(st);
                     }
                     let (Some(rb), Some(wb), Some(comm)) = read_pid_io(&p.path()) else {
                         continue;
@@ -261,11 +261,7 @@ impl ProcCollector {
                     self.io_prev.insert(pid, (rb, wb));
                     io_rates.insert(pid, (dr as f64 / dt, dw as f64 / dt));
                     if dr > 0 || dw > 0 {
-                        let key = (pid, comm);
-                        let st = self
-                            .acc
-                            .entry(key)
-                            .or_insert_with(|| ProcState::first_sight(pid));
+                        let st = self.ledger_entry(pid, &comm, start);
                         st.disk_r += dr;
                         st.disk_w += dw;
                     }
@@ -288,12 +284,8 @@ impl ProcCollector {
                 self.io_prev.insert(m.pid, (rb, wb));
                 io_rates.insert(m.pid, (dr as f64 / dt, dw as f64 / dt));
                 if dr > 0 || dw > 0 {
-                    let key = (m.pid, m.comm.clone());
-                    let start = Some(m.start_epoch);
-                    let st = self
-                        .acc
-                        .entry(key)
-                        .or_insert_with(|| ProcState::first_sight_mac(m.pid, start));
+                    let start = Some(m.start_epoch.max(0) as u64);
+                    let st = self.ledger_entry(m.pid, &m.comm, start);
                     st.disk_r += dr;
                     st.disk_w += dw;
                 }
@@ -306,17 +298,11 @@ impl ProcCollector {
             let mut udp_rates: HashMap<u32, (f64, f64)> = HashMap::new();
             for d in udp {
                 let name = self.udp_name(d.pid);
-                let key = (d.pid, name);
                 #[cfg(target_os = "linux")]
-                let st = self
-                    .acc
-                    .entry(key.clone())
-                    .or_insert_with(|| ProcState::first_sight(d.pid));
+                let cur_start = read_pid_start(d.pid);
                 #[cfg(target_os = "macos")]
-                let st = self.acc.entry(key.clone()).or_insert_with(|| {
-                    let start = self.mac_starts.get(&d.pid).copied();
-                    ProcState::first_sight_mac(d.pid, start)
-                });
+                let cur_start = self.mac_starts.get(&d.pid).map(|e| e.max(0) as u64);
+                let st = self.ledger_entry(d.pid, &name, cur_start);
                 st.udp_recv += d.recv;
                 st.udp_sent += d.sent;
                 let r = udp_rates.entry(d.pid).or_insert((0.0, 0.0));
@@ -336,17 +322,14 @@ impl ProcCollector {
         self.procs = self
             .acc
             .iter()
-            .map(|((pid, name), st)| {
-                let (nrr, nsr) = net_rates
-                    .get(&(*pid, name.clone()))
-                    .copied()
-                    .unwrap_or((0.0, 0.0));
+            .map(|(pid, st)| {
+                let (nrr, nsr) = net_rates.get(pid).copied().unwrap_or((0.0, 0.0));
                 let (urr, usr) = udp_rates.get(pid).copied().unwrap_or((0.0, 0.0));
                 let (drr, dwr) = io_rates.get(pid).copied().unwrap_or((0.0, 0.0));
                 let alive = row_alive(st.start_ticks, pids_now.get(pid).copied());
                 ProcRow {
                     pid: *pid,
-                    name: name.clone(),
+                    name: st.name.clone(),
                     net_recv: st.net_recv,
                     net_sent: st.net_sent,
                     net_rr: nrr,
@@ -392,19 +375,44 @@ impl ProcCollector {
     /// io_prev 对死 pid 的基线没有价值,直接清——两表都被活 pid 数封顶。
     fn evict_dead(&mut self, pids_now: &HashMap<u32, u64>, now: Instant) {
         let retention = self.exit_retention;
-        self.acc
-            .retain(|(pid, _name): &(u32, String), st: &mut ProcState| {
-                if row_alive(st.start_ticks, pids_now.get(pid).copied()) {
-                    st.last_alive = Some(now);
-                    true
-                } else {
-                    match st.last_alive {
-                        Some(t) => now.duration_since(t) < retention,
-                        None => true,
-                    }
+        self.acc.retain(|pid: &u32, st: &mut ProcState| {
+            if row_alive(st.start_ticks, pids_now.get(pid).copied()) {
+                st.last_alive = Some(now);
+                true
+            } else {
+                match st.last_alive {
+                    Some(t) => now.duration_since(t) < retention,
+                    None => true,
                 }
-            });
+            }
+        });
         self.io_prev.retain(|pid, _| pids_now.contains_key(pid));
+    }
+
+    /// 同一 pid 的账本入口(0.2.10 键改造:(pid,name) → pid):
+    /// 改名跟随(start_ticks 未变则沿用累计,名字更新到最新 comm);
+    /// pid 复用(start_ticks 变了)→ 旧世代账本清零重计,不串账。
+    /// 旧键的两个病一起治:改名拆行、复用静默毒化。
+    fn ledger_entry(&mut self, pid: u32, name: &str, cur_start: Option<u64>) -> &mut ProcState {
+        let stale = match self.acc.get(&pid) {
+            Some(st) => st.start_ticks.is_some() && st.start_ticks != cur_start,
+            None => false,
+        };
+        if stale {
+            self.acc.remove(&pid);
+        }
+        #[cfg(target_os = "linux")]
+        let st = self
+            .acc
+            .entry(pid)
+            .or_insert_with(|| ProcState::first_sight(pid));
+        #[cfg(target_os = "macos")]
+        let st = self.acc.entry(pid).or_insert_with(|| {
+            let start = self.mac_starts.get(&pid).copied();
+            ProcState::first_sight_mac(pid, start)
+        });
+        st.name = name.to_string();
+        st
     }
 
     /// name for a UDP-only delta: current comm if readable, else the last one
@@ -525,6 +533,35 @@ mod tests {
     use super::*;
     #[cfg(target_os = "macos")]
     use std::fs;
+
+    #[test]
+    fn rename_follows_and_keeps_ledger() {
+        let mut c = ProcCollector::new();
+        let pid = std::process::id();
+        let comm_path = format!("/proc/{pid}/comm");
+        let orig = std::fs::read_to_string(&comm_path).unwrap();
+        let d = UdpDelta {
+            pid,
+            recv: 100,
+            sent: 0,
+            dt: 1.0,
+        };
+        c.sample(&[d], &[d]);
+        let before = c.procs.iter().find(|r| r.pid == pid).unwrap().net_recv;
+        // 同 pid 同世代下改名:账本必须续在同一行(旧 (pid,name) 键会拆行)
+        std::fs::write(&comm_path, "ltop-renamed").unwrap();
+        let d = UdpDelta {
+            pid,
+            recv: 50,
+            sent: 0,
+            dt: 1.0,
+        };
+        c.sample(&[d], &[d]);
+        let row = c.procs.iter().find(|r| r.pid == pid).unwrap();
+        assert_eq!(row.net_recv, before + 50, "改名不拆行:累计续算");
+        assert_eq!(row.name, "ltop-renamed", "名字跟随最新 comm");
+        std::fs::write(&comm_path, orig.trim()).unwrap();
+    }
 
     #[test]
     fn udp_deltas_land_in_the_ledger_under_the_pid_name() {
@@ -668,9 +705,9 @@ mod tests {
         s2.start_ticks = Some(2);
         let mut s3 = mk(Some(3), Some(now - Duration::from_secs(7200)));
         s3.start_ticks = Some(3);
-        c.acc.insert((1, "a".into()), s1);
-        c.acc.insert((2, "b".into()), s2);
-        c.acc.insert((3, "c".into()), s3);
+        c.acc.insert(1, s1);
+        c.acc.insert(2, s2);
+        c.acc.insert(3, s3);
         c.io_prev.insert(1, (10, 10));
         c.io_prev.insert(3, (30, 30)); // 死 pid,应被清
         let mut pids_now = HashMap::new();
@@ -678,24 +715,16 @@ mod tests {
 
         c.evict_dead(&pids_now, now);
 
-        assert!(c.acc.contains_key(&(1, "a".to_string())), "活进程永留");
-        assert!(
-            c.acc.contains_key(&(2, "b".to_string())),
-            "死进程保留期内留"
-        );
-        assert!(!c.acc.contains_key(&(3, "c".to_string())), "死进程超时清");
+        assert!(c.acc.contains_key(&1), "活进程永留");
+        assert!(c.acc.contains_key(&2), "死进程保留期内留");
+        assert!(!c.acc.contains_key(&3), "死进程超时清");
         assert!(c.io_prev.contains_key(&1), "io_prev 留活 pid");
         assert!(!c.io_prev.contains_key(&3), "io_prev 清死 pid");
         // 永久模式:超时也留
         c.exit_retention = Duration::MAX;
-        c.acc.insert(
-            (3, "c".into()),
-            mk(Some(3), Some(now - Duration::from_secs(7200))),
-        );
+        c.acc
+            .insert(3, mk(Some(3), Some(now - Duration::from_secs(7200))));
         c.evict_dead(&pids_now, now);
-        assert!(
-            c.acc.contains_key(&(3, "c".to_string())),
-            "retention=0(永久)不清"
-        );
+        assert!(c.acc.contains_key(&3), "retention=0(永久)不清");
     }
 }
