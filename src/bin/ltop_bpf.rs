@@ -62,7 +62,8 @@ mod imp {
     }
 
     fn run() -> Result<()> {
-        // 探针 C 代码的 PT_REGS 寄存器映射按 x86_64 编写,其他架构直接拒绝
+        // 探针的 PT_REGS 寄存器映射与 -D__TARGET_ARCH_* 分支已双架构覆盖
+        // (net_bpf.c x86_64 rdi/rdx/rax + arm64 regs 槽位);其余架构拒绝
         if !matches!(std::env::consts::ARCH, "x86_64" | "aarch64") {
             anyhow::bail!(
                 "ltop-bpf supports x86_64/aarch64 Linux only (running on {})",

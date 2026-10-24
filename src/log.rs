@@ -77,6 +77,12 @@ impl MonLog {
         let Ok(f) = File::create(&path) else {
             return None;
         };
+        // 会话日志记录全量连接对端/进程名/主机名,隐私敏感:显式 0600,
+        // 不依赖 umask(多用户系统的共享 home 下 644 可跨用户读)
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+        }
         let mut file = (path.clone(), f);
         let host = json_str(&self.host);
         let iv = self.interval.as_secs();
@@ -101,19 +107,11 @@ impl MonLog {
     }
 
     /// Flush and close; report the log path on stderr so the user can find it
-    pub fn finalize(&mut self) {
-        if let Some((path, mut f)) = self.file.take() {
-            let _ = f.flush();
-            eprintln!(
-                "{}",
-                crate::pick_s(
-                    crate::cli_lang_zh(),
-                    &format!("ltop: monitoring log saved to {}", path.display()),
-                    &format!("ltop: 监控日志已保存到 {}", path.display())
-                )
-            );
-        }
+    pub fn finalize(&mut self) -> Option<PathBuf> {
         self.enabled = false;
+        let (path, mut f) = self.file.take()?;
+        let _ = f.flush();
+        Some(path)
     }
 
     /// v2:全盒快照行(与 `ltop --json` 同 schema);tracked_only 时 procs

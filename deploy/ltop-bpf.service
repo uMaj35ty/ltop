@@ -10,6 +10,27 @@ RestartSec=5
 # a SIGTERM (systemctl stop, scripts) is a clean exit, not a failure to restart on
 SuccessExitStatus=143
 # kprobe attach and map creation need privileges; running as root is the
-# simplest reliable option (CAP_BPF+CAP_PERFMON file caps also work)
+# simplest reliable option (CAP_BPF+CAP_PERFMON file caps also work).
+# Sandboxing: the daemon only needs bpf()/perf events and its /run/ltop dir.
+# CAP_SYS_RESOURCE is kept for memlock accounting on kernels < 5.11.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/run/ltop
+ProtectHome=read-only
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectClock=true
+ProtectHostname=true
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+CapabilityBoundingSet=CAP_BPF CAP_PERFMON CAP_SYS_RESOURCE
+AmbientCapabilities=CAP_BPF CAP_PERFMON CAP_SYS_RESOURCE
+# snapshot is world-readable by design (the unprivileged TUI reads it);
+# it contains per-process byte totals — keep /run/ltop root-owned 755
+UMask=0022
 [Install]
 WantedBy=multi-user.target

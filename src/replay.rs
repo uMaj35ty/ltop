@@ -344,7 +344,9 @@ fn num(s: &str, key: &str) -> Option<u64> {
     }
 }
 
-/// value of `"key":"..."` with the escapes written by `json_str` decoded
+/// value of `"key":"..."` with the escapes written by `json_str` decoded.
+/// 结果经 sanitize_text:replay 读的是外部文件,名字/host 列经 println!
+/// 裸写终端,控制符(ESC 序列)必须剥离
 fn text(s: &str, key: &str) -> Option<String> {
     let pat = format!("\"{key}\":\"");
     let p = s.find(&pat)? + pat.len();
@@ -367,7 +369,7 @@ fn text(s: &str, key: &str) -> Option<String> {
             other => out.push(other),
         }
     }
-    Some(out)
+    Some(crate::sanitize_text(&out))
 }
 
 pub fn print_report(ses: &Session, top: usize, zh: bool) {
@@ -490,10 +492,21 @@ fn write_csv(ses: &Session, out: &std::path::Path) -> Result<()> {
 }
 
 fn csv_field(s: &str) -> String {
-    if s.contains('"') || s.contains(',') {
-        format!("\"{}\"", s.replace('"', "\"\""))
+    // 公式注入防护:表格软件把 = + - @ 开头的单元格当公式执行,前置 '
+    // 强制按文本;控制符已在 sanitize_text 剥离,换行/引号/逗号按
+    // RFC 4180 加引号
+    let guarded = if matches!(
+        s.chars().next(),
+        Some('=') | Some('+') | Some('-') | Some('@') | Some('\t')
+    ) {
+        format!("'{s}")
     } else {
         s.to_string()
+    };
+    if guarded.contains([',', '"', '\n', '\r']) {
+        format!("\"{}\"", guarded.replace('"', "\"\""))
+    } else {
+        guarded
     }
 }
 
@@ -634,6 +647,12 @@ mod tests {
         assert_eq!(csv_field("plain"), "plain");
         assert_eq!(csv_field("a,b"), "\"a,b\"");
         assert_eq!(csv_field("say\"hi"), "\"say\"\"hi\"");
+        // 公式注入:表格软件把 = + - @ 开头的单元格当公式执行,前置 '
+        assert_eq!(csv_field("=cmd|' /C calc'!A0"), "'=cmd|' /C calc'!A0");
+        assert_eq!(csv_field("@SUM(1)"), "'@SUM(1)");
+        assert_eq!(csv_field("+1"), "'+1");
+        // 含换行的字段必须整体加引号,不断行
+        assert_eq!(csv_field("a\nb"), "\"a\nb\"");
     }
 
     /// schema 快照行(serde 序列化)的新键名:表头 watch_start、盘挂

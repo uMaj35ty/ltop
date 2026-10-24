@@ -151,7 +151,19 @@ impl UdpCollector {
         self.pids_seen = 0;
         self.sks_seen = 0;
         self.fresh = false;
-        let Ok(text) = fs::read_to_string(&self.path) else {
+        // 大小上限:快照由 root 守护进程写,但读侧防御纵深——异常巨大的
+        // 文件(权限误配/守护 bug)不再整读进内存。16384 socket 上限的
+        // 合法快照远小于此
+        const SNAPSHOT_MAX: u64 = 8 * 1024 * 1024;
+        let ok = fs::metadata(&self.path)
+            .map(|m| m.len() <= SNAPSHOT_MAX)
+            .unwrap_or(false);
+        let text = if ok {
+            fs::read_to_string(&self.path).ok()
+        } else {
+            None
+        };
+        let Some(text) = text else {
             self.pids.ts = None;
             self.upids.ts = None;
             self.sks.ts = None;

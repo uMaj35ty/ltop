@@ -3,6 +3,70 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.9] - 2026-10-24
+
+Network & security audit across all four release targets (Linux/macOS ×
+x86_64/aarch64) — terminal-escape hardening for every CLI output path, LAN
+spoofing protections for hostname resolution, macOS disk-accounting fix
+(rusage offsets), privilege & supply-chain hardening.
+
+### Fixed
+
+- **mac PROCS disk columns were wrong (and the rusage buffer overran)**:
+  `proc_pid_rusage` writes 160 bytes for rusage_info_v2 but the buffer was
+  152 and the offsets one field off — every call overran the stack buffer by
+  8 bytes, and the displayed Σ read / Σ written were actually
+  child-elapsed-time and the read total. Offsets pinned against the SDK
+  header (read @144, write @152, buffer 168) and live-verified against a
+  dd writer (6 GB written reported correctly; the old code reported 0/0)
+- **Terminal escape injection via CLI outputs** (`--replay`, `report`,
+  `--dump`): strings from external JSONL files (process names, hostnames)
+  and from the LAN (mDNS/NBNS hostnames, local process comms) were printed
+  raw by the non-TUI paths — an ESC sequence in a hostile JSONL or hostname
+  could clear the screen, overwrite the clipboard or fake prior output. All
+  CLI text output now passes a control-character filter (the TUI itself was
+  already safe through ratatui)
+- **LAN hostname spoofing hardened**: mDNS replies must now come from the
+  queried address AND carry a per-query randomized transaction ID
+  (previously a fixed 0x6c74 was sent and replies from anyone were
+  accepted); NBNS likewise randomizes its ID (was fixed 0x2a2a)
+- **Watch captures and monitoring logs are created 0600**: they hold full
+  connection endpoints, process names and hostnames — previously
+  umask-dependent 0644, readable by other users on shared-home hosts
+- **CSV export hardening**: fields starting with `=` `+` `-` `@` get a
+  leading apostrophe (spreadsheet formula injection), fields containing
+  newlines are quoted (row-break injection)
+- **RTM_GET reply parsing bounds** (mac): the sockaddr walk now checks the
+  full 4-byte header before reads, and the probe loop is bounded at 64
+  iterations (a route-broadcast storm can no longer spin it)
+- **`/run/ltop/udp.json` reads are capped at 8 MB** — defense in depth on
+  the root-written snapshot the unprivileged TUI parses
+- **The recording-finish message prints after the alternate screen closes**
+  (it used to be discarded together with the screen, so the log path was
+  never visible)
+
+### Hardening (supply chain / privilege)
+
+- **systemd unit sandboxed**: NoNewPrivileges, ProtectSystem=strict with
+  ReadWritePaths=/run/ltop, ProtectHome, PrivateTmp, kernel-interface
+  protections, and CapabilityBounding/Ambient = CAP_BPF + CAP_PERFMON +
+  CAP_SYS_RESOURCE (previously an unhardened root service)
+- **All GitHub Actions pinned to commit SHAs** (previously mutable tags,
+  referenced from jobs holding the tap/deploy tokens)
+- **Workflow permissions least-privileged**: CI read-only, release build
+  jobs read-only with contents:write scoped to the release job only;
+  TAP_TOKEN no longer left behind in the runner's .git/config nor executed
+  under `set -x`
+- Release builds use `--locked`
+
+### Internal
+
+- macproc cfg hygiene: mac-only FFI declarations and functions are now
+  gated — Linux builds no longer carry un-gated extern declarations, and
+  the module-wide dead-code allow is narrowed to per-item
+- Tests: 148 passing (141 in 0.2.8), zero warnings on Linux and macOS
+  builds
+
 ## [0.2.8] - 2026-10-24
 
 macOS resilience for display sleep / long idle, plus chart stability —

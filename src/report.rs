@@ -194,7 +194,21 @@ pub fn load(path: &std::path::Path, zh: bool) -> Result<(Vec<Snapshot>, usize)> 
             continue;
         }
         match serde_json::from_value::<Snapshot>(v) {
-            Ok(s) => out.push(s),
+            Ok(mut s) => {
+                // 外部文件:名字/主机名进人读表与 --json 前剥控制符
+                // (serde 会把 \u001b 解码为真实 ESC,print 路径裸写终端)
+                s.meta.hostname = crate::sanitize_text(&s.meta.hostname);
+                for p in &mut s.procs {
+                    p.name = crate::sanitize_text(&p.name);
+                }
+                for c in &mut s.conns {
+                    if let Some(pn) = &mut c.process {
+                        *pn = crate::sanitize_text(pn);
+                    }
+                    c.state = crate::sanitize_text(&c.state);
+                }
+                out.push(s);
+            }
             Err(_) => skipped += 1,
         }
     }

@@ -11,22 +11,27 @@
 //! (offsetof/sizeof) and are re-verified at runtime by the projection tests
 //! on every platform via synthetic buffers.
 
-#![allow(dead_code)] // FFI 包装仅 mac 数据路径使用;投影纯函数双平台测试
 
 #[cfg(target_os = "macos")]
 use std::collections::HashMap;
+#[cfg(target_os = "macos")]
 use std::ffi::{c_int, c_void};
 
 #[cfg(target_os = "macos")]
 use crate::collect::nettop::flow_inode;
 
+#[cfg(target_os = "macos")]
 const PROC_PIDLISTFDS: c_int = 1;
+#[cfg(target_os = "macos")]
 const PROC_PIDFDSOCKETINFO: c_int = 3;
+#[cfg(target_os = "macos")]
 const PROX_FDTYPE_SOCKET: u32 = 2;
 
 // Darwin sysctl mib(libc crate 未收录 KERN_PROC;数值来自 SDK 头文件探针):
 // mib = [CTL_KERN(1), KERN_PROC(14), KERN_PROC_ALL(0)]
+#[cfg(target_os = "macos")]
 const KERN_PROC_MIB: c_int = 14;
+#[cfg(target_os = "macos")]
 const KERN_PROC_ALL: c_int = 0;
 
 // --- socket_fdinfo buffer offsets (bytes; pinned by C probes on the
@@ -43,6 +48,7 @@ const INSI_FADDR: usize = 264 + 32;
 const INSI_LADDR: usize = 264 + 48;
 const SOCKET_INFO_LEN: usize = 792; // sizeof(socket_fdinfo)
 /// Darwin 的地址族常量(libc crate 的值随平台变,缓冲区里固定是 Darwin 值)
+#[allow(dead_code)] // 仅 mac 数据路径引用;留作投影/常量文档
 const AF_INET_DARWIN: libc::c_int = 2;
 const AF_INET6_DARWIN: libc::c_int = 30;
 
@@ -54,6 +60,9 @@ pub struct MacPid {
     pub start_epoch: i64,
 }
 
+// FFI 声明仅 mac 编译:声明体在 Linux 无符号,未门控时一个新增调用就会
+// 把链接错误带进 Linux 构建(此前的坑)
+#[cfg(target_os = "macos")]
 extern "C" {
     fn proc_listallpids(buffer: *mut c_void, buffersize: c_int) -> c_int;
     /// fd 枚举专用(arg 必须为 0)
@@ -66,7 +75,6 @@ extern "C" {
     ) -> c_int;
     /// 单个 fd 的信息必须走 proc_pidfdinfo:proc_pidinfo 传 fd flavor 会
     /// 返回截断的结果(真机实测 rc=136 而非 792)
-    #[cfg(target_os = "macos")]
     fn proc_pidfdinfo(
         pid: c_int,
         fd: c_int,
@@ -75,11 +83,11 @@ extern "C" {
         buffersize: c_int,
     ) -> c_int;
     fn proc_pidpath(pid: c_int, buffer: *mut c_void, buffersize: u32) -> c_int;
-    #[cfg(target_os = "macos")]
     fn proc_pid_rusage(pid: c_int, flavor: c_int, buffer: *mut c_void) -> c_int;
 }
 
 /// pid → (pid, comm, start epoch) for the whole system, one sysctl walk
+#[cfg(target_os = "macos")]
 pub fn list_pids() -> Vec<MacPid> {
     let mut out = Vec::new();
     for (pid, comm, start) in kern_proc_all() {
@@ -92,9 +100,7 @@ pub fn list_pids() -> Vec<MacPid> {
     out
 }
 
-/// (pid, comm, start epoch) rows via sysctl(KERN_PROC_ALL)
-/// struct kinfo_proc: extern proc (header) + eproc; p_comm lives at
-/// kp_proc.p_comm and p_starttime (timeval) right before it.
+#[cfg(target_os = "macos")]
 fn kern_proc_all() -> Vec<(u32, String, i64)> {
     let mut mib = [libc::CTL_KERN, KERN_PROC_MIB, KERN_PROC_ALL];
     let mut size: usize = 0;
@@ -149,31 +155,37 @@ fn kern_proc_all() -> Vec<(u32, String, i64)> {
 /// kinfo_proc byte offsets and size (pinned by a C offsetof probe on the
 /// macOS 27 SDK: sizeof=648, p_pid=40, p_starttime.tv_sec=0, p_comm=243)
 mod kp {
-    pub const P_PID: usize = 40; // kp_proc.p_pid
-    pub const P_STARTTIME: usize = 0; // kp_proc.p_starttime.tv_sec
-    pub const P_COMM: usize = 243; // kp_proc.p_comm
+        #[allow(dead_code)] // 仅 mac 的 kern_proc_all 引用;偏移文档常量
+pub const P_PID: usize = 40; // kp_proc.p_pid
+        #[allow(dead_code)] // 仅 mac 的 kern_proc_all 引用;偏移文档常量
+pub const P_STARTTIME: usize = 0; // kp_proc.p_starttime.tv_sec
+        #[allow(dead_code)] // 仅 mac 的 kern_proc_all 引用;偏移文档常量
+pub const P_COMM: usize = 243; // kp_proc.p_comm
 }
+#[cfg(target_os = "macos")]
 use kp::{P_COMM, P_PID, P_STARTTIME};
 
+#[allow(dead_code)] // 仅 mac 数据路径引用;留作投影/常量文档
 const KINFO_PROC_SIZE: usize = 648;
 
 /// per-pid cumulative disk bytes (read, write) — own uid only (EPERM
 /// otherwise, matching Linux /proc/<pid>/io access)
 #[cfg(target_os = "macos")]
 pub fn disk_io(pid: u32) -> Option<(u64, u64)> {
-    // rusage_info_v2: ri_diskio_bytesread @136, ri_diskio_byteswritten @144
-    let mut buf = [0u8; 152];
-    // SAFETY: buf is a 152-byte rusage_info_v2 allocation, flavor = V2
+    // rusage_info_v2(SDK resource.h 实测)= uuid[16] + 18×u64 = 160 字节:
+    // ri_diskio_bytesread @144、ri_diskio_byteswritten @152。旧注释钉的
+    // @136/144 与 152 缓冲是错的:内核无条件 copyout 160 字节(旧缓冲每次
+    // 调用栈上溢 8 字节),且偏移差一格把 child_elapsed 当 bytesread
+    let mut buf = [0u8; 168];
+    // SAFETY: buf ≥ sizeof(rusage_info_v2)=160,flavor = V2
     let rc = unsafe { proc_pid_rusage(pid as c_int, 2, buf.as_mut_ptr() as *mut c_void) };
     if rc != 0 {
         return None;
     }
-    Some((u64_at(&buf, 136), u64_at(&buf, 144)))
+    Some((u64_at(&buf, 144), u64_at(&buf, 152)))
 }
 
-/// working directory of a pid (own uid) via PROC_PIDVNODEPATHINFO:
-/// proc_vnodepathinfo = pvi_cdir(vnode_info_path) + pvi_rdir(same);
-/// vnode_info_path = vnode_info(152B) + vip_path[1024], cwd 路径在偏移 152
+#[cfg(target_os = "macos")]
 pub fn proc_cwd(pid: u32) -> Option<String> {
     // 内核要求 buffer ≥ 整个 proc_vnodepathinfo(= 2352:pvi_cdir + pvi_rdir
     // 各 1176);只给前一半时 proc_pidinfo 直接失败返回 0
@@ -200,6 +212,7 @@ pub fn proc_cwd(pid: u32) -> Option<String> {
 }
 
 /// full executable path of a pid (own uid), as a one-element argv
+#[cfg(target_os = "macos")]
 pub fn cmdline(pid: u32) -> Option<Vec<String>> {
     let mut buf = [0u8; 1024 + 1];
     let rc = unsafe { proc_pidpath(pid as c_int, buf.as_mut_ptr() as *mut c_void, 1024) };
@@ -361,6 +374,7 @@ pub fn socket_tuple(buf: &[u8]) -> Option<SockTuple> {
     Some((proto, local, remote))
 }
 
+#[allow(dead_code)] // 仅 mac 数据路径引用;留作投影/常量文档
 fn i32_at(b: &[u8], off: usize) -> i32 {
     i32::from_ne_bytes([b[off], b[off + 1], b[off + 2], b[off + 3]])
 }
@@ -369,6 +383,7 @@ fn u32_at(b: &[u8], off: usize) -> u32 {
     u32::from_ne_bytes([b[off], b[off + 1], b[off + 2], b[off + 3]])
 }
 
+#[allow(dead_code)] // 仅 mac 数据路径引用;留作投影/常量文档
 fn u64_at(b: &[u8], off: usize) -> u64 {
     u64::from_ne_bytes([
         b[off],
@@ -382,16 +397,19 @@ fn u64_at(b: &[u8], off: usize) -> u64 {
     ])
 }
 
+#[allow(dead_code)] // 仅 mac 数据路径引用;留作投影/常量文档
 fn i64_at(b: &[u8], off: usize) -> i64 {
     i64_at_bytes(b, off)
 }
 
+#[allow(dead_code)] // 仅 mac 数据路径引用;留作投影/常量文档
 fn i64_at_bytes(b: &[u8], off: usize) -> i64 {
     let mut v = [0u8; 8];
     v.copy_from_slice(&b[off..off + 8]);
     i64::from_ne_bytes(v)
 }
 
+#[allow(dead_code)] // 仅 mac 数据路径引用;留作投影/常量文档
 fn c_str(b: &[u8]) -> String {
     let end = b.iter().position(|&c| c == 0).unwrap_or(b.len());
     String::from_utf8_lossy(&b[..end]).into_owned()
