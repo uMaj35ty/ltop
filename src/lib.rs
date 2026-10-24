@@ -101,6 +101,8 @@ USAGE:
     (no options)            run the TUI
     watch [OPTIONS]         headless capture to a schema-v1 JSONL file
     report <FILE> [OPTIONS] window summary of a watch/monlog JSONL (--json for AI)
+    lan-setup [--remove]    macOS: install/remove the snapshot agent (real MACs
+                            behind the macOS 27 privacy gate; see docs)
     --json                  AI-friendly structured snapshot (JSON, schema v1)
     --schema                field reference for --json (machine-readable)
     --dump                  one-shot diagnostic dump to stdout, then exit
