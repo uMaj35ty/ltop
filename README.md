@@ -16,7 +16,7 @@ eBPF helper adds per-process and per-connection byte accounting.
 — this README is the elevator pitch plus everything needed to install and
 start; the deep details live on the docs site.
 
-![Classic layout mid Steam download — six boxes, live LAN neighbours, grouped connections](assets/screenshots/main.png)
+![Classic layout mid Steam download — six boxes, live LAN neighbours, grouped connections](assets/screenshots/main.webp)
 
 ## Quick install
 

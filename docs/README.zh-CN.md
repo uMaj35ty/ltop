@@ -14,7 +14,7 @@
 📖 **文档站(截图与画廊): [umaj35ty.github.io/ltop](https://umaj35ty.github.io/ltop/)**
 ——本 README 是电梯稿 + 安装与首次启动所需的全部;深层细节在文档站。
 
-![Classic 布局——Steam 下载实况、六盒、实时 LAN 邻居与进程分组连接](../assets/screenshots/main.png)
+![Classic 布局——Steam 下载实况、六盒、实时 LAN 邻居与进程分组连接](../assets/screenshots/main.webp)
 
 ## 快速安装
 
