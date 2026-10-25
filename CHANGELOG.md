@@ -3,6 +3,34 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.11] - 2026-10-25
+
+Docs-site performance and a LAN-box usability closure: the macOS privacy
+hint now tells you the fix, chapter images are natively rendered at small
+size, and the AtomGit mirror joins the documented channels.
+
+### Added
+
+- **LAN box hint when macOS gates neighbour MACs**: the box now shows an
+  actionable dim footer — `ltop lan-setup` restores real MACs (no root) —
+  instead of only describing the restriction; it also renders when the
+  RTM scan has populated mac-less rows (list non-empty), the state users
+  actually hit. Clears itself once the snapshot agent supplies MACs
+- AtomGit mirror documented as a channel: clone URL in the installation
+  chapters (en/zh) and the skills pages (China-network friendly)
+
+### Changed
+
+- **Chapter screenshots natively rendered at small size**: the
+  introduction and tui chapter images are real terminal captures
+  (asciinema + agg glyph rendering, text crisp) shipped as lossless WebP
+  — pixel-identical, 3.3× smaller than the previous PNGs (intro
+  107→33 KB, tall 135→37 KB, wide 161→49 KB)
+- lan-setup reminders in the README quick-install (en/zh) and the site
+  quickstart step 1
+- compat chapter (en/zh): documented the known-key config fallback
+  limitation
+
 ## [0.2.10] - 2026-10-24
 
 Tech-debt and QoL line: long-window `report` no longer loads whole capture
