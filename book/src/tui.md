@@ -7,7 +7,7 @@ left, tables right), **wide** (charts across the top, tables below), **tall**
 frame; bytes transferred while paused are back-filled on resume, so pausing
 never loses accounting.
 
-![Classic layout](../assets/screenshots/classic-six-boxes.png)
+![Classic layout](../assets/screenshots/classic-six-boxes-small.png)
 
 ## The six boxes
 
@@ -46,7 +46,7 @@ udp), `o` cycles sorts — including **proc** grouping, which folds same-name
 processes into an expandable group head (`▸ firefox ×17` with the group Σ;
 `enter` on the head collapses/expands, search hits auto-expand).
 
-![Tall layout — grouped connections with group totals and a tracked row](../assets/screenshots/tall-process-groups.png)
+![Tall layout — grouped connections with group totals and a tracked row](../assets/screenshots/tall-process-groups-small.png)
 
 ### 6 — PROCS
 
@@ -74,7 +74,7 @@ default (`proc_exit_retention_min`, `0` = keep forever).
 - `enter` on a LAN row pins the neighbour (red highlight, stays on top) and
   filters CONNS to that peer; repeat to unpin, `esc`/`f` clear.
 
-![Wide layout — detail panel with captured command line, UDP breakdown and the theme menu](../assets/screenshots/wide-detail-panel.png)
+![Wide layout — detail panel with captured command line, UDP breakdown and the theme menu](../assets/screenshots/wide-detail-panel-small.png)
 
 ## Search
 
