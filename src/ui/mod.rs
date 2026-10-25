@@ -1404,19 +1404,35 @@ fn draw_lan(f: &mut Frame, area: Rect, app: &App, focused: bool) {
     let headers = ["IP", "MAC", "HOSTNAME", "IF"];
     // 滚动窗口:一页 = 表头之下的全部行(inner 已不含边框,只减表头 1 行;
     // 旧写法 -2 把表头算两次,6 行高的盒子只渲染出 2 台设备)
-    let visible = inner.height.saturating_sub(1) as usize;
-    if list.is_empty() && app.lan.arp_blocked {
-        let tip = if app.lang == Lang::Zh {
-            "macOS 隐私限制:邻居 MAC 不可见(签名限制);本行扫描仅覆盖当前子网"
+    // mac:隐私门控提示(0.2.11 口径:给可执行的修复动作,而不是只描述限制)。
+    // 列表空=整屏提示;非空(rt_scan 已填出无 MAC 行)=盒底一行不挤数据
+    let mac_hint = if app.lan.arp_blocked {
+        Some(if app.lang == Lang::Zh {
+            "macOS 对未签名程序隐藏邻居 MAC —— 运行 ltop lan-setup 恢复真实 MAC(免 root)"
         } else {
-            "macOS privacy: neighbour MACs are hidden (code-signing gate); scan covers the current subnet only"
-        };
-        f.render_widget(
-            Paragraph::new(vec![Line::from(vec![Span::styled(tip, dim())])]),
-            inner,
-        );
+            "macOS hides neighbour MACs from unsigned apps — run ltop lan-setup for real MACs (no root)"
+        })
+    } else {
+        None
+    };
+    if list.is_empty() {
+        if let Some(tip) = mac_hint {
+            f.render_widget(
+                Paragraph::new(vec![Line::from(vec![Span::styled(tip, dim())])]),
+                inner,
+            );
+        }
         return;
     }
+    let (table_area, hint_area) = match mac_hint {
+        Some(tip) if inner.height >= 3 => {
+            let chunks =
+                Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(inner);
+            (chunks[0], Some((tip, chunks[1])))
+        }
+        _ => (inner, None),
+    };
+    let visible = table_area.height.saturating_sub(1) as usize;
     let rows: Vec<Row> = list
         .iter()
         .enumerate()
@@ -1438,9 +1454,15 @@ fn draw_lan(f: &mut Frame, area: Rect, app: &App, focused: bool) {
         .collect();
     let header = Row::new(headers).style(dim().add_modifier(Modifier::BOLD));
     // IP/MAC/IF have fixed formats; the hostname column takes the spare width
-    let cols = fit_columns(&[16, 17, 0, 8], 2, 8, 30, inner.width, 1);
+    let cols = fit_columns(&[16, 17, 0, 8], 2, 8, 30, table_area.width, 1);
     let table = Table::new(rows, cols).header(header).column_spacing(1);
-    f.render_widget(table, inner);
+    f.render_widget(table, table_area);
+    if let Some((tip, area)) = hint_area {
+        f.render_widget(
+            Paragraph::new(vec![Line::from(vec![Span::styled(tip, dim())])]),
+            area,
+        );
+    }
 }
 
 fn neighbor_row(
