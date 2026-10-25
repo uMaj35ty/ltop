@@ -15,6 +15,6 @@ pkgbase = ltop-bin
 	conflicts = localist-top-bin
 	source = ltop-0.2.4-x86_64-linux.tar.gz::https://github.com/uMaj35ty/ltop/releases/download/v0.2.4/ltop-0.2.4-x86_64-linux.tar.gz
 	source = ltop-bpf.service::https://github.com/uMaj35ty/ltop/raw/v0.2.4/deploy/ltop-bpf.service
-	sha256sums = d1e07967cba0f4f27c17005ee58f6e6457656b323417f092831a15c8edef0d78
+	sha256sums = 9c60bb31ebc5a0bbbc805aae6393074f4073787a6f303db4e7105df8aac72975
 	sha256sums = 7ef2417602547e639140fa27e6d61bbb5a1fcde3fdbdc0e7b07f4ab453494676
 pkgname = ltop-bin
