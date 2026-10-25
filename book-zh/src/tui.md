@@ -5,7 +5,7 @@
 干净收起。`z` 把焦点盒子放大全屏，`esc` 退出。`space` 冻结画面；暂停期间
 发生的流量在恢复时补齐，不会漏账。
 
-![Classic 布局](../../assets/screenshots/classic-six-boxes-small.png)
+![Classic 布局](../../assets/screenshots/classic-six-boxes-small.webp)
 
 ## 六个盒子
 
@@ -38,7 +38,7 @@ MTU 和地址。累计流量显示两份: ltop 启动以来（可重置）和接
 可展开的组头（`▸ firefox ×17`，组头带 Σ；组头上 `enter` 折叠/展开，搜索命中
 自动展开）。
 
-![Tall 布局——分组连接、组总量与被追踪行](../../assets/screenshots/tall-process-groups-small.png)
+![Tall 布局——分组连接、组总量与被追踪行](../../assets/screenshots/tall-process-groups-small.webp)
 
 ### 6 — PROCS
 
@@ -61,7 +61,7 @@ net-rate → disk-sum → disk-rate → name）。退出进程的账本默认 30
 - LAN 行上 `enter` **置顶**邻居（红色高亮，钉在最上）同时**让 CONNS 只看
   这个对端**；再按一次取消，`esc`/`f` 也能清。
 
-![Wide 布局——详情面板、捕获的完整命令行、UDP 分解与主题菜单](../../assets/screenshots/wide-detail-panel-small.png)
+![Wide 布局——详情面板、捕获的完整命令行、UDP 分解与主题菜单](../../assets/screenshots/wide-detail-panel-small.webp)
 
 ## 搜索
 
