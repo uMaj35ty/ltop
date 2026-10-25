@@ -87,5 +87,9 @@ crates.io (source), GitHub Releases tarballs (x86_64/aarch64), AUR
   semantics) — see the [FAQ](faq.md#conns-totals-include-traffic-from-before-ltop-started).
 - After an `ltop-bpf` restart the eBPF counters start from zero; the UI
   re-baselines automatically via snapshot instance IDs.
+- Config files: unknown keys and comments survive saves (0.2.10+), but a
+  *known* key carrying a value this build doesn't recognise (e.g. a sort
+  name introduced by a newer version) falls back to the default and is
+  rewritten on the next save.
 - On macOS only live sockets are counted (nettop semantics): a transfer
   completing within one sampling tick is missed.
