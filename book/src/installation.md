@@ -90,6 +90,9 @@ sudo ltop-bpf --once    # collector smoke test: sample once, print, exit
 git clone https://github.com/uMaj35ty/ltop
 cd ltop
 cargo build --release
+
+# China mirror (same history and tags, Chinese-first README):
+git clone https://atomgit.com/uMaj35ty/ltop
 # artifacts in target/release/: ltop, ltop-bpf (Linux)
 ```
 

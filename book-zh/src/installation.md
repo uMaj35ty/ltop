@@ -81,6 +81,9 @@ sudo ltop-bpf --once    # 采集器冒烟测试: 采一次、打印、退出
 git clone https://github.com/uMaj35ty/ltop
 cd ltop
 cargo build --release
+
+# 国内镜像(历史与 tag 完全一致,中文优先 README):
+git clone https://atomgit.com/uMaj35ty/ltop
 # 产物在 target/release/: ltop、ltop-bpf（Linux）
 ```
 

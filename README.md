@@ -26,6 +26,10 @@ start; the deep details live on the docs site.
 brew install uMaj35ty/ltop/ltop
 ```
 
+**macOS 27+?** The system hides neighbour/interface MAC addresses from
+unsigned apps — run **`ltop lan-setup`** once after installing to show real
+MAC addresses in the LAN and NET boxes (per-user launchd agent, no root).
+
 **crates.io** (compiles from source; needs a Rust toolchain):
 
 ```bash

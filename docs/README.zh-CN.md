@@ -24,6 +24,9 @@
 brew install uMaj35ty/ltop/ltop
 ```
 
+**macOS 27+?** 系统会对未签名程序隐藏邻居/网卡 MAC——安装后跑一次
+**`ltop lan-setup`**,LAN/NET 盒即显示真实 MAC(每用户 launchd 代理,免 root)。
+
 **crates.io**(源码编译;需要 Rust 工具链):
 
 ```bash
