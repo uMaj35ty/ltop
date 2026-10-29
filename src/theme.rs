@@ -212,6 +212,12 @@ pub fn init() -> String {
         if load_file(&p) {
             return src;
         }
+        // an explicitly requested theme must not fail silently — the
+        // fallback (omarchy state / builtin) would mask a typo'd path
+        crate::usage_warn(
+            &format!("--theme {src}: could not load the theme file, falling back"),
+            &format!("--theme {src}:主题文件加载失败,已回退到候选主题"),
+        );
     }
     for p in omarchy_candidates() {
         if load_file(&p) {
