@@ -60,6 +60,18 @@ Those sockets belong to **other users** (Linux): attribution scans your own
 uid's sockets. "null" means "not attributable to you", not "unrelated to any
 process".
 
+## CONNS has a group named "n/a" (uid:4294967295 in older versions)
+
+macOS counterpart of the above: the unprivileged TUI can only attribute
+sockets of **your own user** (libproc, same semantics as reading your own
+`/proc/<pid>/fd` on Linux). Connections belonging to other users, system
+daemons or the kernel are visible as traffic but not attributable to a
+process, so they group under `n/a` — 0.2.12 and later; older builds printed
+the raw `uid:4294967295` sentinel, which is the same bucket. This is a
+permission boundary, not missing data. To see the owners resolved, run
+`sudo ltop` once (root can enumerate every process and the group empties
+out); only do so if you are comfortable running a monitor as root.
+
 ## One-shot `--json` takes ~1.2 s
 
 Two sampling rounds run back-to-back so every rate field is populated from

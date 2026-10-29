@@ -23,6 +23,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   Dracula text color
 - `--theme <file>` failures no longer fall back silently: a warning names
   the file that could not be loaded
+- unattributed connections (macOS: other users' / system sockets, the
+  `NO_UID` sentinel) now group and label as `n/a` instead of printing the
+  raw `uid:4294967295`; documented in the FAQ alongside `sudo ltop`
 
 ### Changed
 
