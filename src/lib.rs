@@ -1433,11 +1433,16 @@ pub fn dump(theme_src: &str) -> Result<()> {
 
     println!("== UDP (eBPF) ==");
     println!(
-        "snapshot {}  fresh {}  pids {}  sockets {}",
+        "snapshot {}  fresh {}  pids {}  sockets {}  daemon schema {}",
         app.udp.path.display(),
         app.udp.fresh,
         app.udp.pids_seen,
-        app.udp.sks_seen
+        app.udp.sks_seen,
+        // None = pre-versioning daemon (≤0.2.11); a value above
+        // SNAPSHOT_VERSION means the helper is newer than this build
+        app.udp
+            .remote_ver
+            .map_or("pre-versioning (<0.2.12)".to_string(), |v| v.to_string())
     );
     for d in app.udp.last_inodes.iter().take(8) {
         let conn = app
