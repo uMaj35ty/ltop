@@ -9,6 +9,7 @@
 
 ## 1. Main UI Colors
 theme[main_bg]       = "#080611"  # main bg need to be empty if you want transparent background
+theme[main_fg]       = "#D1C3EB"
 theme[title]         = "#9266C4"
 theme[hi_fg]         = "#8047B9"
 

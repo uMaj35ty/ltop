@@ -371,7 +371,12 @@ pub(crate) fn parse_btop_str(content: &str) -> Option<Palette> {
     set(&mut pal.title, "title");
     set(&mut pal.hi, "hi_fg");
     set(&mut pal.dim, "inactive_fg");
-    set(&mut pal.accent, "graph_text");
+    // accent needs an on-palette fallback chain: 27 builtin themes ship
+    // without graph_text, and the bare key lookup silently kept the
+    // Dracula fallback cyan for IPs, clock and values
+    if let Some(c) = map.get("graph_text").or(map.get("main_fg")).or(map.get("title")) {
+        pal.accent = *c;
+    }
     set(&mut pal.border_net, "net_box");
     set(&mut pal.border_lan, "proc_box");
     set(&mut pal.border_disk, "mem_box");
@@ -553,6 +558,43 @@ mod tests {
                     pal.dim
                 );
             }
+        }
+    }
+
+    #[test]
+    fn accent_falls_back_on_palette_instead_of_dracula() {
+        // graph_text wins when present
+        let full = "theme[main_bg]=\"#111111\"\ntheme[main_fg]=\"#eeeeee\"\ntheme[graph_text]=\"#00ff00\"\n";
+        assert_eq!(
+            parse_btop_str(full).unwrap().accent,
+            Color::Rgb(0, 255, 0)
+        );
+        // no graph_text: main_fg keeps the accent on-palette (27 builtin
+        // themes ship without graph_text)
+        let no_gt = "theme[main_bg]=\"#111111\"\ntheme[main_fg]=\"#eeeeee\"\n";
+        assert_eq!(
+            parse_btop_str(no_gt).unwrap().accent,
+            Color::Rgb(0xee, 0xee, 0xee)
+        );
+        // neither: title is the last on-palette resort
+        let title_only = "theme[main_bg]=\"#111111\"\ntheme[title]=\"#123456\"\n";
+        assert_eq!(
+            parse_btop_str(title_only).unwrap().accent,
+            Color::Rgb(0x12, 0x34, 0x56)
+        );
+    }
+
+    /// every builtin theme must define main_fg itself — a missing key
+    /// silently inherits the Dracula fallback text color (omarchy-void)
+    #[test]
+    fn all_builtin_themes_define_main_fg() {
+        for (name, content) in theme_data::BUILTIN_THEMES {
+            assert!(
+                content
+                    .lines()
+                    .any(|l| l.trim_start().starts_with("theme[main_fg]")),
+                "theme {name} does not define main_fg"
+            );
         }
     }
 
