@@ -8,6 +8,15 @@ readme = "README.md"
 repository = "https://github.com/uMaj35ty/ltop"
 default-run = "ltop"
 autobins = false
+# the docs-site media tree ships via the GitHub release and the website,
+# not the crate — assets/ itself must stay (themes are include_str!'d at
+# build time). The screenshots pushed 0.2.12 past crates.io's 10 MiB cap
+exclude = [
+    "assets/screenshots",
+    "book",
+    "book-zh",
+    "website",
+]
 
 [[bin]]
 name = "ltop"
