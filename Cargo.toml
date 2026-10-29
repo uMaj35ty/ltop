@@ -29,10 +29,10 @@ unicode-width = "0.2"
 
 # aya/eBPF 加载器仅 Linux(ltop-bpf 二进制);mac 构建不引入
 [target.'cfg(target_os = "linux")'.dependencies]
-aya = "0.14.0"
+aya = "0.16.0"
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
-aya-obj = "0.5"
+aya-obj = "0.6"
 
 [profile.release]
 lto = true
