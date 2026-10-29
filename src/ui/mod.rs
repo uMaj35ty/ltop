@@ -754,20 +754,78 @@ fn superscript(n: usize) -> String {
         .collect()
 }
 
-/// stable id for list items that survive reordering
-/// readable text colour for a coloured row background
-fn contrast_fg(c: Color) -> Color {
-    match c {
-        Color::Rgb(r, g, b) => {
-            let l = 0.2126 * r as f32 + 0.7152 * g as f32 + 0.0722 * b as f32;
-            if l > 140.0 {
-                Color::Rgb(0, 0, 0)
-            } else {
-                Color::Rgb(255, 255, 255)
-            }
-        }
-        _ => Color::Black,
+// Readable-row kernels: palette-derived only (theme text / theme bg
+// anchors), no hardcoded black/white, so they hold across all 72 builtin
+// themes and user theme files.
+
+/// nudge a highlight `c` toward the theme bg until the theme text reads on
+/// it at WCAG 3:1; keeps the hue, only the luminance moves. Themes without
+/// a measurable bg (transparent) pass through
+fn readable_bg_over(c: Color, base: Option<Color>, text: Color) -> Color {
+    let Some(base) = base else {
+        return c;
+    };
+    if crate::theme::contrast_ratio(c, text) >= 3.0 {
+        return c;
     }
+    let mut best = c;
+    let mut t = 0.1;
+    while t <= 0.9 + f32::EPSILON {
+        let cand = crate::theme::blend(c, base, t);
+        best = cand;
+        if crate::theme::contrast_ratio(cand, text) >= 3.0 {
+            return cand;
+        }
+        t += 0.1;
+    }
+    best
+}
+
+/// better-contrasting of the theme's two anchors (text / bg) as fg on `bg`
+fn readable_fg_between(bg: Color, text: Color, anchor: Option<Color>) -> Color {
+    match anchor {
+        Some(a) if crate::theme::contrast_ratio(a, bg) > crate::theme::contrast_ratio(text, bg) => a,
+        _ => text,
+    }
+}
+
+/// selection wash over the row background: the download-gradient hue is
+/// swept from subtle to strong until it is both visible against the row
+/// background and readable under the overlay's own span colors. When the
+/// hue itself cannot separate (dark gradient start on a dark theme — the
+/// invisible-selection bug), the hue is lifted toward the text color for
+/// luminance while keeping its hue, and the sweep retries
+fn selection_bg_over(hue: Color, base: Option<Color>, text: Color) -> Color {
+    let Some(base) = base else {
+        return hue;
+    };
+    let ok = |c: Color| {
+        crate::theme::contrast_ratio(c, base) >= 1.3 && crate::theme::contrast_ratio(c, text) >= 2.2
+    };
+    for t in [0.15, 0.22, 0.3, 0.4, 0.55] {
+        let c = crate::theme::blend(base, hue, t);
+        if ok(c) {
+            return c;
+        }
+    }
+    let lifted = crate::theme::blend(hue, text, 0.45);
+    for t in [0.15, 0.22, 0.3, 0.4, 0.55] {
+        let c = crate::theme::blend(base, lifted, t);
+        if ok(c) {
+            return c;
+        }
+    }
+    crate::theme::blend(base, lifted, 0.55)
+}
+
+fn readable_bg(c: Color) -> Color {
+    let pal = palette();
+    readable_bg_over(c, pal.bg, pal.text)
+}
+
+fn readable_fg(bg: Color) -> Color {
+    let pal = palette();
+    readable_fg_between(bg, pal.text, pal.bg)
 }
 
 /// alternating track colours: two distinct theme accents
@@ -780,7 +838,7 @@ fn track_bg(slot: usize) -> Color {
 }
 
 fn track_fg(slot: usize) -> Color {
-    contrast_fg(track_bg(slot))
+    readable_fg(track_bg(slot))
 }
 
 /// Rows of a box's current list, for selection clamping
@@ -1489,12 +1547,10 @@ fn neighbor_row(
     // 置顶行:高亮主色底(红);选中行:复色高亮(隔行双底色)。
     // 底色铺在 row 级 style 上,整行(含列间空隙)一体化,而非分散到列
     let (bg, base_fg) = if pinned {
-        (Some(track_bg(0)), contrast_fg(track_bg(0)))
+        (Some(track_bg(0)), readable_fg(track_bg(0)))
     } else if selected {
-        (
-            Some(track_bg(alt as usize)),
-            contrast_fg(track_bg(alt as usize)),
-        )
+        let selt = track_bg(alt as usize);
+        (Some(selt), readable_fg(selt))
     } else {
         (None, palette().text)
     };
@@ -1770,11 +1826,12 @@ fn conn_row_aggregate(
     slot: Option<usize>,
 ) -> Row<'static> {
     if open {
-        // 展开态:高亮底色(主题下载渐变顶;追踪行保留隔行底色),整行正文色
-        let bg = match slot {
+        // 展开态:高亮底色(主题下载渐变顶,亮度向主题 bg 缓动到 text
+        // 可读;追踪行保留隔行底色),整行正文色
+        let bg = readable_bg(match slot {
             Some(sl) => track_bg(sl % 2),
             None => track_bg(0),
-        };
+        });
         let cell = |s: String| Cell::from(Span::styled(s, Style::new().fg(palette().text).bg(bg)));
         Row::new([
             cell(format!("\u{25be}{name} ×{n} Σ")),
@@ -1926,12 +1983,19 @@ fn overlay_rect(inner: Rect, y: u16) -> Option<Rect> {
     })
 }
 
+/// selection wash for the current palette (see `selection_bg_over`)
+fn selection_bg() -> Color {
+    let pal = palette();
+    selection_bg_over(download().at(0.12), pal.bg, pal.text)
+}
+
 /// two-line detail drawn over the selected row
 fn draw_selected(f: &mut Frame, rect: Rect, lines: Vec<Line<'static>>) {
-    // 弱着色深底(渐变暗端):overlay 内容的语义色(accent/dim/红绿流量)
-    // 按深底设计——旧实现用 hi 亮底 + 单色 contrast,两行色彩层次全灭。
-    // Paragraph 只铺 bg 不铺 fg,span 各自的显式色全部保留。
-    let bgc = download().at(0.12);
+    // 选中底 = selection_bg():主题 bg 上扫 download 渐变色相的强度,保证
+    // 既与行底可分、又不吞掉 overlay 内 span 的语义色(accent/dim/红绿);
+    // 色相本身分不出时向 text 提亮同色相再扫。Paragraph 只铺 bg 不铺 fg,
+    // span 各自的显式色全部保留。
+    let bgc = selection_bg();
     // wipe the underlying table text first — Paragraph.style only recolors
     // cells, it does not erase the symbols underneath
     f.render_widget(Clear, rect);
@@ -1939,11 +2003,16 @@ fn draw_selected(f: &mut Frame, rect: Rect, lines: Vec<Line<'static>>) {
     while ls.len() < 2 {
         ls.push(Line::from(""));
     }
-    // 左缘竖条:弱底色后的选中锚点
+    // 左缘竖条:选中锚点;accent 与选中底拉不开时退到可读前景
+    let bar = if crate::theme::contrast_ratio(accent(), bgc) >= 1.6 {
+        accent()
+    } else {
+        readable_fg(bgc)
+    };
     let bar_w = 1.min(rect.width);
     f.render_widget(
         Paragraph::new(vec![Line::from("▌"), Line::from("▌")])
-            .style(Style::new().fg(accent()).bg(bgc)),
+            .style(Style::new().fg(bar).bg(bgc)),
         Rect {
             x: rect.x,
             y: rect.y,
@@ -3501,6 +3570,59 @@ mod tests {
     use super::*;
     use crate::app::BOX_COUNT;
     use ratatui::layout::Constraint;
+
+    /// invisible-selection regression, dark theme: a download gradient
+    /// whose start ≈ the background (omarchy-void style) must still yield
+    /// a wash that separates from the row bg and reads under span colors
+    #[test]
+    fn selection_wash_clears_floors_on_dark_and_light() {
+        let dark_bg = Color::Rgb(0x28, 0x2a, 0x36);
+        let dark_text = Color::Rgb(0xf8, 0xf8, 0xf2);
+        // hue indistinguishable from the bg (the old at(0.12) bug)
+        let camo = Color::Rgb(0x2b, 0x2d, 0x39);
+        let wash = selection_bg_over(camo, Some(dark_bg), dark_text);
+        assert!(crate::theme::contrast_ratio(wash, dark_bg) >= 1.3, "dark: not visible");
+        assert!(crate::theme::contrast_ratio(wash, dark_text) >= 2.2, "dark: span colors unreadable");
+
+        // light theme (solarized-like): dark text, light bg, mid hue
+        let light_bg = Color::Rgb(0xee, 0xe8, 0xd5);
+        let light_text = Color::Rgb(0x07, 0x36, 0x42);
+        let wash = selection_bg_over(Color::Rgb(0x42, 0x8c, 0x4a), Some(light_bg), light_text);
+        assert!(crate::theme::contrast_ratio(wash, light_bg) >= 1.3, "light: not visible");
+        assert!(crate::theme::contrast_ratio(wash, light_text) >= 2.2, "light: span colors unreadable");
+
+        // no measurable bg (transparent): hue passes through
+        assert_eq!(selection_bg_over(camo, None, dark_text), camo);
+    }
+
+    #[test]
+    fn readable_bg_holds_the_text_floor() {
+        let text = Color::Rgb(0xf8, 0xf8, 0xf2);
+        let base = Color::Rgb(0x28, 0x2a, 0x36);
+        // bright gradient end (dracula yellow): white text reads 1.1:1 on it
+        let yellow = Color::Rgb(0xf1, 0xfa, 0x8c);
+        assert!(crate::theme::contrast_ratio(yellow, text) < 3.0);
+        let fixed = readable_bg_over(yellow, Some(base), text);
+        assert!(crate::theme::contrast_ratio(fixed, text) >= 3.0);
+        // already-compliant colors pass through untouched
+        assert_eq!(readable_bg_over(base, Some(base), text), base);
+        // transparent bg: no anchor to blend toward
+        assert_eq!(readable_bg_over(yellow, None, text), yellow);
+    }
+
+    #[test]
+    fn readable_fg_picks_the_better_theme_anchor() {
+        let text = Color::Rgb(0xf8, 0xf8, 0xf2);
+        let dark_anchor = Color::Rgb(0x28, 0x2a, 0x36);
+        // bright bg: dark anchor reads far better than white text
+        let yellow = Color::Rgb(0xf1, 0xfa, 0x8c);
+        assert_eq!(readable_fg_between(yellow, text, Some(dark_anchor)), dark_anchor);
+        // near-black bg: text wins
+        assert_eq!(readable_fg_between(dark_anchor, text, Some(dark_anchor)), text);
+        // no anchor: text
+        assert_eq!(readable_fg_between(yellow, text, None), text);
+    }
+
 
     fn lens(cs: &[Constraint]) -> Vec<Option<u16>> {
         cs.iter()

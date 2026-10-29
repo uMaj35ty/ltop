@@ -129,6 +129,11 @@ fn mix_rgb(a: Color, b: Color, t: f32) -> Option<Color> {
     Some(Color::Rgb(mix(r1, r2), mix(g1, g2), mix(b1, b2)))
 }
 
+/// linear RGB blend (t=0 → a, t=1 → b); non-Rgb colors pass `a` through
+pub(crate) fn blend(a: Color, b: Color, t: f32) -> Color {
+    mix_rgb(a, b, t).unwrap_or(a)
+}
+
 /// Lift `dim` toward `text` until it reaches [`DIM_CONTRAST_FLOOR`] against
 /// `bg`. Transparent backgrounds (None) can't be measured, and non-Rgb
 /// colors (ANSI/named) aren't blended — both pass through unchanged.

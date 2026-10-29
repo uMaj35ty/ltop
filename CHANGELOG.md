@@ -26,6 +26,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- **selection/expansion contrast is theme-derived, not hardcoded**: the
+  two-line selection overlay sweeps the download-gradient hue over the
+  theme background until it is both visible against the row background
+  and readable under its span colors (previously a fixed 12% wash that
+  vanished on themes whose gradient start ≈ the background); the left
+  anchor bar falls back to a readable fg when accent blends into the
+  wash. Expanded CONNS aggregate rows and tracked/pinned rows (CONNS,
+  PROCS, LAN) now keep their hue but move luminance until the theme text
+  reads at WCAG 3:1, and their foreground picks the better-reading of
+  the theme's two anchors instead of hardcoded black/white
 - eBPF helper updated to aya 0.16 (aya-obj unified at 0.6; no API changes)
 - **udp snapshots carry a schema version** (`"v":1` leading field);
   `ltop --dump` shows the running daemon's version, so a stale helper
