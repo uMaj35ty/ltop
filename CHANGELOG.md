@@ -3,6 +3,35 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **dim text visibility across themes**: btop's `inactive_fg` is decorative
+  by convention, but ltop renders table headers, session labels and tips
+  with it — 52 built-in themes sat below a 3:1 contrast ratio and three
+  (everforest-dark-hard/-medium, gruvbox_material_dark) shipped an
+  inactive_fg identical to the background (invisible). The palette now
+  enforces a WCAG 3:1 floor at load: dim is blended toward the text color
+  until it reads, capped short of plain text so the hierarchy survives.
+  Applies to builtins, `--theme` files and omarchy hot reloads alike;
+  transparent-background themes are left untouched (not measurable)
+- **on-palette accent fallback**: 27 built-in themes ship without
+  `graph_text`, silently leaving IPs, clock and values in the Dracula
+  fallback cyan. `graph_text` now falls back to `main_fg`, then `title`
+- omarchy-void shipped without `main_fg` and silently inherited the
+  Dracula text color
+- `--theme <file>` failures no longer fall back silently: a warning names
+  the file that could not be loaded
+
+### Changed
+
+- eBPF helper updated to aya 0.16 (aya-obj unified at 0.6; no API changes)
+- **udp snapshots carry a schema version** (`"v":1` leading field);
+  `ltop --dump` shows the running daemon's version, so a stale helper
+  left behind by PATH shadowing (`/usr/local/bin` before `~/.cargo/bin`)
+  becomes detectable. Pre-versioning helpers (≤0.2.11) read back as none
+
 ## [0.2.11] - 2026-10-25
 
 Docs-site performance and a LAN-box usability closure: the macOS privacy
