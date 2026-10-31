@@ -26,19 +26,22 @@ type IoObject = u32;
 
 /// BSD device name -> (bytes_read, bytes_written, ops_read, ops_write)
 /// for leaf IOMedias; plus the full name list for the device tree.
-pub fn disk_counters() -> (HashMap<String, [u64; 4]>, Vec<String>) {
+/// (per-name [read B, write B, read ops, write ops], BSD names of every
+/// IOMedia (leaves + whole disks), per-name capacity in bytes)
+pub fn disk_counters() -> (HashMap<String, [u64; 4]>, Vec<String>, HashMap<String, u64>) {
     let mut out = HashMap::new();
     let mut names = Vec::new();
+    let mut sizes: HashMap<String, u64> = HashMap::new();
     unsafe {
         // SAFETY: standard IOKit iteration; every object and CF value is
         // released on all paths, matched buffers are null-checked.
         let matching = IOServiceMatching(c"IOMedia".as_ptr());
         if matching.is_null() {
-            return (out, names);
+            return (out, names, sizes);
         }
         let mut it: IoObject = 0;
         if IOServiceGetMatchingServices(0, matching, &mut it) != 0 {
-            return (out, names); // consumed `matching` either way
+            return (out, names, sizes); // consumed `matching` either way
         }
         loop {
             let obj: IoObject = IOIteratorNext(it);
@@ -46,6 +49,11 @@ pub fn disk_counters() -> (HashMap<String, [u64; 4]>, Vec<String>) {
                 break;
             }
             if let Some(name) = string_prop(obj, "BSD Name\0") {
+                // every IOMedia carries its capacity; leaves and whole disks
+                // alike (the tree shows sizes for structural rows too)
+                if let Some(size) = number_prop(obj, "Size\0") {
+                    sizes.insert(name.clone(), size);
+                }
                 if bool_prop(obj, "Leaf\0") {
                     if let Some(stats) = dict_prop(obj, "Statistics\0") {
                         let br = number_in_dict(stats, "Bytes (Read)\0");
@@ -68,11 +76,11 @@ pub fn disk_counters() -> (HashMap<String, [u64; 4]>, Vec<String>) {
         // 非 leaf 子 media(whole media)的 BSD Name
         let matching = IOServiceMatching(c"IOBlockStorageDriver".as_ptr());
         if matching.is_null() {
-            return (out, names);
+            return (out, names, sizes);
         }
         let mut it: IoObject = 0;
         if IOServiceGetMatchingServices(0, matching, &mut it) != 0 {
-            return (out, names);
+            return (out, names, sizes);
         }
         loop {
             let drv: IoObject = IOIteratorNext(it);
@@ -93,7 +101,7 @@ pub fn disk_counters() -> (HashMap<String, [u64; 4]>, Vec<String>) {
         }
         IOObjectRelease(it);
     }
-    (out, names)
+    (out, names, sizes)
 }
 
 /// driver 下非 leaf(whole)子 media 的 BSD Name,即盘名(disk0)
@@ -225,6 +233,16 @@ unsafe fn number_in_dict(dict: *mut c_void, key: &str) -> u64 {
     } else {
         0
     }
+}
+
+/// direct 64-bit number property (e.g. IOMedia "Size", bytes);
+/// CFNumberGetValue coerces narrower widths
+unsafe fn number_prop(obj: IoObject, key: &str) -> Option<u64> {
+    let cf = prop(obj, key)?;
+    let mut out: u64 = 0;
+    let ok = CFNumberGetValue(cf, 4, &mut out as *mut u64 as *mut c_void);
+    CFRelease(cf);
+    ok.then_some(out)
 }
 
 unsafe fn prop(obj: IoObject, key: &str) -> Option<*mut c_void> {

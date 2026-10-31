@@ -329,16 +329,17 @@ fn read_size(sysdir: &std::path::Path) -> Option<u64> {
         .map(|s| s * 512)
 }
 
-/// mac:BSD 名前缀分组(disk3s1s1 → disk3);无容量(sysctl 盘大小另查,暂缺)
+/// mac:BSD 名前缀分组(disk3s1s1 → disk3);容量来自 IOMedia "Size"
+/// (leaves 与 whole media 都有,与 Linux 的 /sys/block/*/size 对齐)
 #[cfg(target_os = "macos")]
 fn build_block_tree() -> Vec<TreeNode> {
-    let (_, names) = crate::collect::iokit::disk_counters();
+    let (_, names, sizes) = crate::collect::iokit::disk_counters();
     let mut roots: Vec<(String, Vec<TreeNode>)> = Vec::new();
     for n in &names {
         let node = TreeNode {
             name: n.clone(),
             pretty: None,
-            size: None,
+            size: sizes.get(n).copied(),
             children: Vec::new(),
         };
         if let Some(parent) = crate::collect::iokit::slice_parent(n) {
@@ -353,11 +354,14 @@ fn build_block_tree() -> Vec<TreeNode> {
     roots.sort_by(|a, b| a.0.cmp(&b.0));
     roots
         .into_iter()
-        .map(|(name, children)| TreeNode {
-            name,
-            pretty: None,
-            size: None,
-            children,
+        .map(|(name, children)| {
+            let size = sizes.get(&name).copied();
+            TreeNode {
+                name,
+                pretty: None,
+                size,
+                children,
+            }
         })
         .collect()
 }
@@ -462,7 +466,7 @@ fn build_block_tree() -> Vec<TreeNode> {
 /// mac:IOKit 叶子 IOMedia 的字节/操作计数(整盘聚合对象已跳过)
 #[cfg(target_os = "macos")]
 fn parse_diskstats() -> HashMap<String, DiskRaw> {
-    let (map, _) = crate::collect::iokit::disk_counters();
+    let (map, _, _) = crate::collect::iokit::disk_counters();
     map.into_iter()
         .map(|(k, v)| {
             (
