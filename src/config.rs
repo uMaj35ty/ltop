@@ -300,7 +300,9 @@ impl Default for Config {
             extra: Vec::new(),
             lang: Lang::En,
             layout: LayoutMode::Classic,
-            tick_ms: 1000,
+            // 首装默认 2.0s:采样刷新对监控场景足够,省电优先;配置文件里
+            // 写了 tick_ms 的用户不受默认变化影响,+/- 热键仍 ±250ms
+            tick_ms: 2000,
             graph_net: GraphMode::Hybrid,
             graph_disk: GraphMode::Centered,
             boxes: [true; 6],

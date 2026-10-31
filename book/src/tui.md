@@ -32,11 +32,14 @@ pins the neighbour and filters CONNS to that peer.
 Read/write rate charts (deduplicated across stacked devices — `nvme0n1` and
 its `dm-0(root)` child are one sample, not two) beside the device list:
 capacity bars and live per-device rates, the fs type as a dim tail after
-each name. On **Linux** this is the full physical tree (disk → partition →
-dm, unmounted rows included — LUKS/LVM layering stays readable). On
-**macOS** it lists mounted volumes only: the registry tree there is
-dominated by synthesized APFS plumbing and simulator images, and the host
-cannot see mounts inside VM guests anyway. `d` expands the mount list and
+each name. On **macOS** the list shows mounted volumes only: VMs and
+simulators attach their virtual disks as host-visible synthesized devices —
+often a dozen or more per machine — and the host cannot see anything about
+their internal capacity or usage, so those rows would be pure noise. On
+**Linux** a VM's disks never appear as host block devices (they are plain
+files in a filesystem), so the device tree reflects real hardware and stays
+the full physical tree — disk → partition → dm with unmounted rows, where
+LUKS/LVM layering stays readable. `d` expands the mount list and
 aims the arrow/jump keys at the disks list; `i` switches the chart mode. An
 overflowing list gets a btop-style scrollbar in its right edge — click the
 track to page, drag the thumb to scroll, no focus needed (the wheel already
@@ -133,7 +136,7 @@ export: `--replay [--csv OUT]`. Details in [The data plane](data.md).
 | `+`/`-` | refresh interval ±250 ms |
 
 Settings worth knowing (all in `m` → settings, persisted to
-`~/.config/ltop/config.conf`): refresh `tick_ms` (default 1000), tombstone
+`~/.config/ltop/config.conf`): refresh `tick_ms` (default 2000), tombstone
 TTL, the recording toggle (same as the `L` key), log interval/retention,
 sweep interval, default sort/filter modes, `theme`, `lang`,
 `proc_expand_default` (groups expanded by default), `proc_exit_retention_min`,

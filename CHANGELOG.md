@@ -25,14 +25,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Removed
 
 - **the device tree on macOS** — the DISKS box there now lists mounted
-  volumes only. The IOKit registry tree was dominated by synthesized APFS
-  plumbing and simulator runtime images (one physical SSD listed 30+
-  nodes), and the host cannot see mounts inside VM guests anyway, so the
-  physical hierarchy carried no information on mac. Linux keeps the full
-  tree: disk → partition → dm with unmounted rows, where LUKS/LVM layering
-  is the point. The macOS list falls out of the same source — an empty
-  tree falls back to a flat mounted-volumes table (same rows, scrollbar,
-  mount expand/collapse and fs-type tail)
+  volumes only. VMs and simulators attach their virtual disks as
+  host-visible synthesized devices — often a dozen or more per machine —
+  and the host cannot see anything about their internal capacity or usage,
+  so those rows would be pure noise (one physical SSD listed 30+ nodes).
+  Linux keeps the full tree: a Linux VM's disks never appear as host block
+  devices (they are plain files in a filesystem), so the tree reflects real
+  hardware — disk → partition → dm with unmounted rows, where LUKS/LVM
+  layering is the point. The macOS list falls out of the same source — an
+  empty tree falls back to a flat mounted-volumes table (same rows,
+  scrollbar, mount expand/collapse and fs-type tail)
 
 ### Fixed
 
@@ -48,6 +50,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- **first-run refresh defaults to 2.0s** — `tick_ms` ships as 2000 (was
+  1000): plenty for a monitor's cadence, gentler on idle machines. Config
+  files that name `tick_ms` explicitly are unaffected, and `+`/`-` still
+  steps ±250 ms
 - **the DISKS title badge counts mounted volumes, not tracked devices** —
   the old `N dev` was the rate/capacity data-plane size, which on macOS
   includes the always-zero synthesized APFS layer and every mounted
