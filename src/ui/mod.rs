@@ -1945,7 +1945,7 @@ fn draw_disks(f: &mut Frame, area: Rect, app: &App, focused: bool) {
     } else {
         inner.width
     };
-    let cols = fit_columns(&[0, 16, 9, 9], 0, 10, 40, table_w, 1);
+    let cols = fit_columns(&[0, 21, 9, 9], 0, 10, 40, table_w, 1);
     let table = Table::new(rows, cols).header(header).column_spacing(1);
     f.render_widget(table, inner);
     if let Some(col) = bar {
@@ -1976,11 +1976,14 @@ fn disk_row(app: &App, node: &TreeNode, label: String) -> Row<'static> {
     // structural nodes (whole disks, carrier partitions) show their size
     let (usage, fstype, rate_r, rate_w) = match dev {
         Some(d) => (
-            usage_bar(if d.total > 0 {
-                d.used as f64 / d.total as f64
-            } else {
-                0.0
-            }),
+            usage_bar(
+                if d.total > 0 {
+                    d.used as f64 / d.total as f64
+                } else {
+                    0.0
+                },
+                d.total,
+            ),
             Some(d.fstype.as_str()),
             fmt_speed(d.rate_r),
             fmt_speed(d.rate_w),
@@ -2019,7 +2022,7 @@ fn vol_row(app: &App, d: &DiskDev) -> Row<'static> {
         d.name.clone(),
         rest,
         Some(d.fstype.as_str()),
-        usage_bar(frac),
+        usage_bar(frac, d.total),
         fmt_speed(d.rate_r),
         fmt_speed(d.rate_w),
     )
@@ -2039,11 +2042,17 @@ fn mounts_tail(app: &App, d: &DiskDev, rest: &mut String) {
     }
 }
 
-fn usage_bar(frac: f64) -> Line<'static> {
-    Line::from(vec![
+/// 条 + 百分比 + 绝对容量(mac 卷化后这是唯一能读到 G 数的地方;0 容量
+/// 不显示——未知就是未知,不画个假 0B)
+fn usage_bar(frac: f64, total: u64) -> Line<'static> {
+    let mut spans = vec![
         braille_bar(frac, 10, palette().used.at(frac as f32)),
         Span::styled(format!(" {:>3.0}%", frac * 100.0), text()),
-    ])
+    ];
+    if total > 0 {
+        spans.push(Span::styled(format!(" {}", fmt_bytes(total as f64)), dim()));
+    }
+    Line::from(spans)
 }
 
 /// 四列单元格组装(树行/卷行共用)。fs type 是名字后的暗色尾巴:身份
@@ -4651,6 +4660,12 @@ mod tests {
             rows.iter()
                 .any(|r| r.contains("disk3s1") && r.contains("· apfs")),
             "mounted volume row with fstype tail"
+        );
+        // USED 列带绝对容量(total=100B)
+        assert!(
+            rows.iter()
+                .any(|r| r.contains("disk3s1") && r.contains("100B")),
+            "capacity renders in the USED cell"
         );
         assert!(
             rows.iter()
