@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ltop skills——教会你的 agent 观察系统</title>
+<meta name="description" content="ltop 自带现成的 agent skill：一个 markdown 文件，教会编程 agent 何时、如何使用 ltop 的 JSON 快照、watch + report 和诊断配方。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0e14'/%3E%3Crect x='6' y='6' width='6' height='20' fill='%233fd06c'/%3E%3Crect x='15' y='14' width='4' height='12' fill='%23ff5c7a'/%3E%3Crect x='22' y='10' width='4' height='16' fill='%2356c8ff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css?v=10">
+<style>
+  .skill-hero { padding: 56px 0 8px; text-align: center; }
+  .skill-hero h1 { font-size: clamp(24px, 3.6vw, 36px); margin: 0 0 14px; }
+  .skill-hero .lead { margin-bottom: 10px; }
+  table.cmds { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 12px 0 4px; }
+  table.cmds th, table.cmds td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  table.cmds th { color: var(--dim); font-weight: 600; font-size: 12px; letter-spacing: 1px; }
+  table.cmds td:first-child { color: var(--yellow); white-space: nowrap; }
+  table.cmds td:last-child { color: var(--dim); }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap nav-inner">
+    <a class="logo" href="index.zh.html"><b>l</b>top</a>
+    <div class="links">
+      <a href="index.zh.html#features">功能</a>
+      <a href="index.zh.html#quickstart">快速上手</a>
+      <a href="index.zh.html#roadmap" class="docsy">路线图</a>
+      <a href="gallery.zh.html" class="docsy">画廊</a>
+      
+      <a href="skills.zh.html" class="docsy">Skills</a>
+      <a href="docs/zh/" class="docsy">文档</a>
+          </div>
+      <span class="nav-row2"><a href="https://github.com/uMaj35ty/ltop" class="gh">GitHub ↗</a><a href="skills.html" class="lang" hreflang="en">English</a></span>
+  </div>
+</nav>
+
+<section class="skill-hero">
+  <div class="wrap">
+    <h1><span style="color:var(--green)">ltop skills</span>——教会你的 agent 观察系统</h1>
+    <p class="lead">
+      一个 markdown 文件，让编程 agent 不再刮 shell 输出，而是直接<em>问 ltop</em>。
+    </p>
+    <p class="tagline">
+      skill 随仓库发布：<code>docs/skills/ltop-observe/SKILL.md</code>——命令、
+      schema 语义、平台陷阱、诊断配方都在里面。除 ltop 本体外零依赖。
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>安装</h2>
+    <p class="sec-sub">任何从目录加载 skill 的 agent 都能用。以 Claude Code 为例；
+    其他 agent 把文件夹放进它读 skill 的位置即可。</p>
+    <div class="steps">
+      <div class="step">
+        <span class="n">1</span>
+        <h3>机器上先有 ltop</h3>
+        <p>skill 驱动的是 CLI——先装 ltop（<a href="docs/zh/installation.html">渠道</a>）。
+        eBPF 助手可选；没有它 UDP 数字会降级，skill 里写明了这一点。</p>
+        <div class="prewrap"><pre><span class="p">$</span> brew install uMaj35ty/ltop/ltop</pre><button class="copy" data-copy="brew install uMaj35ty/ltop/ltop">复制</button></div>
+      </div>
+      <div class="step">
+        <span class="n">2</span>
+        <h3>把 skill 拷到位</h3>
+        <p>一个文件一个目录——Claude Code 及兼容布局：</p>
+        <div class="prewrap"><pre><span class="p">$</span> git clone --depth 1 \
+    https://github.com/uMaj35ty/ltop /tmp/ltop
+<span class="p">$</span> mkdir -p ~/.claude/skills
+<span class="p">$</span> cp -r /tmp/ltop/docs/skills/ltop-observe \
+    ~/.claude/skills/</pre><button class="copy" data-copy="git clone --depth 1 https://github.com/uMaj35ty/ltop /tmp/ltop
+mkdir -p ~/.claude/skills
+cp -r /tmp/ltop/docs/skills/ltop-observe ~/.claude/skills/">复制</button></div>        <p>国内镜像:<code>git clone --depth 1 https://atomgit.com/uMaj35ty/ltop /tmp/ltop</code>(历史一致,国内网络快)。</p>
+
+      </div>
+      <div class="step">
+        <span class="n">3</span>
+        <h3>自然语言直接问</h3>
+        <p>"网速怎么变慢了？"——"盯着 chrome 10 分钟然后汇报流量。"skill 的
+        frontmatter 会被这类任务触发；agent 跑对命令、读回结构化 JSON。</p>
+        <div class="prewrap"><pre><span class="p">$</span> ltop watch --duration 10m --proc chrome
+<span class="p">$</span> ltop report <span class="p">&lt;file&gt;</span> --json</pre><button class="copy" data-copy="ltop watch --duration 10m --proc chrome
+ltop report <file> --json">复制</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <h2>skill 教了什么</h2>
+    <p class="sec-sub">agent 从"猜"到"读结构化输出"所需的全部——完整内容就是
+    <a href="https://github.com/uMaj35ty/ltop/blob/master/docs/skills/ltop-observe/SKILL.md">SKILL.md</a>
+    本身。</p>
+    <div class="grid">
+      <div class="card" style="grid-column: 1 / -1;">
+        <h3><em>▣</em>命令面</h3>
+        <table class="cmds">
+          <tr><th>命令</th><th>agent 拿到什么</th></tr>
+          <tr><td>ltop --json</td><td>schema-v1 快照，五个域全带速率（约 1.2 秒：连采两轮）</td></tr>
+          <tr><td>ltop --schema</td><td>随版本更新的字段参考——永不与二进制漂移</td></tr>
+          <tr><td>ltop watch</td><td>无头 JSONL 采集：--duration / --stop 哨兵 / --proc 聚焦，崩溃安全，免 root</td></tr>
+          <tr><td>ltop report</td><td>窗口总和、峰值、活跃时长——人读表格或 ~2 KB JSON（比轮询省 ~97% token）</td></tr>
+          <tr><td>jq</td><td>watch/monlog 文件就是普通 JSONL——任意切片一条过滤器的事</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h3><em>◉</em>诊断配方</h3>
+        <p>网速慢 → 按速率排接口、查链路状态、再看忙网卡上的头部连接。磁盘忙 →
+        设备吞吐对容量，再找每进程写盘者。LAN 清点 → 邻居带网关标记和 mDNS
+        名。时间窗任务 → watch + report，绝不轮询。</p>
+      </div>
+      <div class="card">
+        <h3><em>⌦</em>防误读的语义</h3>
+        <p><code>meta.udp_helper</code> 标明 UDP 计费是否完整；
+        <code>conns[].process: null</code> 是其他用户的 socket，不是"没有属主"；
+        进程总量是载荷字节、网卡总量含包头——差 10–40% 是设计使然；macOS 的
+        MAC 是系统脱敏，不是 ltop 藏的。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot-inner">
+    <span class="l"><b>l</b>top — localist top · MIT · 无遥测，免 root</span>
+    <div class="foot-links">
+      <a href="docs/zh/ai.html">AI 文档</a>
+      <a href="https://github.com/uMaj35ty/ltop/blob/master/docs/skills/ltop-observe/SKILL.md">SKILL.md</a>
+      <a href="https://crates.io/crates/ltop">crates.io</a>
+      <a href="https://github.com/uMaj35ty/ltop">GitHub</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll(".copy").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var done = function () {
+        btn.textContent = "已复制 ✓"; btn.classList.add("ok");
+        setTimeout(function () { btn.textContent = "复制"; btn.classList.remove("ok"); }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(btn.dataset.copy).then(done);
+      } else {
+        var ta = document.createElement("textarea");
+        ta.value = btn.dataset.copy; document.body.appendChild(ta);
+        ta.select(); document.execCommand("copy"); document.body.removeChild(ta); done();
+      }
+    });
+  });
+</script>
+</body>
+</html>

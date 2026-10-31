@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ltop skills — teach your agent to observe the system</title>
+<meta name="description" content="ltop ships a ready-made agent skill: one markdown file that teaches coding agents when and how to use ltop's JSON snapshot, watch + report and diagnostic recipes.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0e14'/%3E%3Crect x='6' y='6' width='6' height='20' fill='%233fd06c'/%3E%3Crect x='15' y='14' width='4' height='12' fill='%23ff5c7a'/%3E%3Crect x='22' y='10' width='4' height='16' fill='%2356c8ff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css?v=10">
+<style>
+  .skill-hero { padding: 56px 0 8px; text-align: center; }
+  .skill-hero h1 { font-size: clamp(24px, 3.6vw, 36px); margin: 0 0 14px; }
+  .skill-hero .lead { margin-bottom: 10px; }
+  table.cmds { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 12px 0 4px; }
+  table.cmds th, table.cmds td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  table.cmds th { color: var(--dim); font-weight: 600; font-size: 12px; letter-spacing: 1px; }
+  table.cmds td:first-child { color: var(--yellow); white-space: nowrap; }
+  table.cmds td:last-child { color: var(--dim); }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap nav-inner">
+    <a class="logo" href="index.html"><b>l</b>top</a>
+    <div class="links">
+      <a href="index.html#features">Features</a>
+      <a href="index.html#quickstart">Quick start</a>
+      <a href="index.html#roadmap" class="docsy">Roadmap</a>
+      <a href="gallery.html" class="docsy">Gallery</a>
+      
+      <a href="skills.html" class="docsy">Skills</a>
+      <a href="docs/" class="docsy">Docs</a>
+          </div>
+      <span class="nav-row2"><a href="https://github.com/uMaj35ty/ltop" class="gh">GitHub ↗</a><a href="skills.zh.html" class="lang" hreflang="zh-CN">中文</a></span>
+  </div>
+</nav>
+
+<section class="skill-hero">
+  <div class="wrap">
+    <h1><span style="color:var(--green)">ltop skills</span> — teach your agent to observe the system</h1>
+    <p class="lead">
+      One markdown file turns a coding agent into a system-observer that asks
+      <em>ltop</em> instead of scraping shell output.
+    </p>
+    <p class="tagline">
+      The skill ships in the repo at
+      <code>docs/skills/ltop-observe/SKILL.md</code> — commands, schema semantics,
+      platform traps and diagnostic recipes included. No dependencies beyond ltop itself.
+    </p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Install</h2>
+    <p class="sec-sub">Any agent that loads skills from a directory works. Claude Code
+    example; other agents: drop the folder wherever they read skills from.</p>
+    <div class="steps">
+      <div class="step">
+        <span class="n">1</span>
+        <h3>Have ltop on the machine</h3>
+        <p>The skill drives the CLI — install it first
+        (<a href="docs/installation.html">channels</a>). The eBPF helper is
+        optional; the skill notes when UDP numbers degrade without it.</p>
+        <div class="prewrap"><pre><span class="p">$</span> brew install uMaj35ty/ltop/ltop</pre><button class="copy" data-copy="brew install uMaj35ty/ltop/ltop">copy</button></div>
+      </div>
+      <div class="step">
+        <span class="n">2</span>
+        <h3>Copy the skill into place</h3>
+        <p>One file, one folder — for Claude Code and compatible layouts:</p>
+        <div class="prewrap"><pre><span class="p">$</span> git clone --depth 1 \
+    https://github.com/uMaj35ty/ltop /tmp/ltop
+<span class="p">$</span> mkdir -p ~/.claude/skills
+<span class="p">$</span> cp -r /tmp/ltop/docs/skills/ltop-observe \
+    ~/.claude/skills/</pre><button class="copy" data-copy="git clone --depth 1 https://github.com/uMaj35ty/ltop /tmp/ltop
+mkdir -p ~/.claude/skills
+cp -r /tmp/ltop/docs/skills/ltop-observe ~/.claude/skills/">copy</button></div>        <p>China mirror: <code>git clone --depth 1 https://atomgit.com/uMaj35ty/ltop /tmp/ltop</code> (same history, faster from CN networks).</p>
+
+      </div>
+      <div class="step">
+        <span class="n">3</span>
+        <h3>Ask naturally</h3>
+        <p>"Why is the network slow?" — "Watch chrome for 10 minutes and
+        report traffic." The skill's frontmatter triggers on these; the agent
+        runs the right command and reads structured JSON back.</p>
+        <div class="prewrap"><pre><span class="p">$</span> ltop watch --duration 10m --proc chrome
+<span class="p">$</span> ltop report <span class="p">&lt;file&gt;</span> --json</pre><button class="copy" data-copy="ltop watch --duration 10m --proc chrome
+ltop report <file> --json">copy</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <h2>What the skill teaches</h2>
+    <p class="sec-sub">Everything an agent needs to stop guessing and start reading
+    structured output — the full text is the
+    <a href="https://github.com/uMaj35ty/ltop/blob/master/docs/skills/ltop-observe/SKILL.md">SKILL.md</a>
+    itself.</p>
+    <div class="grid">
+      <div class="card" style="grid-column: 1 / -1;">
+        <h3><em>▣</em>Command surface</h3>
+        <table class="cmds">
+          <tr><th>command</th><th>what the agent gets</th></tr>
+          <tr><td>ltop --json</td><td>schema-v1 snapshot, all five domains, rates included (~1.2 s: two sampling rounds)</td></tr>
+          <tr><td>ltop --schema</td><td>versioned field reference — never drifts from the binary</td></tr>
+          <tr><td>ltop watch</td><td>headless JSONL capture: --duration / --stop sentinel / --proc focus, crash-safe, no root</td></tr>
+          <tr><td>ltop report</td><td>window sums, peaks, active time — table or ~2 KB JSON (~97% fewer tokens than polling)</td></tr>
+          <tr><td>jq</td><td>watch/monlog files are plain JSONL — arbitrary slices are one filter away</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h3><em>◉</em>Diagnostic recipes</h3>
+        <p>Network slow → sort interfaces by rate, check link state, then the top
+        connections on the busy NIC. Disk busy → device throughput vs capacity,
+        then per-process writers. LAN inventory → neighbours with gateway flags
+        and mDNS names. Time windows → watch + report, never poll.</p>
+      </div>
+      <div class="card">
+        <h3><em>⌦</em>Semantics that prevent wrong answers</h3>
+        <p><code>meta.udp_helper</code> says when UDP accounting is complete;
+        <code>conns[].process: null</code> means another user's socket, not
+        "unowned"; process totals are payload bytes while NIC totals include
+        headers — a 10–40% gap is by design; macOS MACs are sanitized by the
+        system, not hidden by ltop.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot-inner">
+    <span class="l"><b>l</b>top — localist top · MIT license · no telemetry, no root required</span>
+    <div class="foot-links">
+      <a href="docs/ai.html">AI docs</a>
+      <a href="https://github.com/uMaj35ty/ltop/blob/master/docs/skills/ltop-observe/SKILL.md">SKILL.md</a>
+      <a href="https://crates.io/crates/ltop">crates.io</a>
+      <a href="https://github.com/uMaj35ty/ltop">GitHub</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll(".copy").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var done = function () {
+        btn.textContent = "copied ✓"; btn.classList.add("ok");
+        setTimeout(function () { btn.textContent = "copy"; btn.classList.remove("ok"); }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(btn.dataset.copy).then(done);
+      } else {
+        var ta = document.createElement("textarea");
+        ta.value = btn.dataset.copy; document.body.appendChild(ta);
+        ta.select(); document.execCommand("copy"); document.body.removeChild(ta); done();
+      }
+    });
+  });
+</script>
+</body>
+</html>
