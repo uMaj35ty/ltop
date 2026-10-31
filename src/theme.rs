@@ -385,7 +385,11 @@ pub(crate) fn parse_btop_str(content: &str) -> Option<Palette> {
     // accent needs an on-palette fallback chain: 27 builtin themes ship
     // without graph_text, and the bare key lookup silently kept the
     // Dracula fallback cyan for IPs, clock and values
-    if let Some(c) = map.get("graph_text").or(map.get("main_fg")).or(map.get("title")) {
+    if let Some(c) = map
+        .get("graph_text")
+        .or(map.get("main_fg"))
+        .or(map.get("title"))
+    {
         pal.accent = *c;
     }
     set(&mut pal.border_net, "net_box");
@@ -576,10 +580,7 @@ mod tests {
     fn accent_falls_back_on_palette_instead_of_dracula() {
         // graph_text wins when present
         let full = "theme[main_bg]=\"#111111\"\ntheme[main_fg]=\"#eeeeee\"\ntheme[graph_text]=\"#00ff00\"\n";
-        assert_eq!(
-            parse_btop_str(full).unwrap().accent,
-            Color::Rgb(0, 255, 0)
-        );
+        assert_eq!(parse_btop_str(full).unwrap().accent, Color::Rgb(0, 255, 0));
         // no graph_text: main_fg keeps the accent on-palette (27 builtin
         // themes ship without graph_text)
         let no_gt = "theme[main_bg]=\"#111111\"\ntheme[main_fg]=\"#eeeeee\"\n";
@@ -626,9 +627,6 @@ mod tests {
 
         // transparent bg and non-Rgb colors are not measurable — unchanged
         assert_eq!(lift_dim(fine, None, text), fine);
-        assert_eq!(
-            lift_dim(Color::Indexed(8), bg, text),
-            Color::Indexed(8)
-        );
+        assert_eq!(lift_dim(Color::Indexed(8), bg, text), Color::Indexed(8));
     }
 }

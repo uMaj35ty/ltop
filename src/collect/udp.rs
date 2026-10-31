@@ -439,7 +439,7 @@ mod tests {
         let mut c = UdpCollector::new();
         // 组合账本含 TCP+UDP,分项账本只有 UDP:一次 ingest 同时出两路
         let s0 = Snap {
-ver: None,
+            ver: None,
             ts: 1000,
             inst: Some("A".into()),
             pids: map(&[(7, 100, 0)]),
@@ -448,7 +448,7 @@ ver: None,
         };
         assert!(c.ingest(s0).net.is_empty()); // 基线
         let s1 = Snap {
-ver: None,
+            ver: None,
             ts: 2000,
             inst: Some("A".into()),
             pids: map(&[(7, 1100, 0)]), // TCP+UDP 合计增量 1000
@@ -466,7 +466,7 @@ ver: None,
     fn socket_deltas_come_out_inode_keyed() {
         let mut c = UdpCollector::new();
         let s0 = Snap {
-ver: None,
+            ver: None,
             ts: 1000,
             inst: Some("A".into()),
             pids: Counters::new(),
@@ -475,7 +475,7 @@ ver: None,
         };
         assert!(c.ingest(s0).inodes.is_empty()); // baseline
         let s1 = Snap {
-ver: None,
+            ver: None,
             ts: 2000,
             inst: Some("A".into()),
             pids: Counters::new(),
@@ -501,9 +501,9 @@ ver: None,
     fn writer_switch_clears_last_inodes() {
         let mut c = UdpCollector::new();
         // 先攒一轮真实 socket 增量,last_inodes 有内容(detail 面板数据源)
-        assert!(
-            c.ingest(Snap {
-ver: None,
+        assert!(c
+            .ingest(Snap {
+                ver: None,
                 ts: 1000,
                 inst: Some("A".into()),
                 pids: Counters::new(),
@@ -511,10 +511,9 @@ ver: None,
                 sks: map(&[(9, 10, 0)]),
             })
             .inodes
-            .is_empty()
-        );
+            .is_empty());
         let s = c.ingest(Snap {
-ver: None,
+            ver: None,
             ts: 2000,
             inst: Some("A".into()),
             pids: Counters::new(),

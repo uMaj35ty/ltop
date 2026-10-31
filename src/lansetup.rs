@@ -116,7 +116,10 @@ fn install_agent(zh: bool) -> Result<()> {
     let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
 
     let home = std::env::var("HOME").with_context(|| {
-        p("HOME is not set; cannot locate LaunchAgents", "未设置 HOME,定位不到 LaunchAgents")
+        p(
+            "HOME is not set; cannot locate LaunchAgents",
+            "未设置 HOME,定位不到 LaunchAgents",
+        )
     })?;
     let plist = std::path::PathBuf::from(home)
         .join("Library/LaunchAgents")
@@ -191,7 +194,10 @@ fn remove_agent(zh: bool) -> Result<()> {
     let uid = unsafe { libc::getuid() };
     let _ = launchctl(&["bootout", &format!("gui/{uid}/{LABEL}")]);
     let home = std::env::var("HOME").with_context(|| {
-        p("HOME is not set; cannot locate LaunchAgents", "未设置 HOME,定位不到 LaunchAgents")
+        p(
+            "HOME is not set; cannot locate LaunchAgents",
+            "未设置 HOME,定位不到 LaunchAgents",
+        )
     })?;
     let plist = std::path::PathBuf::from(home)
         .join("Library/LaunchAgents")

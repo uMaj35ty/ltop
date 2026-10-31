@@ -258,7 +258,8 @@ Run as root (systemd unit: deploy/ltop-bpf.service).",
                 .cmp(&(a.1.recv + a.1.sent))
                 .then_with(|| a.0.cmp(&b.0))
         });
-        let mut json = format!("{{\"v\":{SNAPSHOT_VERSION},\"inst\":\"{inst}\",\"ts\":{ts},\"pids\":[");
+        let mut json =
+            format!("{{\"v\":{SNAPSHOT_VERSION},\"inst\":\"{inst}\",\"ts\":{ts},\"pids\":[");
         for (i, (pid, v)) in sorted.iter().enumerate() {
             if i > 0 {
                 json.push(',');

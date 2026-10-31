@@ -598,7 +598,10 @@ utun7      1380  <Link#41>   <#41>                     0     0           0      
         assert!(n.rates.contains_key("en0"), "缺席不清速率");
         assert_eq!(n.selected.as_deref(), Some("en0"), "缺席不换选中");
         // 重现:差分跨缺席期,恰好多一行
-        n.ingest(vec![dev("en1", 0, 0), dev("en0", 10_000, 0)], Instant::now());
+        n.ingest(
+            vec![dev("en1", 0, 0), dev("en0", 10_000, 0)],
+            Instant::now(),
+        );
         assert_eq!(n.history_rx.get("en0").unwrap().len(), 4);
         assert_eq!(n.missed_rounds.get("en0"), None, "重现清缺席计数");
     }

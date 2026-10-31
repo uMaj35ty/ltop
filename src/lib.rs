@@ -141,8 +141,7 @@ fn disable_app_nap() {
     unsafe {
         // 本crate只链 IOKit(带 CoreFoundation):dlopen 保证 Foundation 在场
         libc::dlopen(
-            c"/System/Library/Frameworks/Foundation.framework/Foundation".as_ptr()
-                as *const c_char,
+            c"/System/Library/Frameworks/Foundation.framework/Foundation".as_ptr() as *const c_char,
             libc::RTLD_LAZY,
         );
         let cls = objc_getClass(c"NSProcessInfo".as_ptr());
@@ -1068,9 +1067,7 @@ fn handle_mouse(app: &mut App, m: &crossterm::event::MouseEvent) {
     // 滚轮逐字段步进、点击弹窗外关闭面板
     if let crate::app::MenuState::Detail(b, id) = app.menu {
         let dbl = app.last_click.is_some_and(|(t0, c0, r0)| {
-            t0.elapsed() < std::time::Duration::from_millis(400)
-                && c0 == m.column
-                && r0 == m.row
+            t0.elapsed() < std::time::Duration::from_millis(400) && c0 == m.column && r0 == m.row
         });
         app.last_click = Some((std::time::Instant::now(), m.column, m.row));
         match m.kind {

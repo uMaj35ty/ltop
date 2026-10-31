@@ -666,11 +666,7 @@ fn query_id() -> u16 {
         .map(|d| d.subsec_nanos())
         .unwrap_or(0);
     let c = COUNTER.fetch_add(0x9E37_79B9, Ordering::Relaxed);
-    let x = nanos
-        .wrapping_mul(0x9E37_79B1)
-        ^ c
-        ^ (c >> 16)
-        ^ std::process::id();
+    let x = nanos.wrapping_mul(0x9E37_79B1) ^ c ^ (c >> 16) ^ std::process::id();
     (((x >> 8) ^ x) & 0xFFFF) as u16
 }
 
@@ -838,9 +834,7 @@ fn resolve_nbns(ip: Ipv4Addr) -> Option<String> {
         let until = Instant::now() + Duration::from_millis(400);
         while Instant::now() < until {
             match sock.recv_from(&mut buf) {
-                Ok((n, src))
-                    if src.ip() == ip && reply_id_matches(&buf[..n], id) =>
-                {
+                Ok((n, src)) if src.ip() == ip && reply_id_matches(&buf[..n], id) => {
                     if let Some(name) = parse_nbns_response(&buf[..n]) {
                         let name = name.trim_end_matches('\0').trim().to_lowercase();
                         // a reverse-encoded address or an empty string is not a name

@@ -144,8 +144,7 @@ pub fn braille_graph(
     }
     // coupled scaling: divide the auto peak by frac (≤1) so the small side
     // of a lopsided link renders at its true fraction of the chart height
-    let max = series.iter().copied().fold(0.0f64, f64::max).max(max_floor)
-        / scale_frac.max(0.05);
+    let max = series.iter().copied().fold(0.0f64, f64::max).max(max_floor) / scale_frac.max(0.05);
     if mode == GraphMode::Block {
         return block_graph(&series, width, height, max, grad);
     }
@@ -417,11 +416,11 @@ mod tests {
         // below the trigger threshold: real fraction, clamped to the floor
         assert_eq!(coupled_frac(1.0, 30.0, 8, 5), 0.5); // 1/30 < 1/5 → floor
         assert_eq!(coupled_frac(1.0, 10.0, 30, 5), 0.3); // tall chart → 0.3
-        // not below threshold: untouched
+                                                         // not below threshold: untouched
         assert_eq!(coupled_frac(1.0, 3.0, 8, 5), 1.0); // 1/3 > 1/5
         assert_eq!(coupled_frac(1.0, 1.0, 8, 5), 1.0); // equal
         assert_eq!(coupled_frac(1.0, 5.0, 8, 5), 1.0); // right at boundary
-        // disabled / degenerate inputs
+                                                       // disabled / degenerate inputs
         assert_eq!(coupled_frac(1.0, 30.0, 8, 0), 1.0);
         assert_eq!(coupled_frac(0.0, 30.0, 8, 5), 1.0);
         assert_eq!(coupled_frac(1.0, 0.0, 8, 5), 1.0);

@@ -11,7 +11,6 @@
 //! (offsetof/sizeof) and are re-verified at runtime by the projection tests
 //! on every platform via synthetic buffers.
 
-
 #[cfg(target_os = "macos")]
 use std::collections::HashMap;
 #[cfg(target_os = "macos")]
@@ -155,12 +154,12 @@ fn kern_proc_all() -> Vec<(u32, String, i64)> {
 /// kinfo_proc byte offsets and size (pinned by a C offsetof probe on the
 /// macOS 27 SDK: sizeof=648, p_pid=40, p_starttime.tv_sec=0, p_comm=243)
 mod kp {
-        #[allow(dead_code)] // 仅 mac 的 kern_proc_all 引用;偏移文档常量
-pub const P_PID: usize = 40; // kp_proc.p_pid
-        #[allow(dead_code)] // 仅 mac 的 kern_proc_all 引用;偏移文档常量
-pub const P_STARTTIME: usize = 0; // kp_proc.p_starttime.tv_sec
-        #[allow(dead_code)] // 仅 mac 的 kern_proc_all 引用;偏移文档常量
-pub const P_COMM: usize = 243; // kp_proc.p_comm
+    #[allow(dead_code)] // 仅 mac 的 kern_proc_all 引用;偏移文档常量
+    pub const P_PID: usize = 40; // kp_proc.p_pid
+    #[allow(dead_code)] // 仅 mac 的 kern_proc_all 引用;偏移文档常量
+    pub const P_STARTTIME: usize = 0; // kp_proc.p_starttime.tv_sec
+    #[allow(dead_code)] // 仅 mac 的 kern_proc_all 引用;偏移文档常量
+    pub const P_COMM: usize = 243; // kp_proc.p_comm
 }
 #[cfg(target_os = "macos")]
 use kp::{P_COMM, P_PID, P_STARTTIME};
