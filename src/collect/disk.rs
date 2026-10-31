@@ -356,23 +356,16 @@ fn volume_spaceused(c: &CString) -> Option<u64> {
         fileattr: 0,
         forkattr: 0,
     };
-    // 返回布局:u32 长度头,其后属性值自然对齐 → u64 落在 buf[1]
-    let mut buf = [0u64; 2];
+    // 返回布局:u32 长度头(实测=12)后紧跟 u64 值,偏移 4——实测
+    // 0x032E2CD000=12.7GiB 与 df 的 Used 一致(无 8 字节自然对齐)
+    let mut buf = [0u8; 16];
     // SAFETY: buf is fully owned for the duration of the call; the attribute
-    // set requests exactly one u64, which fits the two-word buffer
-    let r = unsafe {
-        getattrlist(
-            c.as_ptr(),
-            &attrs,
-            buf.as_mut_ptr().cast(),
-            std::mem::size_of::<u64>() * 2,
-            0,
-        )
-    };
+    // set requests exactly one u64, which fits the 16-byte buffer
+    let r = unsafe { getattrlist(c.as_ptr(), &attrs, buf.as_mut_ptr().cast(), buf.len(), 0) };
     if r != 0 {
         return None;
     }
-    Some(buf[1])
+    Some(u64::from_ne_bytes(buf[4..12].try_into().unwrap()))
 }
 
 #[cfg(target_os = "linux")]
