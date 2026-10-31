@@ -40,6 +40,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- **the DISKS title badge counts mounted volumes, not tracked devices** —
+  the old `N dev` was the rate/capacity data-plane size, which on macOS
+  includes the always-zero synthesized APFS layer and every mounted
+  simulator runtime image (one physical SSD reported as "32 dev"). The
+  badge is now `N vol` = devices carrying at least one mountpoint; the
+  device tree below still shows the full physical hierarchy
 - **CI gains a supply-chain gate and a format gate** — `cargo-deny`
   (RustSec advisories, license allowlist, registry provenance, `deny.toml`)
   and `cargo fmt --check` join the test/clippy matrix; the tree is

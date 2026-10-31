@@ -1863,8 +1863,17 @@ fn draw_disks(f: &mut Frame, area: Rect, app: &App, focused: bool) {
     // 的 clamped_offset 同语义;draw 与滚动条共用这一个偏移
     let visible = (area.height.saturating_sub(3)).max(1) as usize; // borders + header
     let off = app.scroll[BOX_DISKS].min(flat_len.saturating_sub(visible));
+    // 口径 = 挂载卷数,不是数据面大小:mac 上 devices 还含恒零合成层与
+    // 模拟器镜像(1 块物理盘能报 32 dev),dev 数会严重虚高;树的物理
+    // 全貌照旧全画,标题只报用户语义上的"挂了多少卷"
+    let vols = app
+        .disk
+        .devices
+        .iter()
+        .filter(|d| !d.mounts.is_empty())
+        .count();
     let mut rest = vec![
-        vec![text_s(format!("{} dev", app.disk.devices.len()))],
+        vec![text_s(format!("{vols} vol"))],
         vec![text_s(format!(
             "mounts: {}",
             if app.disks_expanded { "all" } else { "first" }
