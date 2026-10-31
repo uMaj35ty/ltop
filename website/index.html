@@ -7,7 +7,7 @@
 <meta name="description" content="ltop is a terminal monitor that finds the process eating your bandwidth or disk: per-process network and disk I/O, per-connection traffic, LAN neighbours. For developers, sysadmins and enthusiasts. No root required; an optional eBPF helper adds exact TCP+UDP byte accounting.">
 <meta property="og:title" content="ltop — where does the traffic go?">
 <meta property="og:description" content="Per-process and per-connection network + disk accounting, LAN neighbours with per-peer traffic, and an AI-friendly data plane (watch + report, ~97% fewer tokens).">
-<meta property="og:image" content="assets/screenshots/main.png">
+<meta property="og:image" content="assets/screenshots/main.webp">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0e14'/%3E%3Crect x='6' y='6' width='6' height='20' fill='%233fd06c'/%3E%3Crect x='15' y='14' width='4' height='12' fill='%23ff5c7a'/%3E%3Crect x='22' y='10' width='4' height='16' fill='%2356c8ff'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css?v=10">
 </head>
@@ -91,7 +91,7 @@
     <figure class="hero-shot">
       <div class="frame">
         <div class="cap"><i class="r"></i><i class="y"></i><i class="g"></i>&nbsp; ltop — omarchy — wlp5s0 — refresh 1.0s+</div>
-        <img src="assets/screenshots/main.png" alt="ltop classic layout mid Steam download: NET charts climbing to 8.8 MiB/s, LAN neighbours, connections grouped by process (steam x50 highlighted), per-process totals and the disk tree" fetchpriority="high">
+        <img src="assets/screenshots/main.webp" alt="ltop classic layout mid Steam download: NET charts climbing to 8.8 MiB/s, LAN neighbours, connections grouped by process (steam x50 highlighted), per-process totals and the disk tree" fetchpriority="high">
       </div>
       <figcaption>The classic layout, live: a Steam download in progress — NET charts climbing, connections
       grouped per process with group Σ, session-cumulative per-process network + disk, and the physical
@@ -166,6 +166,8 @@
         <p>Prebuilt via Homebrew, source via cargo, or release tarballs —
         <a href="docs/installation.html">all channels</a>.</p>
         <div class="prewrap"><pre><span class="p">$</span> brew install uMaj35ty/ltop/ltop</pre><button class="copy" data-copy="brew install uMaj35ty/ltop/ltop">copy</button></div>
+        <p>On macOS 27? Run <code>ltop lan-setup</code> once — real MAC
+        addresses in the LAN/NET boxes (per-user agent, no root).</p>
       </div>
       <div class="step">
         <span class="n">2</span>
@@ -208,25 +210,23 @@ ltop report &lt;file&gt; --json  # ~1k tokens">copy</button></div>
         <h3><span class="tag">✓</span> SHIPPED</h3>
         <ul>
           <li><span class="v">0.1.0</span><span>First public release — x86_64 Linux</span></li>
-          <li><span class="v">0.2.0</span><span>aarch64 Linux: dual-arch eBPF, double tarballs</span></li>
-          <li><span class="v">0.2.1</span><span>Native macOS: nettop, IOKit, route socket</span></li>
-          <li><span class="v">0.2.2</span><span>QOL batch (help, detail colors, block graphs) + automated Homebrew tap</span></li>
-          <li><span class="v">0.2.3</span><span>AI-friendly surface: <code>--json</code>, <code>--schema</code>, agent skill</span></li>
+          <li><span class="v">0.2.0–0.2.1</span><span>Cross-platform — dual-arch eBPF (aarch64 Linux) and native macOS (nettop, IOKit, route socket), Homebrew distribution</span></li>
+          <li><span class="v">0.2.2–0.2.3</span><span>Polish + AI-friendly surface — <code>--json</code>/<code>--schema</code>, agent skill</span></li>
           <li><span class="v">0.2.4</span><span>Headless <code>watch</code> + <code>report</code> — exact window summaries, ~97% fewer tokens</span></li>
-          <li><span class="v">0.2.5</span><span>Docs site (you're here) + resource-footprint audit</span></li>
-          <li><span class="v">0.2.6</span><span>Detail-panel mouse support (click to move, double-click to copy) + coupled net-graph scaling + mac connection attribution fix</span></li>
-          <li><span class="v">0.2.7</span><span>mac bug fixes + TUI polish — grouped settings with guarded record/kill hotkeys, full Chinese translations, CJK-safe popups, zoom / CONNS grouping fixes</span></li>
-          <li><span class="v">0.2.8</span><span>sleep/long-idle resilience (App Nap off, bounded nettop, sampling grace) + spike-damped chart auto-scale (NET &amp; DISK I/O)</span></li>
-          <li><span class="v">0.2.9</span><span>network &amp; security audit across all four targets — terminal-escape hardening, LAN spoofing protections, mac disk-accounting fix, supply-chain hardening</span></li>
+          <li><span class="v">0.2.5–0.2.6</span><span>Docs site (you're here) + 72-theme library, detail-panel mouse support, coupled graph scaling</span></li>
+          <li><span class="v">0.2.7–0.2.8</span><span>UX &amp; resilience — grouped bilingual settings, CJK-safe popups, mac idle resilience, spike-damped charts</span></li>
+          <li><span class="v">0.2.9</span><span>Network &amp; security audit across all four release targets</span></li>
+          <li><span class="v">0.2.10–0.2.11</span><span>Real MAC addresses on macOS (<code>ltop lan-setup</code>), streaming <code>report</code>, lossless-WebP docs, AtomGit mirror</span></li>
+          <li><span class="v">0.2.12</span><span>Theme visibility — WCAG dim floor and theme-derived selection/expansion contrast across all 72 themes, eBPF stack on aya 0.16, versioned helper snapshots</span></li>
+          <li><span class="v">0.2.13</span><span>Disks browsing — btop-style scrollbar and keyboard access, macOS lists mounted volumes with per-volume used bytes (getattrlist), pid-reuse guards on kill/restart, cargo-deny + rustfmt CI gates, 2.0 s first-run refresh</span></li>
         </ul>
       </div>
       <div class="col">
         <h3><span class="tag" style="color:var(--cyan)">→</span> NEXT</h3>
         <ul>
-          <li><span class="v">0.2.x</span><span>ongoing — bug fixes, tech debt and QoL ride the stable line (report streaming, ledger refinements)</span></li>
+          <li><span class="v">0.2.x</span><span>ongoing — bug fixes, tech debt and QoL ride the stable line</span></li>
           <li><span class="v">0.3</span><span><b>fleet</b> (beta branch open) — SSH aggregation of many machines: one terminal watches the whole LAN, nodes install nothing new</span></li>
           <li><span class="v">0.4</span><span><code>ltop mcp</code> — a stdio JSON-RPC server wrapping the JSON surfaces for agents</span></li>
-          <li><span class="v">later</span><span>macOS privileged helper to unlock real MAC addresses</span></li>
         </ul>
       </div>
     </div>

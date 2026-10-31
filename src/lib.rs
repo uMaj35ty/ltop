@@ -4,6 +4,7 @@ pub mod app;
 pub mod collect;
 pub mod config;
 pub mod fleet;
+pub mod lansetup;
 pub mod log;
 pub mod replay;
 pub mod report;
@@ -73,10 +74,19 @@ fn early_exit(args: &[String]) -> Option<Result<()>> {
         .skip(1)
         .find(|a| a.starts_with("--") && !known.contains(&a.as_str()))
     {
-        eprintln!("ltop: unknown option {bad} (try --help)");
+        usage_warn(
+            &format!("ltop: unknown option {bad} (try --help)"),
+            &format!("ltop: 未知选项 {bad}(试 --help)"),
+        );
         return Some(Err(anyhow::anyhow!("unknown option")));
     }
     None
+}
+
+/// CLI 用法错误统一口径(0.2.10 约定):`ltop[ 子命令]: <消息>(试 --help)`,
+/// 双语、stderr 提示行 + 退出码 1;子命令内与 TUI 旗标路径同款
+pub(crate) fn usage_warn(en: &str, zh: &str) {
+    eprintln!("{}", crate::pick_s(cli_lang_zh(), en, zh));
 }
 
 /// 与 `--dump`/`--replay`/`--log` 的实际处理一一对应;改参数先改这里。
@@ -92,6 +102,8 @@ USAGE:
     (no options)            run the TUI
     watch [OPTIONS]         headless capture to a schema-v1 JSONL file
     report <FILE> [OPTIONS] window summary of a watch/monlog JSONL (--json for AI)
+    lan-setup [--remove]    macOS: install/remove the snapshot agent (real MACs
+                            behind the macOS 27 privacy gate; see docs)
     --json                  AI-friendly structured snapshot (JSON, schema v1)
     --schema                field reference for --json (machine-readable)
     --dump                  one-shot diagnostic dump to stdout, then exit
@@ -130,8 +142,7 @@ fn disable_app_nap() {
     unsafe {
         // 本crate只链 IOKit(带 CoreFoundation):dlopen 保证 Foundation 在场
         libc::dlopen(
-            c"/System/Library/Frameworks/Foundation.framework/Foundation".as_ptr()
-                as *const c_char,
+            c"/System/Library/Frameworks/Foundation.framework/Foundation".as_ptr() as *const c_char,
             libc::RTLD_LAZY,
         );
         let cls = objc_getClass(c"NSProcessInfo".as_ptr());
@@ -204,12 +215,20 @@ pub fn cli_main() -> Result<()> {
     // 通用短路在下方,只管 TUI 路径的旗标)
     match args.get(1).map(String::as_str) {
         Some("watch") => return watch::run(&args[2..]),
+        Some("lan-setup") => return lansetup::run(&args[2..]),
         Some("report") => return report::run(&args[2..]),
         Some("fleet") => return fleet::run(&args[2..]),
         // 子命令打错字不能掉进 TUI(此前 repor 会静默开界面);
         // 旗标(含 --json 等)照旧走原路径
         Some(cmd) if !cmd.starts_with('-') => {
-            eprintln!("ltop: unknown command {cmd:?} (subcommands: watch, report, fleet; try --help)");
+            usage_warn(
+                &format!(
+                    "ltop: unknown command {cmd:?} (subcommands: watch, report, lan-setup, fleet; try --help)"
+                ),
+                &format!(
+                    "ltop: 未知命令 {cmd:?}(可用:watch、report、lan-setup、fleet;试 --help)"
+                ),
+            );
             return Err(anyhow::anyhow!("unknown command"));
         }
         _ => {}
@@ -606,9 +625,13 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
             }
             KeyCode::Char('r') => app.proc.sort = app.proc.sort.next(),
             // `d` matches the [d]isks title letter; `e` now belongs to the
-            // lan box (order cycle)
+            // lan box (order cycle). Also aims the arrow/Home/End keys at the
+            // disks box (the DISKS branch of jump_selection scrolls instead
+            // of selecting) — the visible scrollbar thumb is the feedback,
+            // so the disks list is browsable without stealing p/c/l focus
             KeyCode::Char('d') => {
                 app.disks_expanded = !app.disks_expanded;
+                app.last_focus = app::BOX_DISKS;
             }
             KeyCode::Char('f') => {
                 app.conn.filter = app.conn.filter.next();
@@ -714,11 +737,15 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
                     app.scroll[b] = app.scroll[b].saturating_add(3);
                 }
             }
+            // page keys page by the box's visible height (not 3 rows — that
+            // was the same step as one arrow press); draw clamps the offset
             KeyCode::PageUp => {
-                app.scroll[app.last_focus] = app.scroll[app.last_focus].saturating_sub(3);
+                let page = ui::box_capacity(app.last_focus).max(1);
+                app.scroll[app.last_focus] = app.scroll[app.last_focus].saturating_sub(page);
             }
             KeyCode::PageDown => {
-                app.scroll[app.last_focus] = app.scroll[app.last_focus].saturating_add(3);
+                let page = ui::box_capacity(app.last_focus).max(1);
+                app.scroll[app.last_focus] = app.scroll[app.last_focus].saturating_add(page);
             }
             KeyCode::Char('s') => {
                 app.lan.sweep_enabled = !app.lan.sweep_enabled;
@@ -951,6 +978,9 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
                     if let Some(p) = app.proc.procs.iter().find(|p| p.pid as u64 == id) {
                         if let Some(cmd) = &p.cmdline {
                             if p.alive {
+                                // snapshot the cmdline now: the dialog's y is
+                                // verified against it before the signal
+                                app.confirm_cmd = Some(cmd.clone());
                                 app.menu = MenuState::ConfirmRestart(p.pid);
                             } else {
                                 let _ = start_cmd(cmd);
@@ -971,6 +1001,14 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
                     _ => None,
                 };
                 if let Some(pid) = pid {
+                    // same pid-reuse guard as restart: anchor the dialog to
+                    // the cmdline it was opened with
+                    app.confirm_cmd = app
+                        .proc
+                        .procs
+                        .iter()
+                        .find(|p| p.pid == pid)
+                        .and_then(|p| p.cmdline.clone());
                     app.menu = MenuState::ConfirmKill(pid);
                 }
             }
@@ -979,45 +1017,50 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
         },
         MenuState::ConfirmKill(pid) => match code {
             KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
-                kill_pid(pid);
                 app.menu = MenuState::None;
+                let anchor = app.confirm_cmd.take();
+                // no anchor (cmdline unknown): behave as before; with one,
+                // the pid must still be that cmdline's live process
+                let verified = match anchor {
+                    None => true,
+                    Some(cmd) => {
+                        matches!(
+                            confirm_verify(&app.proc.procs, pid, &cmd),
+                            ConfirmAction::Signal
+                        )
+                    }
+                };
+                if verified {
+                    kill_pid(pid);
+                }
             }
             KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc | KeyCode::Char('q') => {
+                app.confirm_cmd = None;
                 app.menu = MenuState::None;
             }
             _ => {}
         },
         MenuState::ConfirmRestart(pid) => match code {
             KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
-                let cmd = app
-                    .proc
-                    .procs
-                    .iter()
-                    .find(|p| p.pid == pid)
-                    .and_then(|p| p.cmdline.clone());
-                if let Some(cmd) = cmd {
-                    kill_pid(pid);
-                    // relaunch from a worker thread: the old instance may take
-                    // a moment to exit (releasing ports/singleton locks), and
-                    // the TUI must not freeze while waiting for it
-                    std::thread::spawn(move || {
-                        for _ in 0..40 {
-                            // kill(0) 探活(EPERM = 活着但没权限发信号)——
-                            // 跨平台,Linux /proc 探测的同义替换
-                            let alive = unsafe { libc::kill(pid as libc::pid_t, 0) } == 0
-                                || std::io::Error::last_os_error().raw_os_error()
-                                    == Some(libc::EPERM);
-                            if !alive {
-                                break;
-                            }
-                            std::thread::sleep(std::time::Duration::from_millis(50));
-                        }
-                        let _ = start_cmd(&cmd);
-                    });
-                }
                 app.menu = MenuState::None;
+                if let Some(cmd) = app.confirm_cmd.take() {
+                    match confirm_verify(&app.proc.procs, pid, &cmd) {
+                        ConfirmAction::Signal => {
+                            kill_pid(pid);
+                            relaunch_when_gone(pid, cmd);
+                        }
+                        // exited while the dialog was open: starting it now
+                        // is exactly the restart the user asked for
+                        ConfirmAction::Exited => {
+                            let _ = start_cmd(&cmd);
+                        }
+                        // pid recycled or gone: signal nothing, launch nothing
+                        ConfirmAction::Mismatch => {}
+                    }
+                }
             }
             KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc | KeyCode::Char('q') => {
+                app.confirm_cmd = None;
                 app.menu = MenuState::None;
             }
             _ => {}
@@ -1050,9 +1093,7 @@ fn handle_mouse(app: &mut App, m: &crossterm::event::MouseEvent) {
     // 滚轮逐字段步进、点击弹窗外关闭面板
     if let crate::app::MenuState::Detail(b, id) = app.menu {
         let dbl = app.last_click.is_some_and(|(t0, c0, r0)| {
-            t0.elapsed() < std::time::Duration::from_millis(400)
-                && c0 == m.column
-                && r0 == m.row
+            t0.elapsed() < std::time::Duration::from_millis(400) && c0 == m.column && r0 == m.row
         });
         app.last_click = Some((std::time::Instant::now(), m.column, m.row));
         match m.kind {
@@ -1084,6 +1125,16 @@ fn handle_mouse(app: &mut App, m: &crossterm::event::MouseEvent) {
         return;
     }
     match m.kind {
+        MouseEventKind::Drag(MouseButton::Left) => {
+            // thumb drag: the grab offset recorded at Down maps the cursor
+            // row back to a list offset
+            if let Some(grab) = app.sb_drag {
+                ui::scrollbar_drag(app, m.row, grab);
+            }
+        }
+        MouseEventKind::Up(MouseButton::Left) => {
+            app.sb_drag = None;
+        }
         MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
             if let Some(idx) = ui::hit_box(m.column, m.row) {
                 if m.kind == MouseEventKind::ScrollUp {
@@ -1094,6 +1145,31 @@ fn handle_mouse(app: &mut App, m: &crossterm::event::MouseEvent) {
             }
         }
         MouseEventKind::Down(MouseButton::Left) => {
+            // disks 滚动条是纯滚动控件:点轨道/箭头翻页,点滑块进入拖拽;
+            // 不参与双击详情,也不触碰聚焦/选中态(盒未渲染时滚动条必不存在)
+            if ui::box_rect(app::BOX_DISKS).is_some() {
+                let (sb_len, sb_visible, sb_off) = ui::disks_scroll_state(app);
+                match ui::scrollbar_hit(m.column, m.row, sb_len, sb_visible, sb_off) {
+                    Some(ui::SbHit::Thumb { grab }) => {
+                        app.sb_drag = Some(grab);
+                        app.last_click = None;
+                        return;
+                    }
+                    Some(ui::SbHit::PageUp) => {
+                        app.scroll[app::BOX_DISKS] =
+                            app.scroll[app::BOX_DISKS].saturating_sub(sb_visible.max(1));
+                        app.last_click = None;
+                        return;
+                    }
+                    Some(ui::SbHit::PageDown) => {
+                        app.scroll[app::BOX_DISKS] =
+                            app.scroll[app::BOX_DISKS].saturating_add(sb_visible.max(1));
+                        app.last_click = None;
+                        return;
+                    }
+                    None => {}
+                }
+            }
             // 双击(同格 400ms 内两次):直接打开该行 detail(procs/conns)
             if let Some((t0, c0, r0)) = app.last_click {
                 if t0.elapsed() < std::time::Duration::from_millis(400)
@@ -1168,6 +1244,57 @@ pub(crate) fn kill_pid(pid: u32) {
     unsafe {
         libc::kill(pid as i32, libc::SIGTERM);
     }
+}
+
+/// verdict of the pid-reuse guard for a confirmed kill/restart: the pid from
+/// the dialog is re-checked against the process ledger before any signal —
+/// a process that exited while the dialog was open may have had its pid
+/// recycled already, and the signal would land on an unrelated process
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ConfirmAction {
+    /// pid alive, cmdline matches the snapshot: safe to signal
+    Signal,
+    /// same ledger entry but already exited: nothing to signal; a restart
+    /// may still launch it
+    Exited,
+    /// pid gone or now running a different cmdline: do not signal
+    Mismatch,
+}
+
+fn confirm_verify(
+    procs: &[crate::collect::proc::ProcRow],
+    pid: u32,
+    cmd: &[String],
+) -> ConfirmAction {
+    match procs.iter().find(|p| p.pid == pid) {
+        Some(p) if p.cmdline.as_deref() == Some(cmd) => {
+            if p.alive {
+                ConfirmAction::Signal
+            } else {
+                ConfirmAction::Exited
+            }
+        }
+        _ => ConfirmAction::Mismatch,
+    }
+}
+
+/// relaunch a verified-then-SIGTERMed process from a worker thread: the old
+/// instance may take a moment to exit (releasing ports/singleton locks), and
+/// the TUI must not freeze while waiting. Probe is kill(pid, 0) (EPERM =
+/// alive without signal rights); if the pid were recycled inside the 2 s
+/// window the wait simply times out and the relaunch proceeds.
+fn relaunch_when_gone(pid: u32, cmd: Vec<String>) {
+    std::thread::spawn(move || {
+        for _ in 0..40 {
+            let alive = unsafe { libc::kill(pid as libc::pid_t, 0) } == 0
+                || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM);
+            if !alive {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        let _ = start_cmd(&cmd);
+    });
 }
 
 /// Launch a captured command line detached from the terminal: own session
@@ -1415,11 +1542,16 @@ pub fn dump(theme_src: &str) -> Result<()> {
 
     println!("== UDP (eBPF) ==");
     println!(
-        "snapshot {}  fresh {}  pids {}  sockets {}",
+        "snapshot {}  fresh {}  pids {}  sockets {}  daemon schema {}",
         app.udp.path.display(),
         app.udp.fresh,
         app.udp.pids_seen,
-        app.udp.sks_seen
+        app.udp.sks_seen,
+        // None = pre-versioning daemon (≤0.2.11); a value above
+        // SNAPSHOT_VERSION means the helper is newer than this build
+        app.udp
+            .remote_ver
+            .map_or("pre-versioning (<0.2.12)".to_string(), |v| v.to_string())
     );
     for d in app.udp.last_inodes.iter().take(8) {
         let conn = app
@@ -1808,6 +1940,86 @@ mod tests {
     /// p/c focus: first press focuses, second press unfocuses — and unfocusing
     /// must also stop the two-line selection overlay from rendering (that
     /// lingering overlay read as "focus didn't cancel")
+    #[test]
+    fn d_key_aims_keys_at_disks_and_toggles_mounts() {
+        use crossterm::event::KeyCode;
+        let mut app = App::new(None);
+        let before = app.disks_expanded;
+        handle_key(&mut app, KeyCode::Char('d'), KeyModifiers::empty());
+        assert_eq!(app.last_focus, app::BOX_DISKS);
+        assert_ne!(app.disks_expanded, before);
+        // disks 不进 focus 模型:zoom/enter/k 都不受影响
+        assert!(!app.focus[app::BOX_DISKS]);
+        handle_key(&mut app, KeyCode::Char('d'), KeyModifiers::empty());
+        assert_eq!(app.disks_expanded, before);
+        assert_eq!(app.last_focus, app::BOX_DISKS, "方向键目标不随展开切换改变");
+    }
+
+    #[test]
+    fn jump_keys_reach_disks_once_it_is_last_focus() {
+        use crossterm::event::KeyCode;
+        let mut app = App::new(None);
+        handle_key(&mut app, KeyCode::Char('d'), KeyModifiers::empty());
+        handle_key(&mut app, KeyCode::Char('G'), KeyModifiers::empty());
+        assert_eq!(app.scroll[app::BOX_DISKS], usize::MAX);
+        handle_key(&mut app, KeyCode::Char('g'), KeyModifiers::empty());
+        assert_eq!(app.scroll[app::BOX_DISKS], 0);
+    }
+
+    #[test]
+    fn page_keys_step_by_box_capacity() {
+        use crossterm::event::KeyCode;
+        use ratatui::backend::TestBackend;
+        use ratatui::Terminal;
+        let mut app = App::new(None);
+        for i in 0..app::BOX_COUNT {
+            app.visible[i] = i == app::BOX_DISKS;
+        }
+        let mut term = Terminal::new(TestBackend::new(120, 40)).unwrap();
+        term.draw(|f| ui::draw(f, &app)).unwrap(); // BOX_AREAS 就位
+        let cap = ui::box_capacity(app.last_focus).max(1);
+        handle_key(&mut app, KeyCode::PageDown, KeyModifiers::empty());
+        assert_eq!(app.scroll[app.last_focus], cap);
+        handle_key(&mut app, KeyCode::PageUp, KeyModifiers::empty());
+        assert_eq!(app.scroll[app.last_focus], 0);
+    }
+
+    /// pid 复用防护:只有快照 cmdline 的活进程才允许发信号
+    #[test]
+    fn confirm_verify_blocks_recycled_pids() {
+        let cmd = vec!["sleep".to_string(), "30".to_string()];
+        let mk =
+            |pid: u32, alive: bool, cmdline: Option<Vec<String>>| crate::collect::proc::ProcRow {
+                pid,
+                name: "x".into(),
+                net_recv: 0,
+                net_sent: 0,
+                net_rr: 0.0,
+                net_sr: 0.0,
+                udp_recv: 0,
+                udp_sent: 0,
+                udp_rr: 0.0,
+                udp_sr: 0.0,
+                disk_r: 0,
+                disk_w: 0,
+                disk_rr: 0.0,
+                disk_wr: 0.0,
+                uptime_s: None,
+                alive,
+                cmdline,
+            };
+        let procs = vec![
+            mk(7, true, Some(cmd.clone())),
+            mk(8, false, Some(cmd.clone())),
+            // pid 9 已被内核复用,跑的是别的程序
+            mk(9, true, Some(vec!["other".into()])),
+        ];
+        assert_eq!(confirm_verify(&procs, 7, &cmd), ConfirmAction::Signal);
+        assert_eq!(confirm_verify(&procs, 8, &cmd), ConfirmAction::Exited);
+        assert_eq!(confirm_verify(&procs, 9, &cmd), ConfirmAction::Mismatch);
+        assert_eq!(confirm_verify(&procs, 42, &cmd), ConfirmAction::Mismatch);
+    }
+
     #[test]
     fn p_and_c_second_press_cancels_focus() {
         use crossterm::event::KeyCode;

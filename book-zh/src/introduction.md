@@ -9,7 +9,7 @@
    了也留账。
 3. **局域网上有谁？** —— 哪些设备在线、哪个是网关、到每台设备的流量是多少。
 
-![Classic 布局——六盒、实时 LAN 邻居与进程分组连接](../../assets/screenshots/classic-six-boxes.png)
+![Classic 布局——六盒、实时 LAN 邻居与进程分组连接](../../assets/screenshots/classic-six-boxes-small.webp)
 
 ## 工作方式
 

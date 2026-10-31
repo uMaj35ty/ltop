@@ -116,12 +116,11 @@ SEC("maps") struct bpf_map_def recv_sk = {
 	.max_entries = 16384,
 };
 
-/* sk → inode cache, so the CO-RE walk runs once per socket.
- * Known limitation: keyed by the raw sk pointer with no invalidation hook,
- * so after SLAB address reuse a new socket's traffic can land on the old
- * socket's inode row until the LRU evicts naturally (low-probability
- * mis-attribution on very long sessions). Fixing it needs a destruction
- * probe or per-packet revalidation — tracked in the roadmap. */
+/* sk → inode cache, so the CO-RE walk runs once per socket. Stale entries
+ * are cleared by the destruct probe below, so a recycled SLAB address can
+ * no longer inherit the dead socket's inode (0.2.7 audit finding, fixed
+ * in 0.2.10; kernels where the symbol is unavailable just fall back to
+ * LRU-eviction semantics, which is what shipped before). */
 SEC("maps") struct bpf_map_def sk_ino = {
 	.type = 9,
 	.key_size = 8,
@@ -298,6 +297,21 @@ SEC("kretprobe/udpv6_recvmsg")
 int udp6_recv(struct pt_regs *ctx)
 {
 	take_ret(ctx, 1, 1);
+	return 0;
+}
+
+/* Socket teardown (common .sk_destruct for inet TCP and UDP): drop the
+ * sk→inode cache entry so a recycled SLAB address cannot inherit the dead
+ * socket's inode row. Once per socket lifetime — cost is nil next to the
+ * per-packet lookups. UDP is the only consumer of sk_ino, but inet_sock_
+ * destruct covers both families and skipping the TCP pass would need an
+ * extra family test in the probe. */
+SEC("kprobe/inet_sock_destruct")
+int sock_destruct(struct pt_regs *ctx)
+{
+	u64 sk = PT_ARG1(ctx);
+	if (sk)
+		map_delete_elem(&sk_ino, &sk);
 	return 0;
 }
 

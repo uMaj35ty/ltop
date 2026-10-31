@@ -5,7 +5,7 @@
 干净收起。`z` 把焦点盒子放大全屏，`esc` 退出。`space` 冻结画面；暂停期间
 发生的流量在恢复时补齐，不会漏账。
 
-![Classic 布局](../../assets/screenshots/classic-six-boxes.png)
+![Classic 布局](../../assets/screenshots/classic-six-boxes-small.webp)
 
 ## 六个盒子
 
@@ -25,8 +25,15 @@ MTU 和地址。累计流量显示两份: ltop 启动以来（可重置）和接
 ### 3 / 4 — DISK I/O 与 DISKS
 
 读/写速率图表（堆叠设备去重——`nvme0n1` 和它的 `dm-0(root)` 只算一份），
-旁边是物理设备树: 容量条加每设备实时速率。`d` 展开挂载树，`i` 切换图表
-模式。
+旁边是设备列表: 容量条加每设备实时速率，文件系统类型以暗色小字缀在设备名
+后。**macOS** 上只列挂载卷: 虚拟机与模拟器会把虚拟盘以宿主可见的合成设备
+形式挂出来——动辄十几个——而宿主看不到它们内部的容量与用量，这些行只是
+噪声。**Linux** 上 VM 的磁盘不会成为宿主块设备（只是文件系统里的普通文
+件），设备树如实反映硬件，保留完整物理树（盘 → 分区 → dm，含未挂载结构
+行，LUKS/LVM 分层可读）。`d` 展开
+挂载列表并把方向键/跳转键指向 disks 列表，`i` 切换图表模式。列表超长时
+右缘出现 btop 式滚动条——点轨道翻页、拖滑块滚动，无需聚焦（滚轮本来就
+不需要）。
 
 ### 5 — CONNS
 
@@ -38,7 +45,7 @@ MTU 和地址。累计流量显示两份: ltop 启动以来（可重置）和接
 可展开的组头（`▸ firefox ×17`，组头带 Σ；组头上 `enter` 折叠/展开，搜索命中
 自动展开）。
 
-![Tall 布局——分组连接、组总量与被追踪行](../../assets/screenshots/tall-process-groups.png)
+![Tall 布局——分组连接、组总量与被追踪行](../../assets/screenshots/tall-process-groups-small.webp)
 
 ### 6 — PROCS
 
@@ -61,7 +68,7 @@ net-rate → disk-sum → disk-rate → name）。退出进程的账本默认 30
 - LAN 行上 `enter` **置顶**邻居（红色高亮，钉在最上）同时**让 CONNS 只看
   这个对端**；再按一次取消，`esc`/`f` 也能清。
 
-![Wide 布局——详情面板、捕获的完整命令行、UDP 分解与主题菜单](../../assets/screenshots/wide-detail-panel.png)
+![Wide 布局——详情面板、捕获的完整命令行、UDP 分解与主题菜单](../../assets/screenshots/wide-detail-panel-small.webp)
 
 ## 搜索
 
@@ -96,10 +103,11 @@ net-rate → disk-sum → disk-rate → name）。退出进程的账本默认 30
 | `r` | procs 排序循环 |
 | `f` / `o` | conns 过滤循环 / 排序循环 |
 | 组头上 `enter`、`←→` | 折叠 / 展开进程组 |
-| `d` | 展开/收起磁盘挂载树 |
+| `d` | 展开/收起磁盘挂载树；方向键/跳转键随即指向 disks 列表 |
 | `e` | lan 排序: ip → hostname → mac → iface |
 | `n` / `i` | net / disk 图表模式 |
-| `↑↓` `PgUp` `PgDn` / 滚轮 | 移动选中；滚轮滚动光标下的列表；点击选中 |
+| `↑↓` `PgUp` `PgDn` / 滚轮 | 移动选中；PgUp/PgDn 按可视高度翻页；滚轮滚动光标下的列表；点击选中 |
+| disks 滚动条 | 点轨道翻页、拖滑块滚动——无需聚焦 |
 | LAN 行上 `enter` | 置顶邻居 + CONNS 过滤到该对端 |
 | conns/procs 行上 `enter` | 详情面板（追踪 `t`/`space`，终止 `k`，重启 `s`，复制 `y`） |
 | `z` | 焦点盒子全屏缩放 |
@@ -109,7 +117,7 @@ net-rate → disk-sum → disk-rate → name）。退出进程的账本默认 30
 | `+`/`-` | 刷新间隔 ±250 ms |
 
 常用设置（都在 `m` → settings，持久化到 `~/.config/ltop/config.conf`）:
-刷新 `tick_ms`（默认 1000）、墓碑 TTL、录制开关（与 `L` 键同路径）、日志
+刷新 `tick_ms`（默认 2000）、墓碑 TTL、录制开关（与 `L` 键同路径）、日志
 间隔/保留、扫描间隔、默认排序/过滤、`theme`、`lang`、
 `proc_expand_default`（进程组默认展开）、`proc_exit_retention_min`、
 `allow_global_kill`（暴露 `k` 键，默认关）、`allow_global_log`（暴露 `L` 录制

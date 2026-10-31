@@ -116,7 +116,16 @@ pub fn run(args: &[String]) -> Result<()> {
                 })?;
                 i += 1;
             }
-            a if a.starts_with("--") => bail!("ltop watch: unknown option {a} (try --help)"),
+            a if a.starts_with("--") => {
+                bail!(
+                    "{}",
+                    crate::pick_s(
+                        crate::cli_lang_zh(),
+                        &format!("ltop watch: unknown option {a} (try --help)"),
+                        &format!("ltop watch: 未知选项 {a}(试 --help)")
+                    )
+                )
+            }
             a => bail!(
                 "{}",
                 p(

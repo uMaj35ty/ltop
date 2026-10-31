@@ -14,7 +14,7 @@ use crate::app::{
     BOX_DISKIO, BOX_DISKS, BOX_LAN, BOX_NET, BOX_PROCS,
 };
 use crate::collect::conn::{sock_str, Conn, ConnFilter, ConnSort};
-use crate::collect::disk::TreeNode;
+use crate::collect::disk::{DiskDev, TreeNode};
 use crate::collect::lan::Neighbor;
 use crate::config::{Config, Lang};
 use crate::theme::*;
@@ -51,10 +51,7 @@ pub fn box_rect(idx: usize) -> Option<Rect> {
 pub fn draw(f: &mut Frame, app: &App) {
     let area = f.area();
     // detail 弹窗未打开时,鼠标命中缓存的弹窗几何即刻失效
-    DETAIL_VALID.store(
-        matches!(app.menu, MenuState::Detail(..)),
-        Relaxed,
-    );
+    DETAIL_VALID.store(matches!(app.menu, MenuState::Detail(..)), Relaxed);
     if let Some(bg) = bg() {
         f.render_widget(Block::new().style(Style::new().bg(bg)), area);
     }
@@ -454,7 +451,7 @@ fn box_ideal_rows(app: &App, idx: usize) -> u16 {
         BOX_LAN => list_ideal_rows(app.lan.neighbors.len()),
         BOX_CONNS => list_ideal_rows(app.conn.conns.len()),
         BOX_PROCS => list_ideal_rows(app.proc.procs.len()),
-        BOX_DISKS => list_ideal_rows(app.disk.tree.len() * 2),
+        BOX_DISKS => list_ideal_rows(disk_rows(app).len()),
         _ => GRAPH_MIN_ROWS,
     }
 }
@@ -745,6 +742,153 @@ fn scroll_hint(list_len: usize, off: usize, area: Rect) -> String {
     }
 }
 
+/// btop-style overflow scrollbar, drawn in the rightmost content column of a
+/// list box: `↑` above, `↓` below, a one-row `█` thumb on a blank track.
+/// Position is the scroll fraction over `len - visible`; focus-independent.
+/// Returns the column rect (data rows only, header row excluded) or None
+/// when the list fits.
+fn scrollbar_col(inner: Rect, len: usize, visible: usize) -> Option<Rect> {
+    if inner.width < 4 || inner.height < 4 || len <= visible.max(1) {
+        return None;
+    }
+    Some(Rect {
+        x: inner.right().saturating_sub(1),
+        y: inner.y + 1, // below the table header row
+        width: 1,
+        height: inner.height - 1,
+    })
+}
+
+/// thumb row inside the scrollbar column for a clamped offset
+fn scrollbar_thumb_row(col: Rect, len: usize, off: usize, visible: usize) -> u16 {
+    let track = col.height.saturating_sub(2); // rows between the arrows
+    if track == 0 {
+        return col.y + 1;
+    }
+    let span = len.saturating_sub(visible).max(1);
+    let frac = (off.min(span)) as f64 / span as f64;
+    col.y + 1 + (frac * (track - 1) as f64).round() as u16
+}
+
+fn draw_scrollbar(f: &mut Frame, col: Rect, len: usize, off: usize, visible: usize) {
+    let thumb = scrollbar_thumb_row(col, len, off, visible);
+    let st = text().add_modifier(Modifier::BOLD);
+    let lines: Vec<Line> = (0..col.height)
+        .map(|i| {
+            let ch = match i {
+                0 => "\u{2191}",                        // ↑
+                _ if i == col.height - 1 => "\u{2193}", // ↓
+                _ if col.y + i == thumb => "\u{2588}",  // █
+                _ => " ",
+            };
+            Line::from(Span::styled(ch, st))
+        })
+        .collect();
+    f.render_widget(Paragraph::new(lines), col);
+}
+
+/// scroll geometry of the DISKS box shared by draw and input: (len, visible
+/// data rows, clamped offset). Single source so mouse hit-testing matches
+/// what was rendered.
+pub fn disks_scroll_state(app: &App) -> (usize, usize, usize) {
+    let len = list_len(app, BOX_DISKS);
+    let visible = box_rect(BOX_DISKS)
+        .map(|r| (r.height.saturating_sub(3)).max(1) as usize)
+        .unwrap_or(1);
+    (
+        len,
+        visible,
+        app.scroll[BOX_DISKS].min(len.saturating_sub(visible)),
+    )
+}
+
+/// what a click on the DISKS scrollbar column landed on; `grab` is the
+/// click's offset from the thumb top for drag tracking
+pub enum SbHit {
+    PageUp,
+    PageDown,
+    Thumb { grab: u16 },
+}
+
+pub fn scrollbar_hit(col: u16, row: u16, len: usize, visible: usize, off: usize) -> Option<SbHit> {
+    let inner = box_rect(BOX_DISKS).map(|r| Rect {
+        x: r.x + 1,
+        y: r.y + 1,
+        width: r.width.saturating_sub(2),
+        height: r.height.saturating_sub(2),
+    })?;
+    scrollbar_hit_at(inner, col, row, len, visible, off)
+}
+
+/// pure geometry kernel of the hit test (no global state; unit-testable)
+fn scrollbar_hit_at(
+    inner: Rect,
+    col: u16,
+    row: u16,
+    len: usize,
+    visible: usize,
+    off: usize,
+) -> Option<SbHit> {
+    let bar = scrollbar_col(inner, len, visible)?;
+    if col != bar.x || row < bar.y || row >= bar.y + bar.height {
+        return None;
+    }
+    if row == bar.y {
+        return Some(SbHit::PageUp);
+    }
+    if row == bar.y + bar.height - 1 {
+        return Some(SbHit::PageDown);
+    }
+    let thumb = scrollbar_thumb_row(bar, len, off, visible);
+    if row == thumb {
+        Some(SbHit::Thumb {
+            grab: row - bar.y - 1,
+        })
+    } else if row < thumb {
+        Some(SbHit::PageUp)
+    } else {
+        Some(SbHit::PageDown)
+    }
+}
+
+/// drag mapping: a row on the scrollbar track (with the recorded grab offset)
+/// becomes a list offset. Inverse of the thumb-position math above.
+pub fn scrollbar_drag(app: &mut App, row: u16, grab: u16) {
+    let (len, visible, _) = disks_scroll_state(app);
+    if let Some(inner) = box_rect(BOX_DISKS).map(|r| Rect {
+        x: r.x + 1,
+        y: r.y + 1,
+        width: r.width.saturating_sub(2),
+        height: r.height.saturating_sub(2),
+    }) {
+        scrollbar_drag_at(app, inner, len, visible, row, grab);
+    }
+}
+
+/// pure geometry kernel of the drag mapping (no global state; unit-testable)
+fn scrollbar_drag_at(app: &mut App, inner: Rect, len: usize, visible: usize, row: u16, grab: u16) {
+    let Some(bar) = scrollbar_col(inner, len, visible) else {
+        return;
+    };
+    let track = bar.height.saturating_sub(2);
+    if track == 0 {
+        return;
+    }
+    // clicked track position minus the grab offset, clamped to the track
+    let pos = (i32::from(row) - i32::from(bar.y) - 1 - i32::from(grab)).clamp(0, i32::from(track));
+    let span = len.saturating_sub(visible);
+    let off = if track == 1 {
+        if pos == 0 {
+            0
+        } else {
+            span
+        }
+    } else {
+        (pos as f64 / (track - 1) as f64 * span as f64).round() as usize
+    };
+    app.scroll[BOX_DISKS] = off.min(span);
+}
+
 /// Unicode superscript digits — the btop-style corner badge look
 fn superscript(n: usize) -> String {
     const SUP: [char; 10] = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹'];
@@ -754,20 +898,80 @@ fn superscript(n: usize) -> String {
         .collect()
 }
 
-/// stable id for list items that survive reordering
-/// readable text colour for a coloured row background
-fn contrast_fg(c: Color) -> Color {
-    match c {
-        Color::Rgb(r, g, b) => {
-            let l = 0.2126 * r as f32 + 0.7152 * g as f32 + 0.0722 * b as f32;
-            if l > 140.0 {
-                Color::Rgb(0, 0, 0)
-            } else {
-                Color::Rgb(255, 255, 255)
-            }
-        }
-        _ => Color::Black,
+// Readable-row kernels: palette-derived only (theme text / theme bg
+// anchors), no hardcoded black/white, so they hold across all 72 builtin
+// themes and user theme files.
+
+/// nudge a highlight `c` toward the theme bg until the theme text reads on
+/// it at WCAG 3:1; keeps the hue, only the luminance moves. Themes without
+/// a measurable bg (transparent) pass through
+fn readable_bg_over(c: Color, base: Option<Color>, text: Color) -> Color {
+    let Some(base) = base else {
+        return c;
+    };
+    if crate::theme::contrast_ratio(c, text) >= 3.0 {
+        return c;
     }
+    let mut best = c;
+    let mut t = 0.1;
+    while t <= 0.9 + f32::EPSILON {
+        let cand = crate::theme::blend(c, base, t);
+        best = cand;
+        if crate::theme::contrast_ratio(cand, text) >= 3.0 {
+            return cand;
+        }
+        t += 0.1;
+    }
+    best
+}
+
+/// better-contrasting of the theme's two anchors (text / bg) as fg on `bg`
+fn readable_fg_between(bg: Color, text: Color, anchor: Option<Color>) -> Color {
+    match anchor {
+        Some(a) if crate::theme::contrast_ratio(a, bg) > crate::theme::contrast_ratio(text, bg) => {
+            a
+        }
+        _ => text,
+    }
+}
+
+/// selection wash over the row background: the download-gradient hue is
+/// swept from subtle to strong until it is both visible against the row
+/// background and readable under the overlay's own span colors. When the
+/// hue itself cannot separate (dark gradient start on a dark theme — the
+/// invisible-selection bug), the hue is lifted toward the text color for
+/// luminance while keeping its hue, and the sweep retries
+fn selection_bg_over(hue: Color, base: Option<Color>, text: Color) -> Color {
+    let Some(base) = base else {
+        return hue;
+    };
+    let ok = |c: Color| {
+        crate::theme::contrast_ratio(c, base) >= 1.3 && crate::theme::contrast_ratio(c, text) >= 2.2
+    };
+    for t in [0.15, 0.22, 0.3, 0.4, 0.55] {
+        let c = crate::theme::blend(base, hue, t);
+        if ok(c) {
+            return c;
+        }
+    }
+    let lifted = crate::theme::blend(hue, text, 0.45);
+    for t in [0.15, 0.22, 0.3, 0.4, 0.55] {
+        let c = crate::theme::blend(base, lifted, t);
+        if ok(c) {
+            return c;
+        }
+    }
+    crate::theme::blend(base, lifted, 0.55)
+}
+
+fn readable_bg(c: Color) -> Color {
+    let pal = palette();
+    readable_bg_over(c, pal.bg, pal.text)
+}
+
+fn readable_fg(bg: Color) -> Color {
+    let pal = palette();
+    readable_fg_between(bg, pal.text, pal.bg)
 }
 
 /// alternating track colours: two distinct theme accents
@@ -780,7 +984,7 @@ fn track_bg(slot: usize) -> Color {
 }
 
 fn track_fg(slot: usize) -> Color {
-    contrast_fg(track_bg(slot))
+    readable_fg(track_bg(slot))
 }
 
 /// Rows of a box's current list, for selection clamping
@@ -817,11 +1021,7 @@ pub fn list_len(app: &App, idx: usize) -> usize {
         BOX_LAN => app.lan.neighbors.len(),
         BOX_CONNS => conn_items(app).len(),
         BOX_PROCS => procs_display(app).len(),
-        BOX_DISKS => {
-            let mut flat: Vec<(&TreeNode, String)> = Vec::new();
-            emit_tree_rows(&app.disk.tree, "", 0, &mut flat);
-            flat.len()
-        }
+        BOX_DISKS => disk_rows(app).len(),
         _ => 0,
     }
 }
@@ -1061,8 +1261,7 @@ fn proc_grouped_display(app: &App) -> Vec<&Conn> {
         }
     }
     let tracked: std::collections::HashSet<u64> = app.tracked.conns.iter().copied().collect();
-    let has_tracked =
-        |v: &Vec<usize>| v.iter().any(|&i| tracked.contains(&all[i].inode));
+    let has_tracked = |v: &Vec<usize>| v.iter().any(|&i| tracked.contains(&all[i].inode));
     // 稳定排序:含追踪的组提前,组间相对顺序不变
     groups.sort_by_key(|(_, v)| !has_tracked(v));
     let mut out = Vec::with_capacity(all.len());
@@ -1250,7 +1449,11 @@ fn draw_net(f: &mut Frame, area: Rect, app: &App, focused: bool) {
     let rows = chunks[2].height;
     let (rx_frac, tx_frac) = if app.net_graph_coupled {
         let f = graph::coupled_frac(ptx, prx, rows, app.net_graph_scale_ratio);
-        if ptx < prx { (1.0, f) } else { (f, 1.0) }
+        if ptx < prx {
+            (1.0, f)
+        } else {
+            (f, 1.0)
+        }
     } else {
         (1.0, 1.0)
     };
@@ -1323,10 +1526,7 @@ fn draw_net(f: &mut Frame, area: Rect, app: &App, focused: bool) {
     ]);
     let tx_head = if tx_frac < 1.0 {
         let mut spans = tx_head.spans;
-        spans.push(Span::styled(
-            format!("  ×{tx_frac:.2}"),
-            dim(),
-        ));
+        spans.push(Span::styled(format!("  ×{tx_frac:.2}"), dim()));
         Line::from(spans)
     } else {
         tx_head
@@ -1404,19 +1604,34 @@ fn draw_lan(f: &mut Frame, area: Rect, app: &App, focused: bool) {
     let headers = ["IP", "MAC", "HOSTNAME", "IF"];
     // 滚动窗口:一页 = 表头之下的全部行(inner 已不含边框,只减表头 1 行;
     // 旧写法 -2 把表头算两次,6 行高的盒子只渲染出 2 台设备)
-    let visible = inner.height.saturating_sub(1) as usize;
-    if list.is_empty() && app.lan.arp_blocked {
-        let tip = if app.lang == Lang::Zh {
-            "macOS 隐私限制:邻居 MAC 不可见(签名限制);本行扫描仅覆盖当前子网"
+    // mac:隐私门控提示(0.2.11 口径:给可执行的修复动作,而不是只描述限制)。
+    // 列表空=整屏提示;非空(rt_scan 已填出无 MAC 行)=盒底一行不挤数据
+    let mac_hint = if app.lan.arp_blocked {
+        Some(if app.lang == Lang::Zh {
+            "macOS 对未签名程序隐藏邻居 MAC —— 运行 ltop lan-setup 恢复真实 MAC(免 root)"
         } else {
-            "macOS privacy: neighbour MACs are hidden (code-signing gate); scan covers the current subnet only"
-        };
-        f.render_widget(
-            Paragraph::new(vec![Line::from(vec![Span::styled(tip, dim())])]),
-            inner,
-        );
+            "macOS hides neighbour MACs from unsigned apps — run ltop lan-setup for real MACs (no root)"
+        })
+    } else {
+        None
+    };
+    if list.is_empty() {
+        if let Some(tip) = mac_hint {
+            f.render_widget(
+                Paragraph::new(vec![Line::from(vec![Span::styled(tip, dim())])]),
+                inner,
+            );
+        }
         return;
     }
+    let (table_area, hint_area) = match mac_hint {
+        Some(tip) if inner.height >= 3 => {
+            let chunks = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(inner);
+            (chunks[0], Some((tip, chunks[1])))
+        }
+        _ => (inner, None),
+    };
+    let visible = table_area.height.saturating_sub(1) as usize;
     let rows: Vec<Row> = list
         .iter()
         .enumerate()
@@ -1438,9 +1653,15 @@ fn draw_lan(f: &mut Frame, area: Rect, app: &App, focused: bool) {
         .collect();
     let header = Row::new(headers).style(dim().add_modifier(Modifier::BOLD));
     // IP/MAC/IF have fixed formats; the hostname column takes the spare width
-    let cols = fit_columns(&[16, 17, 0, 8], 2, 8, 30, inner.width, 1);
+    let cols = fit_columns(&[16, 17, 0, 8], 2, 8, 30, table_area.width, 1);
     let table = Table::new(rows, cols).header(header).column_spacing(1);
-    f.render_widget(table, inner);
+    f.render_widget(table, table_area);
+    if let Some((tip, area)) = hint_area {
+        f.render_widget(
+            Paragraph::new(vec![Line::from(vec![Span::styled(tip, dim())])]),
+            area,
+        );
+    }
 }
 
 fn neighbor_row(
@@ -1467,12 +1688,10 @@ fn neighbor_row(
     // 置顶行:高亮主色底(红);选中行:复色高亮(隔行双底色)。
     // 底色铺在 row 级 style 上,整行(含列间空隙)一体化,而非分散到列
     let (bg, base_fg) = if pinned {
-        (Some(track_bg(0)), contrast_fg(track_bg(0)))
+        (Some(track_bg(0)), readable_fg(track_bg(0)))
     } else if selected {
-        (
-            Some(track_bg(alt as usize)),
-            contrast_fg(track_bg(alt as usize)),
-        )
+        let selt = track_bg(alt as usize);
+        (Some(selt), readable_fg(selt))
     } else {
         (None, palette().text)
     };
@@ -1548,10 +1767,26 @@ fn draw_diskio(f: &mut Frame, area: Rect, app: &App, focused: bool) {
             let g = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)])
                 .split(inner);
             graph_section(
-                f, g[0], " ▼ READ ", download(), &hr, tr, sr, app.graph_disk, pr,
+                f,
+                g[0],
+                " ▼ READ ",
+                download(),
+                &hr,
+                tr,
+                sr,
+                app.graph_disk,
+                pr,
             );
             graph_section(
-                f, g[1], " ▲ WRITE ", upload(), &hw, tw, sw, app.graph_disk, pw,
+                f,
+                g[1],
+                " ▲ WRITE ",
+                upload(),
+                &hw,
+                tw,
+                sw,
+                app.graph_disk,
+                pw,
             );
         }
         IoGraphMode::Read => graph_section(
@@ -1565,9 +1800,17 @@ fn draw_diskio(f: &mut Frame, area: Rect, app: &App, focused: bool) {
             app.graph_disk,
             pr,
         ),
-        IoGraphMode::Write => {
-            graph_section(f, inner, " ▲ WRITE ", upload(), &hw, tw, sw, app.graph_disk, pw)
-        }
+        IoGraphMode::Write => graph_section(
+            f,
+            inner,
+            " ▲ WRITE ",
+            upload(),
+            &hw,
+            tw,
+            sw,
+            app.graph_disk,
+            pw,
+        ),
     }
 }
 
@@ -1608,18 +1851,74 @@ fn graph_section(
     );
 }
 
-fn draw_disks(f: &mut Frame, area: Rect, app: &App, focused: bool) {
+/// DISKS 行源:物理树(Linux,含未挂载结构行)或挂载卷平铺(mac——
+/// build_block_tree 恒空,以及任何真无块设备的机器)。树的空/非空就是
+/// 平台分叉,输入/滚动条/布局全部经这一个源头。
+enum DiskRows<'a> {
+    Tree(Vec<(&'a TreeNode, String)>),
+    Vols(Vec<&'a DiskDev>),
+}
+
+impl DiskRows<'_> {
+    fn len(&self) -> usize {
+        match self {
+            Self::Tree(v) => v.len(),
+            Self::Vols(v) => v.len(),
+        }
+    }
+
+    fn rows(&self, app: &App, off: usize) -> Vec<Row<'static>> {
+        match self {
+            Self::Tree(v) => v
+                .iter()
+                .skip(off)
+                .map(|(node, label)| disk_row(app, node, label.clone()))
+                .collect(),
+            Self::Vols(v) => v.iter().skip(off).map(|d| vol_row(app, d)).collect(),
+        }
+    }
+}
+
+fn disk_rows(app: &App) -> DiskRows<'_> {
     let mut flat: Vec<(&TreeNode, String)> = Vec::new();
     emit_tree_rows(&app.disk.tree, "", 0, &mut flat);
-    let off = app.scroll[BOX_DISKS].min(flat.len().saturating_sub(1));
+    if flat.is_empty() {
+        DiskRows::Vols(
+            app.disk
+                .devices
+                .iter()
+                .filter(|d| !d.mounts.is_empty())
+                .collect(),
+        )
+    } else {
+        DiskRows::Tree(flat)
+    }
+}
+
+fn draw_disks(f: &mut Frame, area: Rect, app: &App, focused: bool) {
+    let src = disk_rows(app);
+    let flat_len = src.len();
+    // 表头之下的可视行数封顶:滚到底后停在完整最后一页,与 LAN/CONNS/PROCS
+    // 的 clamped_offset 同语义;draw 与滚动条共用这一个偏移
+    let visible = (area.height.saturating_sub(3)).max(1) as usize; // borders + header
+    let off = app.scroll[BOX_DISKS].min(flat_len.saturating_sub(visible));
+    // 口径 = 挂载卷数,不是数据面大小:mac 上 devices 还含恒零合成层与
+    // 模拟器镜像(1 块物理盘能报 32 dev),dev 数会严重虚高;树的物理
+    // 全貌照旧全画,标题只报用户语义上的"挂了多少卷"
+    let vols = app
+        .disk
+        .devices
+        .iter()
+        .filter(|d| !d.mounts.is_empty())
+        .count();
     let mut rest = vec![
-        vec![text_s(format!("{} dev", app.disk.devices.len()))],
+        vec![text_s(format!("{vols} vol"))],
         vec![text_s(format!(
             "mounts: {}",
             if app.disks_expanded { "all" } else { "first" }
         ))],
     ];
-    let sh = scroll_hint(flat.len(), off, area);
+    let sh = scroll_hint(flat_len, off, area);
     if !sh.is_empty() {
         rest.push(vec![text_s(sh)]);
     }
@@ -1634,72 +1933,143 @@ fn draw_disks(f: &mut Frame, area: Rect, app: &App, focused: bool) {
     if inner.width < 16 || inner.height < 2 {
         return;
     }
-    // 表头之下的可视行数封顶:旧写法 min(len-1) 滚到底后从最后一行起渲染
-    // (只剩单行/空白),与 LAN/CONNS/PROCS 的 clamped_offset 同语义
-    let off = off.min(
-        flat.len()
-            .saturating_sub((inner.height - 1).max(1) as usize),
-    );
 
-    let rows: Vec<Row> = flat
-        .into_iter()
-        .skip(off)
-        .map(|(node, label)| disk_row(app, node, label))
-        .collect();
+    let rows: Vec<Row> = src.rows(app, off);
     let headers = ["DEV", "USED", "R/S", "W/S"];
     let header = Row::new(headers).style(dim().add_modifier(Modifier::BOLD));
-    // DEV absorbs slack; the bar and both rates are exact-width
-    let cols = fit_columns(&[0, 16, 9, 9], 0, 10, 40, inner.width, 1);
+    // the scrollbar column takes the rightmost content column when active;
+    // DEV absorbs the remaining slack, the bar and both rates are exact-width
+    let bar = scrollbar_col(inner, flat_len, visible);
+    let table_w = if bar.is_some() {
+        inner.width - 1
+    } else {
+        inner.width
+    };
+    let cols = fit_columns(&[0, 21, 9, 9], 0, 10, 40, table_w, 1);
     let table = Table::new(rows, cols).header(header).column_spacing(1);
     f.render_widget(table, inner);
+    if let Some(col) = bar {
+        draw_scrollbar(f, col, flat_len, off, visible);
+    }
 }
 
-fn disk_row(app: &App, node: &TreeNode, mut label: String) -> Row<'static> {
+fn disk_row(app: &App, node: &TreeNode, label: String) -> Row<'static> {
     let dev = app.disk.dev_by_name(&node.name);
+    // everything after the device name (pretty alias, mounts) is truncatable
+    // tail: it goes into its own span so the dim fstype tail keeps its place
+    let mut rest = String::new();
     match dev {
         Some(d) => {
             if let Some(p) = &d.pretty {
-                label.push_str(&format!(" ({p})"));
+                rest.push_str(&format!(" ({p})"));
             }
-            if let Some(m) = d.mounts.first() {
-                if app.disks_expanded {
-                    label.push_str(&format!(" {}", d.mounts.join(" ")));
-                } else {
-                    label.push_str(&format!(" {m}"));
-                    if d.mounts.len() > 1 {
-                        label.push_str(&format!(" +{}", d.mounts.len() - 1));
-                    }
-                }
-            }
+            mounts_tail(app, d, &mut rest);
         }
         // mapper alias is still useful for unmounted devices (e.g. closed LUKS)
         None => {
             if let Some(p) = &node.pretty {
-                label.push_str(&format!(" ({p})"));
+                rest.push_str(&format!(" ({p})"));
             }
         }
     }
     // usage bars only for rows backed by a filesystem (one per dev);
     // structural nodes (whole disks, carrier partitions) show their size
-    let usage = if let Some(d) = dev {
-        let frac = if d.total > 0 {
-            d.used as f64 / d.total as f64
-        } else {
-            0.0
-        };
-        Line::from(vec![
-            braille_bar(frac, 10, palette().used.at(frac as f32)),
-            Span::styled(format!(" {:>3.0}%", frac * 100.0), text()),
-        ])
-    } else if let Some(sz) = node.size {
-        Line::from(Span::styled(fmt_bytes(sz as f64), text()))
-    } else {
-        Line::from(Span::styled("", dim()))
+    let (usage, fstype, rate_r, rate_w) = match dev {
+        Some(d) => (
+            usage_bar(
+                if d.total > 0 {
+                    d.used as f64 / d.total as f64
+                } else {
+                    0.0
+                },
+                d.used,
+            ),
+            Some(d.fstype.as_str()),
+            fmt_speed(d.rate_r),
+            fmt_speed(d.rate_w),
+        ),
+        None => match node.size {
+            Some(sz) => (
+                Line::from(Span::styled(fmt_bytes(sz as f64), text())),
+                None,
+                String::new(),
+                String::new(),
+            ),
+            None => (
+                Line::from(Span::styled("", dim())),
+                None,
+                String::new(),
+                String::new(),
+            ),
+        },
     };
-    let rate_r = dev.map(|d| fmt_speed(d.rate_r)).unwrap_or_default();
-    let rate_w = dev.map(|d| fmt_speed(d.rate_w)).unwrap_or_default();
+    disk_cells(label, rest, fstype, usage, rate_r, rate_w)
+}
+
+/// 挂载卷行(mac 平铺形态):与树行同四列,标签即设备名
+fn vol_row(app: &App, d: &DiskDev) -> Row<'static> {
+    let mut rest = String::new();
+    if let Some(p) = &d.pretty {
+        rest.push_str(&format!(" ({p})"));
+    }
+    mounts_tail(app, d, &mut rest);
+    let frac = if d.total > 0 {
+        d.used as f64 / d.total as f64
+    } else {
+        0.0
+    };
+    disk_cells(
+        d.name.clone(),
+        rest,
+        Some(d.fstype.as_str()),
+        usage_bar(frac, d.used),
+        fmt_speed(d.rate_r),
+        fmt_speed(d.rate_w),
+    )
+}
+
+/// mounts 展开/折叠尾注(first +N / all),树行与卷行共用
+fn mounts_tail(app: &App, d: &DiskDev, rest: &mut String) {
+    if let Some(m) = d.mounts.first() {
+        if app.disks_expanded {
+            rest.push_str(&format!(" {}", d.mounts.join(" ")));
+        } else {
+            rest.push_str(&format!(" {m}"));
+            if d.mounts.len() > 1 {
+                rest.push_str(&format!(" +{}", d.mounts.len() - 1));
+            }
+        }
+    }
+}
+
+/// 条 + 百分比 + 本卷已用量(APFS 容器内各卷的 total 同为容器容量,
+/// 没有区分度;used 才是每卷自己的数字。0B 是真值,照画)
+fn usage_bar(frac: f64, used: u64) -> Line<'static> {
+    let mut spans = vec![
+        braille_bar(frac, 10, palette().used.at(frac as f32)),
+        Span::styled(format!(" {:>3.0}%", frac * 100.0), text()),
+    ];
+    spans.push(Span::styled(format!(" {}", fmt_bytes(used as f64)), dim()));
+    Line::from(spans)
+}
+
+/// 四列单元格组装(树行/卷行共用)。fs type 是名字后的暗色尾巴:身份
+/// 信息,窄终端下先截断的是 pretty/mount 尾,它仍在
+fn disk_cells(
+    label: String,
+    rest: String,
+    fstype: Option<&str>,
+    usage: Line<'static>,
+    rate_r: String,
+    rate_w: String,
+) -> Row<'static> {
+    let mut dev_spans = vec![Span::styled(label, text())];
+    if let Some(fs) = fstype.filter(|f| !f.is_empty()) {
+        dev_spans.push(Span::styled(format!(" · {fs}"), dim()));
+    }
+    dev_spans.push(Span::styled(rest, text()));
     Row::new([
-        Cell::from(Span::styled(label, text())),
+        Cell::from(Line::from(dev_spans)),
         Cell::from(usage),
         Cell::from(Span::styled(rate_r, Style::new().fg(download().at(0.5)))),
         Cell::from(Span::styled(rate_w, Style::new().fg(upload().at(0.5)))),
@@ -1748,11 +2118,12 @@ fn conn_row_aggregate(
     slot: Option<usize>,
 ) -> Row<'static> {
     if open {
-        // 展开态:高亮底色(主题下载渐变顶;追踪行保留隔行底色),整行正文色
-        let bg = match slot {
+        // 展开态:高亮底色(主题下载渐变顶,亮度向主题 bg 缓动到 text
+        // 可读;追踪行保留隔行底色),整行正文色
+        let bg = readable_bg(match slot {
             Some(sl) => track_bg(sl % 2),
             None => track_bg(0),
-        };
+        });
         let cell = |s: String| Cell::from(Span::styled(s, Style::new().fg(palette().text).bg(bg)));
         Row::new([
             cell(format!("\u{25be}{name} ×{n} Σ")),
@@ -1904,12 +2275,19 @@ fn overlay_rect(inner: Rect, y: u16) -> Option<Rect> {
     })
 }
 
+/// selection wash for the current palette (see `selection_bg_over`)
+fn selection_bg() -> Color {
+    let pal = palette();
+    selection_bg_over(download().at(0.12), pal.bg, pal.text)
+}
+
 /// two-line detail drawn over the selected row
 fn draw_selected(f: &mut Frame, rect: Rect, lines: Vec<Line<'static>>) {
-    // 弱着色深底(渐变暗端):overlay 内容的语义色(accent/dim/红绿流量)
-    // 按深底设计——旧实现用 hi 亮底 + 单色 contrast,两行色彩层次全灭。
-    // Paragraph 只铺 bg 不铺 fg,span 各自的显式色全部保留。
-    let bgc = download().at(0.12);
+    // 选中底 = selection_bg():主题 bg 上扫 download 渐变色相的强度,保证
+    // 既与行底可分、又不吞掉 overlay 内 span 的语义色(accent/dim/红绿);
+    // 色相本身分不出时向 text 提亮同色相再扫。Paragraph 只铺 bg 不铺 fg,
+    // span 各自的显式色全部保留。
+    let bgc = selection_bg();
     // wipe the underlying table text first — Paragraph.style only recolors
     // cells, it does not erase the symbols underneath
     f.render_widget(Clear, rect);
@@ -1917,11 +2295,15 @@ fn draw_selected(f: &mut Frame, rect: Rect, lines: Vec<Line<'static>>) {
     while ls.len() < 2 {
         ls.push(Line::from(""));
     }
-    // 左缘竖条:弱底色后的选中锚点
+    // 左缘竖条:选中锚点;accent 与选中底拉不开时退到可读前景
+    let bar = if crate::theme::contrast_ratio(accent(), bgc) >= 1.6 {
+        accent()
+    } else {
+        readable_fg(bgc)
+    };
     let bar_w = 1.min(rect.width);
     f.render_widget(
-        Paragraph::new(vec![Line::from("▌"), Line::from("▌")])
-            .style(Style::new().fg(accent()).bg(bgc)),
+        Paragraph::new(vec![Line::from("▌"), Line::from("▌")]).style(Style::new().fg(bar).bg(bgc)),
         Rect {
             x: rect.x,
             y: rect.y,
@@ -2415,11 +2797,7 @@ fn draw_graphs_popup(f: &mut Frame, area: Rect, app: &App, sel: usize) {
                 lang.tr("off").to_string()
             },
         ),
-        (
-            "r",
-            "scale ratio",
-            ratio_label(app.net_graph_scale_ratio),
-        ),
+        ("r", "scale ratio", ratio_label(app.net_graph_scale_ratio)),
     ];
     let (w, h) = (60.min(area.width), 9.min(area.height));
     let popup = centered(area, w, h);
@@ -2560,12 +2938,15 @@ fn draw_settings_popup(f: &mut Frame, area: Rect, app: &App, sel: usize) {
                         fmt_interval(app.conn.tombstone_ttl)
                     },
                 ),
-                ("proc_groups", lang.tr(if app.proc_expand_default {
-                    "expanded"
-                } else {
-                    "collapsed"
-                })
-                .to_string()),
+                (
+                    "proc_groups",
+                    lang.tr(if app.proc_expand_default {
+                        "expanded"
+                    } else {
+                        "collapsed"
+                    })
+                    .to_string(),
+                ),
                 ("global_kill", toggle(app.allow_global_kill)),
             ],
         ),
@@ -2681,10 +3062,7 @@ fn proc_status_fields(p: &crate::collect::proc::ProcRow, lang: crate::config::La
         // live fields
         if let Some(cmd) = &p.cmdline {
             out.push(("cmd", cmd.join(" ")));
-            out.push((
-                "start",
-                lang.tr("restarts_cmd").replace("{cmd}", &cmd[0]),
-            ));
+            out.push(("start", lang.tr("restarts_cmd").replace("{cmd}", &cmd[0])));
         }
         return out;
     }
@@ -2962,12 +3340,7 @@ fn detail_content(app: &App, box_idx: usize, id: u64, width: u16) -> DetailConte
         app.lang.tr("hint_close").to_string(),
     ];
     if let Some(p) = pid {
-        hints.insert(
-            2,
-            app.lang
-                .tr("hint_kill")
-                .replace("{p}", &p.to_string()),
-        );
+        hints.insert(2, app.lang.tr("hint_kill").replace("{p}", &p.to_string()));
     }
     if start_hint {
         hints.insert(2, app.lang.tr("hint_start").to_string());
@@ -3049,7 +3422,9 @@ pub fn detail_hit_test(app: &App, box_idx: usize, id: u64, row: u16) -> DetailHi
     }
     let all_y = (row - inner_y) as usize + DETAIL_SCROLL.load(Relaxed) as usize;
     let width = DETAIL_W.load(Relaxed);
-    let DetailContent { field_rows, values, .. } = detail_content(app, box_idx, id, width);
+    let DetailContent {
+        field_rows, values, ..
+    } = detail_content(app, box_idx, id, width);
     for (i, (start, count)) in field_rows.iter().enumerate() {
         if all_y >= *start && all_y < start + count {
             return DetailHit::Field(i, values[i].clone());
@@ -3130,13 +3505,18 @@ fn draw_detail_popup(f: &mut Frame, area: Rect, app: &App, box_idx: usize, id: u
         .into_iter()
         .enumerate()
         .map(|(li, line)| {
-            let in_field = l.field_rows.get(l.sel).is_some_and(|(start, count)| {
-                li >= *start && li < start + count
-            });
+            let in_field = l
+                .field_rows
+                .get(l.sel)
+                .is_some_and(|(start, count)| li >= *start && li < start + count);
             if !in_field {
                 return line;
             }
-            let bar = if li == l.field_rows[l.sel].0 { "▸" } else { " " };
+            let bar = if li == l.field_rows[l.sel].0 {
+                "▸"
+            } else {
+                " "
+            };
             let mut spans = vec![Span::styled(bar, Style::new().fg(accent()).bg(hl_bg))];
             spans.extend(line.spans.into_iter().map(|mut sp| {
                 sp.style = sp.style.bg(hl_bg);
@@ -3479,6 +3859,76 @@ mod tests {
     use super::*;
     use crate::app::BOX_COUNT;
     use ratatui::layout::Constraint;
+
+    /// invisible-selection regression, dark theme: a download gradient
+    /// whose start ≈ the background (omarchy-void style) must still yield
+    /// a wash that separates from the row bg and reads under span colors
+    #[test]
+    fn selection_wash_clears_floors_on_dark_and_light() {
+        let dark_bg = Color::Rgb(0x28, 0x2a, 0x36);
+        let dark_text = Color::Rgb(0xf8, 0xf8, 0xf2);
+        // hue indistinguishable from the bg (the old at(0.12) bug)
+        let camo = Color::Rgb(0x2b, 0x2d, 0x39);
+        let wash = selection_bg_over(camo, Some(dark_bg), dark_text);
+        assert!(
+            crate::theme::contrast_ratio(wash, dark_bg) >= 1.3,
+            "dark: not visible"
+        );
+        assert!(
+            crate::theme::contrast_ratio(wash, dark_text) >= 2.2,
+            "dark: span colors unreadable"
+        );
+
+        // light theme (solarized-like): dark text, light bg, mid hue
+        let light_bg = Color::Rgb(0xee, 0xe8, 0xd5);
+        let light_text = Color::Rgb(0x07, 0x36, 0x42);
+        let wash = selection_bg_over(Color::Rgb(0x42, 0x8c, 0x4a), Some(light_bg), light_text);
+        assert!(
+            crate::theme::contrast_ratio(wash, light_bg) >= 1.3,
+            "light: not visible"
+        );
+        assert!(
+            crate::theme::contrast_ratio(wash, light_text) >= 2.2,
+            "light: span colors unreadable"
+        );
+
+        // no measurable bg (transparent): hue passes through
+        assert_eq!(selection_bg_over(camo, None, dark_text), camo);
+    }
+
+    #[test]
+    fn readable_bg_holds_the_text_floor() {
+        let text = Color::Rgb(0xf8, 0xf8, 0xf2);
+        let base = Color::Rgb(0x28, 0x2a, 0x36);
+        // bright gradient end (dracula yellow): white text reads 1.1:1 on it
+        let yellow = Color::Rgb(0xf1, 0xfa, 0x8c);
+        assert!(crate::theme::contrast_ratio(yellow, text) < 3.0);
+        let fixed = readable_bg_over(yellow, Some(base), text);
+        assert!(crate::theme::contrast_ratio(fixed, text) >= 3.0);
+        // already-compliant colors pass through untouched
+        assert_eq!(readable_bg_over(base, Some(base), text), base);
+        // transparent bg: no anchor to blend toward
+        assert_eq!(readable_bg_over(yellow, None, text), yellow);
+    }
+
+    #[test]
+    fn readable_fg_picks_the_better_theme_anchor() {
+        let text = Color::Rgb(0xf8, 0xf8, 0xf2);
+        let dark_anchor = Color::Rgb(0x28, 0x2a, 0x36);
+        // bright bg: dark anchor reads far better than white text
+        let yellow = Color::Rgb(0xf1, 0xfa, 0x8c);
+        assert_eq!(
+            readable_fg_between(yellow, text, Some(dark_anchor)),
+            dark_anchor
+        );
+        // near-black bg: text wins
+        assert_eq!(
+            readable_fg_between(dark_anchor, text, Some(dark_anchor)),
+            text
+        );
+        // no anchor: text
+        assert_eq!(readable_fg_between(yellow, text, None), text);
+    }
 
     fn lens(cs: &[Constraint]) -> Vec<Option<u16>> {
         cs.iter()
@@ -4019,6 +4469,214 @@ mod tests {
         assert!(
             !rows.iter().any(|r| r.contains("sd0p1")),
             "越界滚动后仍显示首行"
+        );
+    }
+
+    /// disks-only app with an overflowing tree: `disks` root × 12 partitions
+    fn disks_overflow_app(disks: usize) -> crate::app::App {
+        let mut app = crate::app::App::new(None);
+        for i in 0..BOX_COUNT {
+            app.visible[i] = i == BOX_DISKS;
+        }
+        for d in 0..disks {
+            app.disk.tree.push(crate::collect::disk::TreeNode {
+                name: format!("sd{d}"),
+                pretty: None,
+                size: None,
+                children: (0..12)
+                    .map(|p| crate::collect::disk::TreeNode {
+                        name: format!("sd{d}p{}", p + 1),
+                        pretty: None,
+                        size: None,
+                        children: Vec::new(),
+                    })
+                    .collect(),
+            });
+        }
+        app
+    }
+
+    /// render to a line-per-row symbol grid (TestBackend, no shared state)
+    fn render_grid(app: &crate::app::App) -> Vec<String> {
+        use ratatui::backend::TestBackend;
+        use ratatui::Terminal;
+        let mut term = Terminal::new(TestBackend::new(120, 40)).unwrap();
+        term.draw(|f| draw(f, app)).unwrap();
+        let buf = term.backend().buffer();
+        (0..buf.area.height)
+            .map(|y| (0..buf.area.width).map(|x| buf[(x, y)].symbol()).collect())
+            .collect()
+    }
+
+    #[test]
+    fn disks_scrollbar_shows_arrows_and_thumb_at_offset() {
+        // 溢出列表:btop 字形出现,滑块随偏移从轨道顶走到轨道底
+        let mut app = disks_overflow_app(3);
+        let mut rows = render_grid(&app);
+        // 仅 disks 可见,缓冲区里的 ↑ 只能来自滚动条
+        let (uy, ux) = rows
+            .iter()
+            .enumerate()
+            .find_map(|(y, r)| r.chars().position(|c| c == '\u{2191}').map(|x| (y, x)))
+            .expect("overflowing disks list renders an up arrow");
+        let col: Vec<char> = rows.iter().map(|r| r.chars().nth(ux).unwrap()).collect();
+        let dy = col
+            .iter()
+            .position(|&c| c == '\u{2193}')
+            .expect("down arrow");
+        assert!(dy > uy + 2, "arrows must not be adjacent");
+        assert_eq!(
+            col[uy + 1..dy].iter().filter(|&&c| c == '\u{2588}').count(),
+            1,
+            "exactly one thumb on the track"
+        );
+        assert_eq!(col[uy + 1], '\u{2588}', "off=0 puts the thumb at the top");
+
+        app.scroll[BOX_DISKS] = usize::MAX; // draw clamps to the last page
+        rows = render_grid(&app);
+        let col: Vec<char> = rows.iter().map(|r| r.chars().nth(ux).unwrap()).collect();
+        let dy = col.iter().position(|&c| c == '\u{2193}').unwrap();
+        assert_eq!(
+            col[dy - 1],
+            '\u{2588}',
+            "bottom offset puts the thumb at the track end"
+        );
+
+        // 不溢出:不渲染滚动条
+        let app = disks_overflow_app(1);
+        let rows = render_grid(&app);
+        assert!(
+            !rows.iter().any(|r| r.contains('\u{2191}')),
+            "fitting list must not render a scrollbar"
+        );
+    }
+
+    #[test]
+    fn disks_scrollbar_hit_pages_and_thumb() {
+        // 纯几何核:内框 40×20 → 滑条列 x=38,数据行 y=1..=18
+        let inner = Rect {
+            x: 0,
+            y: 0,
+            width: 40,
+            height: 20,
+        };
+        let (len, visible, off) = (100usize, 10usize, 0usize);
+        let bar_x = inner.right() - 1;
+        assert!(scrollbar_hit_at(inner, bar_x, 1, len, visible, off)
+            .is_some_and(|h| matches!(h, SbHit::PageUp)));
+        assert!(scrollbar_hit_at(inner, bar_x, 19, len, visible, off)
+            .is_some_and(|h| matches!(h, SbHit::PageDown)));
+        // off=0 时滑块在首轨行
+        assert!(scrollbar_hit_at(inner, bar_x, 2, len, visible, off)
+            .is_some_and(|h| matches!(h, SbHit::Thumb { grab: 0 })));
+        // 滑块上方翻上页、下方翻下页(off 取中位,滑块落在轨道中部)
+        let mid_off = 45usize;
+        assert!(scrollbar_hit_at(inner, bar_x, 5, len, visible, mid_off)
+            .is_some_and(|h| matches!(h, SbHit::PageUp)));
+        assert!(scrollbar_hit_at(inner, bar_x, 15, len, visible, mid_off)
+            .is_some_and(|h| matches!(h, SbHit::PageDown)));
+        // 滑条列之外与不溢出列表都不是命中
+        assert!(scrollbar_hit_at(inner, bar_x - 1, 5, len, visible, off).is_none());
+        assert!(scrollbar_hit_at(inner, bar_x, 5, 5, visible, 0).is_none());
+    }
+
+    #[test]
+    fn disks_scrollbar_drag_maps_track_to_offset() {
+        let mut app = crate::app::App::new(None);
+        let inner = Rect {
+            x: 0,
+            y: 0,
+            width: 40,
+            height: 20,
+        };
+        let (len, visible) = (100usize, 10usize);
+        let last_track = 1 + (20 - 1) - 2; // bar.y + bar.height - 2
+        scrollbar_drag_at(&mut app, inner, len, visible, last_track, 0);
+        assert_eq!(
+            app.scroll[BOX_DISKS],
+            len - visible,
+            "track end = last page"
+        );
+        scrollbar_drag_at(&mut app, inner, len, visible, 2, 0);
+        assert_eq!(app.scroll[BOX_DISKS], 0, "track start = first page");
+        scrollbar_drag_at(&mut app, inner, len, visible, (2 + last_track) / 2, 0);
+        let mid = app.scroll[BOX_DISKS];
+        assert!(
+            (40..=50).contains(&mid),
+            "middle of the track ≈ half the span, got {mid}"
+        );
+        // 记录了抓取偏移的拖拽:同一行减去偏移
+        app.scroll[BOX_DISKS] = 0;
+        scrollbar_drag_at(&mut app, inner, len, visible, 7, 5);
+        assert_eq!(app.scroll[BOX_DISKS], 0, "grab-compensated top stays top");
+    }
+
+    #[test]
+    fn disk_row_shows_fstype_tail_after_name() {
+        let mut app = disks_overflow_app(0);
+        app.disk.devices.push(crate::collect::disk::DiskDev {
+            name: "sda1".into(),
+            fstype: "ext4".into(),
+            mounts: vec!["/".into()],
+            total: 100,
+            used: 40,
+            ..Default::default()
+        });
+        app.disk.tree.push(crate::collect::disk::TreeNode {
+            name: "sda1".into(),
+            pretty: None,
+            size: None,
+            children: Vec::new(),
+        });
+        let rows = render_grid(&app);
+        let row = rows.iter().find(|r| r.contains("sda1")).expect("row");
+        assert!(
+            row.contains("· ext4"),
+            "dim fstype tail after the name: {row}"
+        );
+    }
+
+    /// 树为空(mac)→ 挂载卷平铺:未挂载设备不出现,badge 报卷数
+    #[test]
+    fn disks_vols_fallback_lists_mounted_only() {
+        let mut app = disks_overflow_app(0); // 空树
+        let mk = |name: &str, fstype: &str, mounts: Vec<&str>| crate::collect::disk::DiskDev {
+            name: name.into(),
+            fstype: fstype.into(),
+            mounts: mounts.into_iter().map(String::from).collect(),
+            total: 100,
+            used: 25,
+            ..Default::default()
+        };
+        app.disk.devices = vec![
+            mk("disk3s1", "apfs", vec!["/"]),
+            mk("disk3s5", "apfs", vec!["/System/Volumes/Data"]),
+            mk("disk0s3", "", vec![]), // 无挂载:不得出现
+        ];
+        let rows = render_grid(&app);
+        assert!(
+            rows.iter()
+                .any(|r| r.contains("disk3s1") && r.contains("· apfs")),
+            "mounted volume row with fstype tail"
+        );
+        // USED 列带本卷已用量(used=25B)
+        assert!(
+            rows.iter()
+                .any(|r| r.contains("disk3s1") && r.contains("25B")),
+            "used bytes render in the USED cell"
+        );
+        assert!(
+            rows.iter()
+                .any(|r| r.contains("disk3s5") && r.contains("/System/Volumes/Data")),
+            "second volume renders its mount"
+        );
+        assert!(
+            !rows.iter().any(|r| r.contains("disk0s3")),
+            "unmounted device must not render in the vols fallback"
+        );
+        assert!(
+            rows.iter().any(|r| r.contains("2 vol")),
+            "badge counts mounted volumes: {rows:?}"
         );
     }
 

@@ -19,9 +19,18 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// cumulative byte counters per key, as carried by every snapshot
 type Counters = HashMap<u64, (u64, u64)>;
 
+/// schema version the daemons of this build write and this reader
+/// understands. Written as the leading `"v"` field since 0.2.12; older
+/// daemons omit it (read back as None). A higher remote version still
+/// parses — the mismatch is surfaced via `UdpCollector::remote_ver` so
+/// the UI/--dump can warn instead of guessing.
+pub const SNAPSHOT_VERSION: u64 = 1;
+
 /// one decoded snapshot from the daemon
 #[derive(Debug, PartialEq, Clone)]
 pub struct Snap {
+    /// writer schema version; None = versioning-era daemon (≤0.2.11)
+    pub ver: Option<u64>,
     pub ts: u64,
     /// writer identity (`<pid>-<start_ms>`); a change means a new kernel map,
     /// i.e. a new counter universe — diffs across instances would be garbage
@@ -107,6 +116,8 @@ pub struct UdpCollector {
     sks: DiffSide,
     /// writer identity of the last snapshot; a switch re-baselines both sides
     prev_inst: Option<String>,
+    /// schema version of the last snapshot; None = pre-versioning daemon
+    pub remote_ver: Option<u64>,
     /// snapshot path; writable by the daemon only
     pub path: PathBuf,
     /// pids / sockets present in the most recent snapshot read
@@ -133,6 +144,7 @@ impl UdpCollector {
             upids: DiffSide::default(),
             sks: DiffSide::default(),
             prev_inst: None,
+            remote_ver: None,
             // LANMON_UDP_SNAPSHOT overrides for tests / unusual deployments;
             // the daemon has the matching --out flag
             path: std::env::var("LANMON_UDP_SNAPSHOT")
@@ -178,6 +190,7 @@ impl UdpCollector {
     fn ingest(&mut self, snap: Snap) -> UdpSample {
         self.pids_seen = snap.pids.len();
         self.sks_seen = snap.sks.len();
+        self.remote_ver = snap.ver;
         self.fresh = now_ms().saturating_sub(snap.ts) <= self.max_age_ms;
         if self.prev_inst != snap.inst {
             // a different (or first-seen) writer: its counters are unrelated
@@ -193,6 +206,8 @@ impl UdpCollector {
             self.pids.diff(ts, pids);
             self.upids.diff(ts, upids);
             self.sks.diff(ts, sks);
+            // 旧写者留下的 last_inodes 一并作废(detail 面板不陈列旧时代行)
+            self.last_inodes.clear();
             return UdpSample::default();
         }
         let Snap {
@@ -239,16 +254,19 @@ fn pid_deltas_from(raw: Vec<(u64, u64, u64, f64)>) -> Vec<UdpDelta> {
 }
 
 /// parse the daemon's snapshot:
-/// `{"inst":"<pid>-<ms>","ts":<ms>,"pids":[{"pid":N,...}],"upids":[{"pid":N,...}],"sks":[{"ino":N,...}]}`
+/// `{"v":1,"inst":"<pid>-<ms>","ts":<ms>,"pids":[{"pid":N,...}],"upids":[{"pid":N,...}],"sks":[{"ino":N,...}]}`
 /// written by `ltop-bpf` in exactly this key order; tolerant of trailing
-/// garbage but not of reordered keys (both ends ship together)
+/// garbage but not of reordered keys (both ends ship together). The
+/// leading `"v"` is optional — daemons up to 0.2.11 didn't write it.
 pub fn parse_snapshot(text: &str) -> Option<Snap> {
+    let ver = num_after(text, "\"v\":");
     let inst = str_after(text, "\"inst\":\"").map(|s| s.to_string());
     let ts = num_after(text, "\"ts\":")?;
     let pids = parse_counters(text, "\"pids\":[", "\"pid\":")?;
     let upids = parse_counters(text, "\"upids\":[", "\"pid\":").unwrap_or_default();
     let sks = parse_counters(text, "\"sks\":[", "\"ino\":").unwrap_or_default();
     Some(Snap {
+        ver,
         ts,
         inst,
         pids,
@@ -317,7 +335,7 @@ mod tests {
     use super::*;
 
     const SNAP: &str = concat!(
-        "{\"inst\":\"777-1234\",\"ts\":170000001000,\"pids\":[",
+        "{\"v\":1,\"inst\":\"777-1234\",\"ts\":170000001000,\"pids\":[",
         "{\"pid\":100,\"recv\":1000,\"sent\":200},",
         "{\"pid\":200,\"recv\":0,\"sent\":50}],",
         "\"upids\":[{\"pid\":100,\"recv\":1000,\"sent\":200}],",
@@ -330,6 +348,7 @@ mod tests {
 
     fn snap(inst: &str, ts: u64, pids: &[(u64, u64, u64)]) -> Snap {
         Snap {
+            ver: None,
             ts,
             inst: if inst.is_empty() {
                 None
@@ -345,11 +364,32 @@ mod tests {
     #[test]
     fn parses_snapshot_pids_and_sks() {
         let s = parse_snapshot(SNAP).unwrap();
+        assert_eq!(s.ver, Some(SNAPSHOT_VERSION));
         assert_eq!(s.ts, 170000001000);
         assert_eq!(s.inst.as_deref(), Some("777-1234"));
         assert_eq!(s.pids[&100], (1000, 200));
         assert_eq!(s.pids[&200], (0, 50));
         assert_eq!(s.sks[&1009], (800, 100));
+    }
+
+    /// versioning-era daemons omit "v" (read back as None); a future
+    /// higher version still parses — the mismatch surfaces via
+    /// UdpCollector::remote_ver instead of rejecting the data
+    #[test]
+    fn snapshot_version_field_is_optional_and_forward_tolerant() {
+        let old = parse_snapshot("{\"inst\":\"x\",\"ts\":1,\"pids\":[],\"sks\":[]}").unwrap();
+        assert_eq!(old.ver, None);
+        let future =
+            parse_snapshot("{\"v\":99,\"inst\":\"x\",\"ts\":1,\"pids\":[],\"sks\":[]}").unwrap();
+        assert_eq!(future.ver, Some(99));
+        // a pid entry containing recv must not be mistaken for the
+        // version field ("recv" embeds v-quote but not "v":)
+        let s = parse_snapshot(
+            "{\"v\":1,\"inst\":\"x\",\"ts\":1,\"pids\":[{\"pid\":5,\"recv\":10,\"sent\":0}],\"sks\":[]}",
+        )
+        .unwrap();
+        assert_eq!(s.ver, Some(1));
+        assert_eq!(s.pids[&5], (10, 0));
     }
 
     #[test]
@@ -399,6 +439,7 @@ mod tests {
         let mut c = UdpCollector::new();
         // 组合账本含 TCP+UDP,分项账本只有 UDP:一次 ingest 同时出两路
         let s0 = Snap {
+            ver: None,
             ts: 1000,
             inst: Some("A".into()),
             pids: map(&[(7, 100, 0)]),
@@ -407,6 +448,7 @@ mod tests {
         };
         assert!(c.ingest(s0).net.is_empty()); // 基线
         let s1 = Snap {
+            ver: None,
             ts: 2000,
             inst: Some("A".into()),
             pids: map(&[(7, 1100, 0)]), // TCP+UDP 合计增量 1000
@@ -424,6 +466,7 @@ mod tests {
     fn socket_deltas_come_out_inode_keyed() {
         let mut c = UdpCollector::new();
         let s0 = Snap {
+            ver: None,
             ts: 1000,
             inst: Some("A".into()),
             pids: Counters::new(),
@@ -432,6 +475,7 @@ mod tests {
         };
         assert!(c.ingest(s0).inodes.is_empty()); // baseline
         let s1 = Snap {
+            ver: None,
             ts: 2000,
             inst: Some("A".into()),
             pids: Counters::new(),
@@ -451,6 +495,37 @@ mod tests {
         assert!(sample.net.is_empty());
         // the last round stays visible for --dump
         assert_eq!(c.last_inodes, sample.inodes);
+    }
+
+    #[test]
+    fn writer_switch_clears_last_inodes() {
+        let mut c = UdpCollector::new();
+        // 先攒一轮真实 socket 增量,last_inodes 有内容(detail 面板数据源)
+        assert!(c
+            .ingest(Snap {
+                ver: None,
+                ts: 1000,
+                inst: Some("A".into()),
+                pids: Counters::new(),
+                upids: Counters::new(),
+                sks: map(&[(9, 10, 0)]),
+            })
+            .inodes
+            .is_empty());
+        let s = c.ingest(Snap {
+            ver: None,
+            ts: 2000,
+            inst: Some("A".into()),
+            pids: Counters::new(),
+            upids: Counters::new(),
+            sks: map(&[(9, 20, 5)]),
+        });
+        assert!(!s.inodes.is_empty());
+        assert!(!c.last_inodes.is_empty());
+        // 写者切换:default 返回同时必须清 last_inodes,否则 detail 面板
+        // 继续陈列旧写者时代的 inode 行
+        assert!(c.ingest(snap("B", 3000, &[(7, 1, 0)])).inodes.is_empty());
+        assert!(c.last_inodes.is_empty());
     }
 
     #[test]

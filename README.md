@@ -16,7 +16,7 @@ eBPF helper adds per-process and per-connection byte accounting.
 — this README is the elevator pitch plus everything needed to install and
 start; the deep details live on the docs site.
 
-![Classic layout mid Steam download — six boxes, live LAN neighbours, grouped connections](assets/screenshots/main.png)
+![Classic layout mid Steam download — six boxes, live LAN neighbours, grouped connections](assets/screenshots/main.webp)
 
 ## Quick install
 
@@ -25,6 +25,10 @@ start; the deep details live on the docs site.
 ```bash
 brew install uMaj35ty/ltop/ltop
 ```
+
+**macOS 27+?** The system hides neighbour/interface MAC addresses from
+unsigned apps — run **`ltop lan-setup`** once after installing to show real
+MAC addresses in the LAN and NET boxes (per-user launchd agent, no root).
 
 **crates.io** (compiles from source; needs a Rust toolchain):
 
@@ -108,6 +112,11 @@ combination. Details: [AI agents on the docs](https://umaj35ty.github.io/ltop/do
   1-second snapshot from `/run/ltop/udp.json`. LRU maps, single-instance
   lock, automatic detach — no root for the TUI, no nightly toolchain to
   build. Without the helper everything else keeps working
+- **Real MAC addresses on macOS, even 27** — Apple gates neighbour and
+  interface MACs by attribution × signature (27 blinds even Apple-signed
+  `arp` run from an app); `ltop lan-setup` installs a per-user launchd agent
+  that rotates `arp`/`ifconfig` snapshots via Apple platform binaries — LAN
+  and NET boxes show real MACs, no root, no entitlements
 - **Headless watch + report** — crash-safe JSONL capture (per-line appends
   survive a process crash; `--interval`, `--duration`, `--stop` sentinel,
   `--proc` focus) and window-differenced summaries; the TUI monitoring log (`L` / `--log`) shares the schema, and

@@ -8,6 +8,15 @@ readme = "README.md"
 repository = "https://github.com/uMaj35ty/ltop"
 default-run = "ltop"
 autobins = false
+# the docs-site media tree ships via the GitHub release and the website,
+# not the crate — assets/ itself must stay (themes are include_str!'d at
+# build time). The screenshots pushed 0.2.12 past crates.io's 10 MiB cap
+exclude = [
+    "assets/screenshots",
+    "book",
+    "book-zh",
+    "website",
+]
 
 [[bin]]
 name = "ltop"
@@ -29,10 +38,10 @@ unicode-width = "0.2"
 
 # aya/eBPF 加载器仅 Linux(ltop-bpf 二进制);mac 构建不引入
 [target.'cfg(target_os = "linux")'.dependencies]
-aya = "0.14.0"
+aya = "0.16.0"
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
-aya-obj = "0.5"
+aya-obj = "0.6"
 
 [profile.release]
 lto = true

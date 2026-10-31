@@ -1,0 +1,41 @@
+# cargo-deny gate (CI: `EmbarkStudios/cargo-deny-action`) — RustSec advisories,
+# license hygiene and registry provenance for all workspace members (ltop +
+# the ltop-bpf eBPF loader).
+#
+# Policy notes:
+# - advisories: vulnerabilities fail the build; unmaintained/unsound advisory
+#   classes only warn so a stale crate cannot block a security release
+# - bans: duplicate versions warn (transitive splits are normal, review them
+#   at leisure); no crate is blanket-denied yet
+# - licenses: the allowlist below is what the current dep graph actually
+#   ships; anything new fails loudly instead of slipping in silently
+
+[graph]
+all-features = false
+
+[advisories]
+version = 2
+yanked = "deny"
+
+[licenses]
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "CDLA-Permissive-2.0",
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

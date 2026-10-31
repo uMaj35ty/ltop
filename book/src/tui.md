@@ -7,7 +7,7 @@ left, tables right), **wide** (charts across the top, tables below), **tall**
 frame; bytes transferred while paused are back-filled on resume, so pausing
 never loses accounting.
 
-![Classic layout](../assets/screenshots/classic-six-boxes.png)
+![Classic layout](../assets/screenshots/classic-six-boxes-small.webp)
 
 ## The six boxes
 
@@ -30,9 +30,20 @@ pins the neighbour and filters CONNS to that peer.
 ### 3 / 4 — DISK I/O and DISKS
 
 Read/write rate charts (deduplicated across stacked devices — `nvme0n1` and
-its `dm-0(root)` child are one sample, not two) beside a physical device tree
-with capacity bars and live per-device rates. `d` expands the mount tree;
-`i` switches the chart mode.
+its `dm-0(root)` child are one sample, not two) beside the device list:
+capacity bars and live per-device rates, the fs type as a dim tail after
+each name. On **macOS** the list shows mounted volumes only: VMs and
+simulators attach their virtual disks as host-visible synthesized devices —
+often a dozen or more per machine — and the host cannot see anything about
+their internal capacity or usage, so those rows would be pure noise. On
+**Linux** a VM's disks never appear as host block devices (they are plain
+files in a filesystem), so the device tree reflects real hardware and stays
+the full physical tree — disk → partition → dm with unmounted rows, where
+LUKS/LVM layering stays readable. `d` expands the mount list and
+aims the arrow/jump keys at the disks list; `i` switches the chart mode. An
+overflowing list gets a btop-style scrollbar in its right edge — click the
+track to page, drag the thumb to scroll, no focus needed (the wheel already
+worked this way).
 
 ### 5 — CONNS
 
@@ -46,7 +57,7 @@ udp), `o` cycles sorts — including **proc** grouping, which folds same-name
 processes into an expandable group head (`▸ firefox ×17` with the group Σ;
 `enter` on the head collapses/expands, search hits auto-expand).
 
-![Tall layout — grouped connections with group totals and a tracked row](../assets/screenshots/tall-process-groups.png)
+![Tall layout — grouped connections with group totals and a tracked row](../assets/screenshots/tall-process-groups-small.webp)
 
 ### 6 — PROCS
 
@@ -74,7 +85,7 @@ default (`proc_exit_retention_min`, `0` = keep forever).
 - `enter` on a LAN row pins the neighbour (red highlight, stays on top) and
   filters CONNS to that peer; repeat to unpin, `esc`/`f` clear.
 
-![Wide layout — detail panel with captured command line, UDP breakdown and the theme menu](../assets/screenshots/wide-detail-panel.png)
+![Wide layout — detail panel with captured command line, UDP breakdown and the theme menu](../assets/screenshots/wide-detail-panel-small.webp)
 
 ## Search
 
@@ -111,10 +122,11 @@ export: `--replay [--csv OUT]`. Details in [The data plane](data.md).
 | `r` | procs sort cycle |
 | `f` / `o` | conns filter cycle / sort cycle |
 | `enter`, `←→` on a group head | collapse / expand process group |
-| `d` | expand/collapse disk mount tree |
+| `d` | expand/collapse disk mount tree; arrow/jump keys then target the disks list |
 | `e` | lan sort: ip → hostname → mac → iface |
 | `n` / `i` | net / disk chart mode |
-| `↑↓` `PgUp` `PgDn` / wheel | move selection; wheel scrolls the list under the cursor; click selects |
+| `↑↓` `PgUp` `PgDn` / wheel | move selection; PgUp/PgDn page by visible height; wheel scrolls the list under the cursor; click selects |
+| disks scrollbar | click the track to page, drag the thumb to scroll — works without focus |
 | `enter` on a lan row | pin neighbour + filter CONNS to that peer |
 | `enter` on a conns/procs row | detail panel (track `t`/`space`, kill `k`, relaunch `s`, copy `y`) |
 | `z` | zoom the focused box full-screen |
@@ -124,7 +136,7 @@ export: `--replay [--csv OUT]`. Details in [The data plane](data.md).
 | `+`/`-` | refresh interval ±250 ms |
 
 Settings worth knowing (all in `m` → settings, persisted to
-`~/.config/ltop/config.conf`): refresh `tick_ms` (default 1000), tombstone
+`~/.config/ltop/config.conf`): refresh `tick_ms` (default 2000), tombstone
 TTL, the recording toggle (same as the `L` key), log interval/retention,
 sweep interval, default sort/filter modes, `theme`, `lang`,
 `proc_expand_default` (groups expanded by default), `proc_exit_retention_min`,

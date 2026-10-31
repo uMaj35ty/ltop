@@ -32,7 +32,6 @@ impl Lang {
         }
     }
 
-    #[cfg(not(test))]
     fn parse(s: &str) -> Option<Self> {
         match s {
             "en" => Some(Self::En),
@@ -107,7 +106,7 @@ impl Lang {
                 "zoom_desc" => "zoom focused box (lan / conns / procs)",
                 "focus_desc" => "focus procs / conns / lan (toggle)",
                 "order_desc" => "procs sort",
-                "expand_desc" => "expand all mounts",
+                "expand_desc" => "expand mounts, aim keys at disks",
                 "filter_desc" => "conns filter all/lan",
                 "conn_order_desc" => "conns sort",
                 "net_io_desc" => "iface / io mode",
@@ -117,7 +116,7 @@ impl Lang {
                 "log_desc" => "logging on/off",
                 "sweep_desc" => "lan sweep on/off",
                 "refresh_desc" => "refresh interval",
-                "sel_scroll_desc" => "select / scroll lists",
+                "sel_scroll_desc" => "select / scroll / drag scrollbar",
                 "quit_menu_desc" => "quit / menu",
                 "confirm_kill" => " Send SIGTERM to {name} (pid {pid})?",
                 "confirm_restart" => {
@@ -210,7 +209,7 @@ impl Lang {
                 "zoom_desc" => "\u{5168}\u{5c4f}\u{805a}\u{7126}\u{76d2}\u{5b50}（lan / conns / procs）",
                 "focus_desc" => "\u{805a}\u{7126} procs / conns / lan（再按取消）",
                 "order_desc" => "procs \u{6392}\u{5e8f}\u{4e94}\u{6001}",
-                "expand_desc" => "\u{5c55}\u{5f00}/\u{6298}\u{53e0}\u{6302}\u{8f7d}\u{70b9}",
+                "expand_desc" => "\u{5c55}\u{5f00}\u{6302}\u{8f7d}\u{70b9}\u{ff0c}\u{65b9}\u{5411}\u{952e}\u{6307}\u{5411}\u{78c1}\u{76d8}",
                 "filter_desc" => "conns \u{8fc7}\u{6ee4} all/lan",
                 "conn_order_desc" => "conns \u{6392}\u{5e8f}\u{4e09}\u{6001}",
                 "net_io_desc" => "\u{5207}\u{7f51}\u{5361} / io \u{6a21}\u{5f0f}",
@@ -220,7 +219,7 @@ impl Lang {
                 "log_desc" => "\u{65e5}\u{5fd7}\u{5f55}\u{5236}\u{5f00}/\u{5173}",
                 "sweep_desc" => "\u{626b}\u{63cf}\u{5f00}/\u{5173}",
                 "refresh_desc" => "\u{5237}\u{65b0}\u{95f4}\u{9694}",
-                "sel_scroll_desc" => "\u{9009}\u{4e2d} / \u{6eda}\u{52a8}\u{5217}\u{8868}",
+                "sel_scroll_desc" => "\u{9009}\u{4e2d} / \u{6eda}\u{52a8} / \u{62d6}\u{52a8}\u{6eda}\u{52a8}\u{6761}",
                 "quit_menu_desc" => "\u{9000}\u{51fa} / \u{83dc}\u{5355}",
                 "confirm_kill" => " 向 {name}(pid {pid})发送 SIGTERM?",
                 "confirm_restart" => " 重启 {name}(pid {pid})?先 SIGTERM,再按原命令行拉起。",
@@ -290,14 +289,20 @@ pub struct Config {
     pub net_graph_scale_ratio: u32,
     pub conn_sort: ConnSort,
     pub proc_sort: ProcSort,
+    /// 未知键/注释行原样保留(load 收集,content 回写):升级、降级、
+    /// 用户手写内容都不因一次保存而丢失
+    pub extra: Vec<String>,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
+            extra: Vec::new(),
             lang: Lang::En,
             layout: LayoutMode::Classic,
-            tick_ms: 1000,
+            // 首装默认 2.0s:采样刷新对监控场景足够,省电优先;配置文件里
+            // 写了 tick_ms 的用户不受默认变化影响,+/- 热键仍 ±250ms
+            tick_ms: 2000,
             graph_net: GraphMode::Hybrid,
             graph_disk: GraphMode::Centered,
             boxes: [true; 6],
@@ -323,7 +328,6 @@ impl Default for Config {
     }
 }
 
-#[cfg(not(test))]
 fn parse_layout(s: &str) -> Option<LayoutMode> {
     match s {
         "classic" => Some(LayoutMode::Classic),
@@ -333,7 +337,6 @@ fn parse_layout(s: &str) -> Option<LayoutMode> {
     }
 }
 
-#[cfg(not(test))]
 fn parse_graph(s: &str) -> Option<GraphMode> {
     match s {
         "bar" => Some(GraphMode::Solid),
@@ -413,130 +416,146 @@ impl Config {
             return cfg;
         };
         for line in content.lines() {
-            let Some((k, v)) = line.split_once('=') else {
-                continue;
-            };
-            let (k, v) = (k.trim(), v.trim());
-            match k {
-                "lang" => {
-                    if let Some(x) = Lang::parse(v) {
-                        cfg.lang = x;
-                    }
-                }
-                "layout" => {
-                    if let Some(x) = parse_layout(v) {
-                        cfg.layout = x;
-                    }
-                }
-                "tick_ms" => {
-                    if let Ok(x) = v.parse::<u64>() {
-                        cfg.tick_ms = x.clamp(250, 5000);
-                    }
-                }
-                "graph_net" => {
-                    if let Some(x) = parse_graph(v) {
-                        cfg.graph_net = x;
-                    }
-                }
-                "graph_disk" => {
-                    if let Some(x) = parse_graph(v) {
-                        cfg.graph_disk = x;
-                    }
-                }
-                "boxes" => {
-                    for (i, c) in v.chars().take(6).enumerate() {
-                        cfg.boxes[i] = c == '1';
-                    }
-                    // never allow everything off
-                    if !cfg.boxes.iter().any(|&b| b) {
-                        cfg.boxes = [true; 6];
-                    }
-                }
-                "log_interval_ms" => {
-                    if let Ok(x) = v.parse::<u64>() {
-                        cfg.log_interval_ms = x.clamp(1000, 3_600_000);
-                    }
-                }
-                "log_retention_days" => {
-                    if let Ok(x) = v.parse::<u32>() {
-                        cfg.log_retention_days = x;
-                    }
-                }
-                "sweep_interval_s" => {
-                    if let Ok(x) = v.parse::<u64>() {
-                        cfg.sweep_interval_s = x.clamp(5, 86_400);
-                    }
-                }
-                "sweep" => cfg.sweep = v == "true",
-                "log_tracked_only" => cfg.log_tracked_only = v == "true",
-                "allow_global_kill" => cfg.allow_global_kill = v == "true",
-                "allow_global_log" => cfg.allow_global_log = v == "true",
-                "lan_sort" => {
-                    cfg.lan_sort = match v {
-                        "ip" => LanSort::Ip,
-                        "host" => LanSort::Hostname,
-                        "mac" => LanSort::Mac,
-                        "iface" => LanSort::Iface,
-                        _ => cfg.lan_sort,
-                    }
-                }
-                "tombstone_ttl_ms" => {
-                    if let Ok(v) = v.parse() {
-                        cfg.tombstone_ttl_ms = v;
-                    }
-                }
-                "proc_expand_default" => cfg.proc_expand_default = v == "true",
-                "proc_exit_retention_min" => {
-                    if let Ok(v) = v.parse() {
-                        cfg.proc_exit_retention_min = v;
-                    }
-                }
-                "net_graph_coupled" => cfg.net_graph_coupled = v == "true",
-                "net_graph_scale_ratio" => {
-                    if let Ok(v) = v.parse::<u32>() {
-                        cfg.net_graph_scale_ratio = v.clamp(2, 20);
-                    }
-                }
-                "theme" => {
-                    if !v.is_empty() {
-                        cfg.theme = v.to_string();
-                    }
-                }
-                "theme_live_follow" => cfg.theme_live_follow = v == "true",
-                "conn_filter" => {
-                    cfg.conn_filter = match v {
-                        "all" => ConnFilter::All,
-                        "lan" => ConnFilter::Lan,
-                        "tcp" => ConnFilter::Tcp,
-                        "udp" => ConnFilter::Udp,
-                        _ => cfg.conn_filter,
-                    }
-                }
-                "conn_sort" => {
-                    cfg.conn_sort = match v {
-                        "name" => ConnSort::Name,
-                        "rate" => ConnSort::Rate,
-                        "sum" => ConnSort::Sum,
-                        _ => cfg.conn_sort,
-                    }
-                }
-                "proc_sort" => {
-                    cfg.proc_sort = match v {
-                        "name" => ProcSort::Name,
-                        "net-sum" => ProcSort::NetSum,
-                        "net-rate" => ProcSort::NetRate,
-                        "disk-sum" => ProcSort::DiskSum,
-                        "disk-rate" => ProcSort::DiskRate,
-                        _ => cfg.proc_sort,
-                    }
-                }
-                _ => {}
-            }
+            cfg.apply_line(line);
         }
         cfg
     }
 
+    /// 单行应用(load_persisted 的循环体;测试直调以覆盖未知键保留)
+    fn apply_line(&mut self, line: &str) {
+        let Some((k, v)) = line.split_once('=') else {
+            self.extra.push(line.to_string());
+            return;
+        };
+        let (k, v) = (k.trim(), v.trim());
+        match k {
+            "lang" => {
+                if let Some(x) = Lang::parse(v) {
+                    self.lang = x;
+                }
+            }
+            "layout" => {
+                if let Some(x) = parse_layout(v) {
+                    self.layout = x;
+                }
+            }
+            "tick_ms" => {
+                if let Ok(x) = v.parse::<u64>() {
+                    self.tick_ms = x.clamp(250, 5000);
+                }
+            }
+            "graph_net" => {
+                if let Some(x) = parse_graph(v) {
+                    self.graph_net = x;
+                }
+            }
+            "graph_disk" => {
+                if let Some(x) = parse_graph(v) {
+                    self.graph_disk = x;
+                }
+            }
+            "boxes" => {
+                for (i, c) in v.chars().take(6).enumerate() {
+                    self.boxes[i] = c == '1';
+                }
+                // never allow everything off
+                if !self.boxes.iter().any(|&b| b) {
+                    self.boxes = [true; 6];
+                }
+            }
+            "log_interval_ms" => {
+                if let Ok(x) = v.parse::<u64>() {
+                    self.log_interval_ms = x.clamp(1000, 3_600_000);
+                }
+            }
+            "log_retention_days" => {
+                if let Ok(x) = v.parse::<u32>() {
+                    self.log_retention_days = x;
+                }
+            }
+            "sweep_interval_s" => {
+                if let Ok(x) = v.parse::<u64>() {
+                    self.sweep_interval_s = x.clamp(5, 86_400);
+                }
+            }
+            "sweep" => self.sweep = v == "true",
+            "log_tracked_only" => self.log_tracked_only = v == "true",
+            "allow_global_kill" => self.allow_global_kill = v == "true",
+            "allow_global_log" => self.allow_global_log = v == "true",
+            "lan_sort" => {
+                self.lan_sort = match v {
+                    "ip" => LanSort::Ip,
+                    "host" => LanSort::Hostname,
+                    "mac" => LanSort::Mac,
+                    "iface" => LanSort::Iface,
+                    _ => self.lan_sort,
+                }
+            }
+            "tombstone_ttl_ms" => {
+                if let Ok(v) = v.parse() {
+                    self.tombstone_ttl_ms = v;
+                }
+            }
+            "proc_expand_default" => self.proc_expand_default = v == "true",
+            "proc_exit_retention_min" => {
+                if let Ok(v) = v.parse() {
+                    self.proc_exit_retention_min = v;
+                }
+            }
+            "net_graph_coupled" => self.net_graph_coupled = v == "true",
+            "net_graph_scale_ratio" => {
+                if let Ok(v) = v.parse::<u32>() {
+                    self.net_graph_scale_ratio = v.clamp(2, 20);
+                }
+            }
+            "theme" => {
+                if !v.is_empty() {
+                    self.theme = v.to_string();
+                }
+            }
+            "theme_live_follow" => self.theme_live_follow = v == "true",
+            "conn_filter" => {
+                self.conn_filter = match v {
+                    "all" => ConnFilter::All,
+                    "lan" => ConnFilter::Lan,
+                    "tcp" => ConnFilter::Tcp,
+                    "udp" => ConnFilter::Udp,
+                    _ => self.conn_filter,
+                }
+            }
+            "conn_sort" => {
+                self.conn_sort = match v {
+                    "name" => ConnSort::Name,
+                    "rate" => ConnSort::Rate,
+                    "sum" => ConnSort::Sum,
+                    _ => self.conn_sort,
+                }
+            }
+            "proc_sort" => {
+                self.proc_sort = match v {
+                    "name" => ProcSort::Name,
+                    "net-sum" => ProcSort::NetSum,
+                    "net-rate" => ProcSort::NetRate,
+                    "disk-sum" => ProcSort::DiskSum,
+                    "disk-rate" => ProcSort::DiskRate,
+                    _ => self.proc_sort,
+                }
+            }
+            _ => self.extra.push(line.to_string()),
+        }
+    }
+
     pub fn content(&self) -> String {
+        let mut out = self.content_lines();
+        for line in &self.extra {
+            out.push_str(line);
+            out.push('\n');
+        }
+        out
+    }
+
+    /// 已知键内容(固定顺序);extra 行由 content() 追加
+    fn content_lines(&self) -> String {
         let boxes: String = self
             .boxes
             .iter()
@@ -580,12 +599,78 @@ impl Config {
         if let Some(dir) = Self::config_dir() {
             if fs::create_dir_all(&dir).is_ok() {
                 if let Some(path) = Self::path() {
-                    let _ = fs::write(path, self.content());
+                    let _ = Self::write_atomic(&path, &self.content());
                 }
+            }
+        }
+    }
+
+    /// 原子写:同目录 tmp + rename,断电/崩溃不会留下半截 config。
+    /// tmp 带 pid 且 create_new:并发实例互不踩踏、不跟随预置的同名链接;
+    /// 既有文件的自定义权限(如 600)经 rename 存续
+    fn write_atomic(path: &std::path::Path, content: &str) -> std::io::Result<()> {
+        use std::io::Write;
+        let tmp = path.with_extension(format!("tmp.{}", std::process::id()));
+        let mode = fs::metadata(path).ok().map(|m| m.permissions());
+        {
+            let mut f = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&tmp)?;
+            f.write_all(content.as_bytes())?;
+        }
+        if let Some(p) = mode {
+            let _ = fs::set_permissions(&tmp, p);
+        }
+        match fs::rename(&tmp, path) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                let _ = fs::remove_file(&tmp);
+                Err(e)
             }
         }
     }
     // 测试环境 no-op:不写宿主真实 config(与 load 隔离配套)
     #[cfg(test)]
     pub fn save(&self) {}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn content_preserves_extra_lines() {
+        let mut cfg = Config::default();
+        cfg.apply_line("# hand-written note");
+        cfg.apply_line("custom_thing = 7");
+        cfg.apply_line("lang = zh");
+        let out = cfg.content();
+        assert!(out.contains("# hand-written note"), "注释行要回写");
+        assert!(out.contains("custom_thing = 7"), "未知键要回写");
+        assert!(out.contains("lang = zh"));
+        assert!(
+            out.starts_with("lang = "),
+            "已知键仍在固定头部,extra 只追加在尾"
+        );
+    }
+
+    #[test]
+    fn write_atomic_replaces_and_leaves_no_tmp() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static SEQ: AtomicUsize = AtomicUsize::new(0);
+        let n = SEQ.fetch_add(1, Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!("ltop-cfg-{}-{n}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("config.conf");
+        Config::write_atomic(&p, "first").unwrap();
+        assert_eq!(std::fs::read_to_string(&p).unwrap(), "first");
+        Config::write_atomic(&p, "second").unwrap();
+        assert_eq!(std::fs::read_to_string(&p).unwrap(), "second");
+        assert!(
+            !dir.join("config.conf.tmp").exists(),
+            "tmp 必须被 rename 吃掉"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

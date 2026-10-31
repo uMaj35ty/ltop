@@ -88,6 +88,80 @@ impl Default for Palette {
     }
 }
 
+/// WCAG large-text floor enforced on the dim role. btop's inactive_fg is
+/// decorative by convention, but ltop renders load-bearing text with it
+/// (table headers, session labels, tips) — 57 of 72 built-in themes ship
+/// an inactive_fg below 3:1 against main_bg, three of them literally
+/// equal to the background (invisible).
+const DIM_CONTRAST_FLOOR: f32 = 3.0;
+/// Blending is capped short of the text color so a lifted dim never
+/// becomes indistinguishable from regular text (hierarchy is preserved).
+const DIM_BLEND_CAP: f32 = 0.8;
+
+fn rel_lum(c: Color) -> f32 {
+    let Color::Rgb(r, g, b) = c else {
+        return 0.5;
+    };
+    // WCAG 2.x sRGB linearization; the u8 branch is precomputed to keep
+    // this cheap enough for the render path if it ever moves there
+    fn lin(v: u8) -> f32 {
+        let v = f32::from(v) / 255.0;
+        if v <= 0.03928 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
+    }
+    0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+}
+
+pub(crate) fn contrast_ratio(a: Color, b: Color) -> f32 {
+    let (la, lb) = (rel_lum(a), rel_lum(b));
+    let (hi, lo) = (la.max(lb), la.min(lb));
+    (hi + 0.05) / (lo + 0.05)
+}
+
+fn mix_rgb(a: Color, b: Color, t: f32) -> Option<Color> {
+    let (Color::Rgb(r1, g1, b1), Color::Rgb(r2, g2, b2)) = (a, b) else {
+        return None;
+    };
+    let mix = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
+    Some(Color::Rgb(mix(r1, r2), mix(g1, g2), mix(b1, b2)))
+}
+
+/// linear RGB blend (t=0 → a, t=1 → b); non-Rgb colors pass `a` through
+pub(crate) fn blend(a: Color, b: Color, t: f32) -> Color {
+    mix_rgb(a, b, t).unwrap_or(a)
+}
+
+/// Lift `dim` toward `text` until it reaches [`DIM_CONTRAST_FLOOR`] against
+/// `bg`. Transparent backgrounds (None) can't be measured, and non-Rgb
+/// colors (ANSI/named) aren't blended — both pass through unchanged.
+pub(crate) fn lift_dim(dim: Color, bg: Option<Color>, text: Color) -> Color {
+    let Some(bg) = bg else {
+        return dim;
+    };
+    if contrast_ratio(dim, bg) >= DIM_CONTRAST_FLOOR {
+        return dim;
+    }
+    let Some(first) = mix_rgb(dim, text, 0.05) else {
+        return dim;
+    };
+    let mut step = first;
+    let mut t = 0.05;
+    while t < DIM_BLEND_CAP {
+        if contrast_ratio(step, bg) >= DIM_CONTRAST_FLOOR {
+            return step;
+        }
+        t += 0.05;
+        let Some(next) = mix_rgb(dim, text, t) else {
+            break;
+        };
+        step = next;
+    }
+    step
+}
+
 /// omarchy 跟随模式标记(init/apply_omarchy 置位,apply_builtin 清除)
 static FOLLOWING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
@@ -113,7 +187,10 @@ fn cells() -> &'static (RwLock<Palette>, RwLock<String>) {
     })
 }
 
-fn set(pal: Palette, name: &str) {
+fn set(mut pal: Palette, name: &str) {
+    // single choke point: builtins, --theme files and omarchy follow-mode
+    // hot reloads all land here, so the dim floor covers every source
+    pal.dim = lift_dim(pal.dim, pal.bg, pal.text);
     *cells().0.write().unwrap() = pal;
     *cells().1.write().unwrap() = name.to_string();
 }
@@ -140,6 +217,12 @@ pub fn init() -> String {
         if load_file(&p) {
             return src;
         }
+        // an explicitly requested theme must not fail silently — the
+        // fallback (omarchy state / builtin) would mask a typo'd path
+        crate::usage_warn(
+            &format!("--theme {src}: could not load the theme file, falling back"),
+            &format!("--theme {src}:主题文件加载失败,已回退到候选主题"),
+        );
     }
     for p in omarchy_candidates() {
         if load_file(&p) {
@@ -299,7 +382,16 @@ pub(crate) fn parse_btop_str(content: &str) -> Option<Palette> {
     set(&mut pal.title, "title");
     set(&mut pal.hi, "hi_fg");
     set(&mut pal.dim, "inactive_fg");
-    set(&mut pal.accent, "graph_text");
+    // accent needs an on-palette fallback chain: 27 builtin themes ship
+    // without graph_text, and the bare key lookup silently kept the
+    // Dracula fallback cyan for IPs, clock and values
+    if let Some(c) = map
+        .get("graph_text")
+        .or(map.get("main_fg"))
+        .or(map.get("title"))
+    {
+        pal.accent = *c;
+    }
     set(&mut pal.border_net, "net_box");
     set(&mut pal.border_lan, "proc_box");
     set(&mut pal.border_disk, "mem_box");
@@ -465,5 +557,76 @@ mod tests {
                 "theme {name} failed to parse"
             );
         }
+    }
+
+    #[test]
+    fn all_builtin_themes_dim_meets_contrast_floor() {
+        for (name, content) in theme_data::BUILTIN_THEMES {
+            let Some(mut pal) = parse_btop_str(content) else {
+                continue;
+            };
+            pal.dim = lift_dim(pal.dim, pal.bg, pal.text);
+            if let Some(bg) = pal.bg {
+                assert!(
+                    contrast_ratio(pal.dim, bg) >= DIM_CONTRAST_FLOOR,
+                    "theme {name}: dim {:?} still below the floor after lift",
+                    pal.dim
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn accent_falls_back_on_palette_instead_of_dracula() {
+        // graph_text wins when present
+        let full = "theme[main_bg]=\"#111111\"\ntheme[main_fg]=\"#eeeeee\"\ntheme[graph_text]=\"#00ff00\"\n";
+        assert_eq!(parse_btop_str(full).unwrap().accent, Color::Rgb(0, 255, 0));
+        // no graph_text: main_fg keeps the accent on-palette (27 builtin
+        // themes ship without graph_text)
+        let no_gt = "theme[main_bg]=\"#111111\"\ntheme[main_fg]=\"#eeeeee\"\n";
+        assert_eq!(
+            parse_btop_str(no_gt).unwrap().accent,
+            Color::Rgb(0xee, 0xee, 0xee)
+        );
+        // neither: title is the last on-palette resort
+        let title_only = "theme[main_bg]=\"#111111\"\ntheme[title]=\"#123456\"\n";
+        assert_eq!(
+            parse_btop_str(title_only).unwrap().accent,
+            Color::Rgb(0x12, 0x34, 0x56)
+        );
+    }
+
+    /// every builtin theme must define main_fg itself — a missing key
+    /// silently inherits the Dracula fallback text color (omarchy-void)
+    #[test]
+    fn all_builtin_themes_define_main_fg() {
+        for (name, content) in theme_data::BUILTIN_THEMES {
+            assert!(
+                content
+                    .lines()
+                    .any(|l| l.trim_start().starts_with("theme[main_fg]")),
+                "theme {name} does not define main_fg"
+            );
+        }
+    }
+
+    #[test]
+    fn dim_lift_keeps_hierarchy_and_idempotence() {
+        // invisible dim (equal to bg) must be lifted but never reach text
+        let bgc = Color::Rgb(0x28, 0x2a, 0x36);
+        let bg = Some(bgc);
+        let text = Color::Rgb(0xf8, 0xf8, 0xf2);
+        let lifted = lift_dim(Color::Rgb(0x28, 0x2a, 0x36), bg, text);
+        assert!(contrast_ratio(lifted, bgc) >= DIM_CONTRAST_FLOOR);
+        assert_ne!(lifted, text, "lifted dim collapsed into plain text");
+
+        // compliant dim passes through untouched; lifting again is a no-op
+        let fine = Color::Rgb(0xee, 0xee, 0xee);
+        assert_eq!(lift_dim(fine, bg, text), fine);
+        assert_eq!(lift_dim(lifted, bg, text), lifted);
+
+        // transparent bg and non-Rgb colors are not measurable — unchanged
+        assert_eq!(lift_dim(fine, None, text), fine);
+        assert_eq!(lift_dim(Color::Indexed(8), bg, text), Color::Indexed(8));
     }
 }

@@ -178,7 +178,10 @@ mod tests {
         assert_eq!(session_ts("session-1792368483.jsonl"), Some(1792368483));
         assert_eq!(session_ts("ltop-log-1792368483.jsonl"), Some(1792368483));
         // -<pid> 后缀(同秒碰撞防护)与纯秒旧名都认
-        assert_eq!(session_ts("ltop-log-1792368483-1234.jsonl"), Some(1792368483));
+        assert_eq!(
+            session_ts("ltop-log-1792368483-1234.jsonl"),
+            Some(1792368483)
+        );
         assert_eq!(session_ts("session-abc.jsonl"), None);
         assert_eq!(session_ts("other.jsonl"), None);
         assert_eq!(session_ts("session-12.txt"), None);
@@ -189,8 +192,14 @@ mod tests {
             session_file_ts("ltop-session-1792368483-99.jsonl"),
             Some(1792368483)
         );
-        assert_eq!(session_file_ts("ltop-log-1792368483.jsonl"), Some(1792368483));
-        assert_eq!(session_file_ts("session-1792368483.jsonl"), Some(1792368483));
+        assert_eq!(
+            session_file_ts("ltop-log-1792368483.jsonl"),
+            Some(1792368483)
+        );
+        assert_eq!(
+            session_file_ts("session-1792368483.jsonl"),
+            Some(1792368483)
+        );
         assert_eq!(session_file_ts("other.jsonl"), None);
     }
 }

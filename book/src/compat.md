@@ -57,10 +57,17 @@ Documented differences from the Linux path:
   neighbour table enumerates empty, single-entry route queries answer with
   the MAC sanitized to the interface's synthetic address, and `getifaddrs`
   byte counters read frozen (all cross-checked in the same second against
-  Apple-signed tools). ltop routes around this: the NET box counts via
-  `netstat -ib`, and the LAN box rebuilds its neighbour list by probing the
-  kernel cache entry-by-entry over the route socket — IPs, mDNS hostnames
-  and traffic links are real; MAC addresses show as `—`.
+  Apple-signed tools). macOS 27 went further: even Apple-signed `arp` shelled
+  out from an app comes back empty, and `getifaddrs` reports every interface
+  MAC as `02:00:00:00:00:00` (access is now gated on the undocumented
+  `com.apple.developer.networking.topology-observation` entitlement, by
+  responsible-process attribution × platform signature). ltop routes around
+  what it can: the NET box counts via `netstat -ib`, the LAN box rebuilds its
+  neighbour list by probing the kernel cache entry-by-entry over the route
+  socket, and `ltop lan-setup` installs a per-user launchd agent that rotates
+  `arp`/`ifconfig` snapshots through Apple platform binaries — real MACs in
+  the LAN and NET boxes, no root, no entitlements. Without it, MAC addresses
+  show as `—`.
 - Bare-terminal framebuffer fonts may miss braille glyphs; rendering over
   SSH or in a proper terminal emulator shows them all.
 
@@ -80,5 +87,9 @@ crates.io (source), GitHub Releases tarballs (x86_64/aarch64), AUR
   semantics) — see the [FAQ](faq.md#conns-totals-include-traffic-from-before-ltop-started).
 - After an `ltop-bpf` restart the eBPF counters start from zero; the UI
   re-baselines automatically via snapshot instance IDs.
+- Config files: unknown keys and comments survive saves (0.2.10+), but a
+  *known* key carrying a value this build doesn't recognise (e.g. a sort
+  name introduced by a newer version) falls back to the default and is
+  rewritten on the next save.
 - On macOS only live sockets are counted (nettop semantics): a transfer
   completing within one sampling tick is missed.

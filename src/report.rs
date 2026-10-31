@@ -20,7 +20,7 @@ const DEFAULT_TOP: usize = 5;
 
 // ---------- 聚合结果 ----------
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct ProcAgg {
     pub name: String,
     pub net_recv: u64,
@@ -50,7 +50,7 @@ impl ProcAgg {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ConnAgg {
     pub inode: u64,
     pub proto: String,
@@ -71,7 +71,7 @@ impl ConnAgg {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Report {
     pub file: PathBuf,
     pub host: String,
@@ -167,8 +167,49 @@ impl Fields {
 
 // ---------- 载入 ----------
 
-/// 逐行读 JSONL,只收 schema v1 快照行;表头(watch_start/session_start)、
-/// 旧 v1 行(无 schema 字段)、写到一半的行都计入 skipped
+/// 单行解析结果:Blank=空行静默跳过,Invalid=计入 skipped,Snap=有效快照
+/// (Snapshot 体积大,Box 避免枚举膨胀——每行一个瞬态值)
+enum ParseOutcome {
+    Blank,
+    Invalid,
+    Snap(Box<Snapshot>),
+}
+
+/// schema v1 快照行解析,物化(load)与流式(aggregate_file)两路共用:
+/// 坏 JSON / 无 schema 字段 / schema 不符 / 字段不符都算 Invalid;
+/// 主机名与进程/连接名进人读表与 --json 前剥控制符(serde 会把
+/// \u001b 解码为真实 ESC,print 路径裸写终端)
+fn parse_snapshot_line(line: &str) -> ParseOutcome {
+    let line = line.trim();
+    if line.is_empty() {
+        return ParseOutcome::Blank;
+    }
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+        return ParseOutcome::Invalid;
+    };
+    if v.get("schema").and_then(|s| s.as_u64()) != Some(snapshot::SCHEMA as u64) {
+        return ParseOutcome::Invalid;
+    }
+    match serde_json::from_value::<Snapshot>(v) {
+        Ok(mut s) => {
+            s.meta.hostname = crate::sanitize_text(&s.meta.hostname);
+            for p in &mut s.procs {
+                p.name = crate::sanitize_text(&p.name);
+            }
+            for c in &mut s.conns {
+                if let Some(pn) = &mut c.process {
+                    *pn = crate::sanitize_text(pn);
+                }
+                c.state = crate::sanitize_text(&c.state);
+            }
+            ParseOutcome::Snap(Box::new(s))
+        }
+        Err(_) => ParseOutcome::Invalid,
+    }
+}
+
+/// 物化载入:全量快照进内存。仅单测与等价对拍用;
+/// run 的命令行路径走 aggregate_file 流式版
 pub fn load(path: &std::path::Path, zh: bool) -> Result<(Vec<Snapshot>, usize)> {
     let f = std::fs::File::open(path).with_context(|| {
         crate::pick_s(
@@ -181,35 +222,10 @@ pub fn load(path: &std::path::Path, zh: bool) -> Result<(Vec<Snapshot>, usize)> 
     let mut skipped = 0usize;
     for line in std::io::BufReader::new(f).lines() {
         let line = line?;
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-        let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
-            skipped += 1;
-            continue;
-        };
-        if v.get("schema").and_then(|s| s.as_u64()) != Some(snapshot::SCHEMA as u64) {
-            skipped += 1;
-            continue;
-        }
-        match serde_json::from_value::<Snapshot>(v) {
-            Ok(mut s) => {
-                // 外部文件:名字/主机名进人读表与 --json 前剥控制符
-                // (serde 会把 \u001b 解码为真实 ESC,print 路径裸写终端)
-                s.meta.hostname = crate::sanitize_text(&s.meta.hostname);
-                for p in &mut s.procs {
-                    p.name = crate::sanitize_text(&p.name);
-                }
-                for c in &mut s.conns {
-                    if let Some(pn) = &mut c.process {
-                        *pn = crate::sanitize_text(pn);
-                    }
-                    c.state = crate::sanitize_text(&c.state);
-                }
-                out.push(s);
-            }
-            Err(_) => skipped += 1,
+        match parse_snapshot_line(&line) {
+            ParseOutcome::Blank => {}
+            ParseOutcome::Invalid => skipped += 1,
+            ParseOutcome::Snap(s) => out.push(*s),
         }
     }
     Ok((out, skipped))
@@ -217,31 +233,55 @@ pub fn load(path: &std::path::Path, zh: bool) -> Result<(Vec<Snapshot>, usize)> 
 
 // ---------- 聚合 ----------
 
-/// 纯聚合(输入 = 有效快照序列),供 run 与单测共用
-pub fn build(snaps: Vec<Snapshot>, skipped: usize, file: PathBuf) -> Report {
-    let host = snaps
-        .first()
-        .map(|s| s.meta.hostname.clone())
-        .unwrap_or_default();
-    let start = snaps.first().map(|s| s.meta.ts).unwrap_or(0);
-    let end = snaps.last().map(|s| s.meta.ts).unwrap_or(0);
-
-    let mut procs: HashMap<String, ProcAgg> = HashMap::new();
+/// 流式聚合状态:逐快照喂入,主驻留项(整段 Vec<Snapshot>)消失,只剩
+/// 聚合去重态(进程名 / 连接 inode,随窗口内 churn 增长、与旧 build 持平)
+/// —— report 长窗口(7 天 × 5s ≈ 十二万行)不再全量驻留
+struct ReportAcc {
+    host: Option<String>,
+    start: u64,
+    end: u64,
+    snapshots: usize,
+    procs: HashMap<String, ProcAgg>,
     // (name, pid) → 上一快照累计;分段差分,clamp 处理计数器重置
-    let mut proc_prev: HashMap<(String, u32), [u64; 6]> = HashMap::new();
+    proc_prev: HashMap<(String, u32), [u64; 6]>,
     // inode → (聚合, 上一快照在场, 上一累计);中途消失不计其后的窗口
-    let mut conns: HashMap<u64, (ConnAgg, bool, (u64, u64))> = HashMap::new();
-    let mut if_first: HashMap<String, (u64, u64)> = HashMap::new();
-    let mut if_last: HashMap<String, (u64, u64)> = HashMap::new();
-    let mut peak: Option<(u64, f64, f64)> = None;
-    let mut dts: Vec<u64> = Vec::new();
-    let mut prev_ts: Option<u64> = None;
+    conns: HashMap<u64, (ConnAgg, bool, (u64, u64))>,
+    if_first: HashMap<String, (u64, u64)>,
+    if_last: HashMap<String, (u64, u64)>,
+    peak: Option<(u64, f64, f64)>,
+    dts: Vec<u64>,
+    prev_ts: Option<u64>,
+}
 
-    for s in &snaps {
+impl ReportAcc {
+    fn new() -> Self {
+        Self {
+            host: None,
+            start: 0,
+            end: 0,
+            snapshots: 0,
+            procs: HashMap::new(),
+            proc_prev: HashMap::new(),
+            conns: HashMap::new(),
+            if_first: HashMap::new(),
+            if_last: HashMap::new(),
+            peak: None,
+            dts: Vec::new(),
+            prev_ts: None,
+        }
+    }
+
+    fn feed(&mut self, s: &Snapshot) {
+        if self.host.is_none() {
+            self.host = Some(s.meta.hostname.clone());
+            self.start = s.meta.ts;
+        }
+        self.end = s.meta.ts;
+        self.snapshots += 1;
         let ts = s.meta.ts;
-        if let Some(pt) = prev_ts {
+        if let Some(pt) = self.prev_ts {
             if ts > pt {
-                dts.push(ts - pt);
+                self.dts.push(ts - pt);
             }
         }
 
@@ -254,11 +294,12 @@ pub fn build(snaps: Vec<Snapshot>, skipped: usize, file: PathBuf) -> Report {
                 p.disk_read,
                 p.disk_written,
             ];
-            let agg = procs.entry(p.name.clone()).or_insert_with(|| ProcAgg {
+            let agg = self.procs.entry(p.name.clone()).or_insert_with(|| ProcAgg {
                 name: p.name.clone(),
                 ..Default::default()
             });
-            let base = proc_prev
+            let base = self
+                .proc_prev
                 .get(&(p.name.clone(), p.pid))
                 .copied()
                 .unwrap_or(cur);
@@ -288,7 +329,7 @@ pub fn build(snaps: Vec<Snapshot>, skipped: usize, file: PathBuf) -> Report {
             if p.disk_bps_written > agg.peak_disk_w {
                 agg.peak_disk_w = p.disk_bps_written;
             }
-            if let Some(pt) = prev_ts {
+            if let Some(pt) = self.prev_ts {
                 if ts > pt {
                     let dt = (ts - pt) as f64;
                     if dt > 0.0 {
@@ -311,12 +352,12 @@ pub fn build(snaps: Vec<Snapshot>, skipped: usize, file: PathBuf) -> Report {
                 agg.samples += 1;
             }
             agg.last_alive = p.alive;
-            proc_prev.insert((p.name.clone(), p.pid), cur);
+            self.proc_prev.insert((p.name.clone(), p.pid), cur);
         }
 
         let mut seen: HashSet<u64> = HashSet::new();
         for c in &s.conns {
-            let e = conns.entry(c.inode).or_insert_with(|| {
+            let e = self.conns.entry(c.inode).or_insert_with(|| {
                 (
                     ConnAgg {
                         inode: c.inode,
@@ -352,65 +393,116 @@ pub fn build(snaps: Vec<Snapshot>, skipped: usize, file: PathBuf) -> Report {
             agg.state = c.state.clone();
             seen.insert(c.inode);
         }
-        for (inode, (_, present, _)) in conns.iter_mut() {
+        for (inode, (_, present, _)) in self.conns.iter_mut() {
             if !seen.contains(inode) {
                 *present = false;
             }
         }
 
         for i in &s.net.interfaces {
-            if_first
+            self.if_first
                 .entry(i.name.clone())
                 .or_insert((i.session_rx, i.session_tx));
-            if_last.insert(i.name.clone(), (i.session_rx, i.session_tx));
+            self.if_last
+                .insert(i.name.clone(), (i.session_rx, i.session_tx));
         }
         let (rxs, txs) = s
             .net
             .interfaces
             .iter()
             .fold((0.0_f64, 0.0_f64), |a, i| (a.0 + i.rx_bps, a.1 + i.tx_bps));
-        if peak.is_none_or(|(_, pr, pt)| rxs + txs > pr + pt) {
-            peak = Some((ts, rxs, txs));
+        if self.peak.is_none_or(|(_, pr, pt)| rxs + txs > pr + pt) {
+            self.peak = Some((ts, rxs, txs));
         }
 
-        prev_ts = Some(ts);
+        self.prev_ts = Some(ts);
     }
 
-    let (nic_rx, nic_tx) = if_last
-        .iter()
-        .filter_map(|(k, last)| {
-            let first = if_first.get(k)?;
-            Some((
-                last.0.saturating_sub(first.0),
-                last.1.saturating_sub(first.1),
-            ))
-        })
-        .fold((0, 0), |a, x| (a.0 + x.0, a.1 + x.1));
+    fn finish(self, skipped: usize, file: PathBuf) -> Report {
+        let (nic_rx, nic_tx) = self
+            .if_last
+            .iter()
+            .filter_map(|(k, last)| {
+                let first = self.if_first.get(k)?;
+                Some((
+                    last.0.saturating_sub(first.0),
+                    last.1.saturating_sub(first.1),
+                ))
+            })
+            .fold((0, 0), |a, x| (a.0 + x.0, a.1 + x.1));
 
-    dts.sort_unstable();
-    let interval_s = dts.get(dts.len() / 2).copied().unwrap_or(0);
+        let mut dts = self.dts;
+        dts.sort_unstable();
+        let interval_s = dts.get(dts.len() / 2).copied().unwrap_or(0);
 
-    let mut procs: Vec<ProcAgg> = procs.into_values().collect();
-    procs.sort_by_key(|p| std::cmp::Reverse(p.traffic()));
-    let mut conns: Vec<ConnAgg> = conns.into_values().map(|(c, _, _)| c).collect();
-    conns.sort_by_key(|c| std::cmp::Reverse(c.traffic()));
+        let mut procs: Vec<ProcAgg> = self.procs.into_values().collect();
+        procs.sort_by_key(|p| std::cmp::Reverse(p.traffic()));
+        let mut conns: Vec<ConnAgg> = self.conns.into_values().map(|(c, _, _)| c).collect();
+        conns.sort_by_key(|c| std::cmp::Reverse(c.traffic()));
 
-    Report {
-        file,
-        host,
-        start,
-        end,
-        snapshots: snaps.len(),
-        interval_s,
-        skipped,
-        nic_rx,
-        nic_tx,
-        peak_ts: peak.map(|(t, _, _)| t).unwrap_or(0),
-        peak_rx_bps: peak.map(|(_, r, _)| r).unwrap_or(0.0),
-        peak_tx_bps: peak.map(|(_, _, t)| t).unwrap_or(0.0),
-        procs,
-        conns,
+        Report {
+            file,
+            host: self.host.unwrap_or_default(),
+            start: self.start,
+            end: self.end,
+            snapshots: self.snapshots,
+            interval_s,
+            skipped,
+            nic_rx,
+            nic_tx,
+            peak_ts: self.peak.map(|(t, _, _)| t).unwrap_or(0),
+            peak_rx_bps: self.peak.map(|(_, r, _)| r).unwrap_or(0.0),
+            peak_tx_bps: self.peak.map(|(_, _, t)| t).unwrap_or(0.0),
+            procs,
+            conns,
+        }
     }
+}
+
+/// 纯聚合(输入 = 有效快照序列),供单测与等价对拍共用;
+/// run 的命令行路径走 aggregate_file 流式版
+pub fn build(snaps: Vec<Snapshot>, skipped: usize, file: PathBuf) -> Report {
+    let mut acc = ReportAcc::new();
+    for s in &snaps {
+        acc.feed(s);
+    }
+    acc.finish(skipped, file)
+}
+
+/// 流式聚合:逐行读 JSONL 直接喂聚合器,不经 Vec<Snapshot>。
+/// --proc 过滤在喂入前逐行做,与物化路径的逐快照 retain 等价
+fn aggregate_file(
+    path: &std::path::Path,
+    zh: bool,
+    proc: Option<&str>,
+) -> Result<(ReportAcc, usize, usize)> {
+    let f = std::fs::File::open(path).with_context(|| {
+        crate::pick_s(
+            zh,
+            &format!("cannot open {}", path.display()),
+            &format!("打不开 {}", path.display()),
+        )
+    })?;
+    let mut acc = ReportAcc::new();
+    let mut skipped = 0usize;
+    let mut snapshots = 0usize;
+    for line in std::io::BufReader::new(f).lines() {
+        let line = line?;
+        match parse_snapshot_line(&line) {
+            ParseOutcome::Blank => {}
+            ParseOutcome::Invalid => skipped += 1,
+            ParseOutcome::Snap(mut s) => {
+                if let Some(f) = proc {
+                    s.procs.retain(|p| name_match(f, &p.name));
+                    s.conns
+                        .retain(|c| c.process.as_deref().is_some_and(|pn| name_match(f, pn)));
+                }
+                acc.feed(&s);
+                snapshots += 1;
+            }
+        }
+    }
+    Ok((acc, skipped, snapshots))
 }
 
 // ---------- CLI ----------
@@ -463,7 +555,13 @@ pub fn run(args: &[String]) -> Result<()> {
             }
             "--json" => as_json = true,
             a if a.starts_with('-') && a != "-" => {
-                bail!("ltop report: unknown option {a} (try --help)")
+                bail!(
+                    "{}",
+                    p(
+                        &format!("ltop report: unknown option {a} (try --help)"),
+                        &format!("ltop report: 未知选项 {a}(试 --help)")
+                    )
+                )
             }
             a => {
                 if file.replace(PathBuf::from(a)).is_some() {
@@ -488,8 +586,9 @@ pub fn run(args: &[String]) -> Result<()> {
             )
         )
     };
-    let (mut snaps, skipped) = load(&path, zh)?;
-    if snaps.is_empty() {
+    // 流式聚合:逐行读直接喂,内存只留聚合态(长窗口不 OOM)
+    let (acc, skipped, snapshots) = aggregate_file(&path, zh, proc.as_deref())?;
+    if snapshots == 0 {
         let tail = if skipped > 0 {
             p(
                 &format!("skipped {skipped} lines"),
@@ -512,14 +611,7 @@ pub fn run(args: &[String]) -> Result<()> {
             )
         );
     }
-    if let Some(f) = &proc {
-        for s in &mut snaps {
-            s.procs.retain(|p| name_match(f, &p.name));
-            s.conns
-                .retain(|c| c.process.as_deref().is_some_and(|pn| name_match(f, pn)));
-        }
-    }
-    let r = build(snaps, skipped, path.clone());
+    let r = acc.finish(skipped, path.clone());
     if as_json {
         println!("{}", json_summary(&r, top, fields));
     } else {
@@ -961,6 +1053,56 @@ mod tests {
         assert_eq!(snaps.len(), 3);
         assert_eq!(skipped, 3, "表头 + 旧 v1 + 半行都应跳过");
         build(snaps, skipped, PathBuf::from("t.jsonl"))
+    }
+
+    /// 独立临时文件(不立删:流式与物化两条路径都要读)
+    fn sample_file() -> std::path::PathBuf {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static SEQ: AtomicUsize = AtomicUsize::new(0);
+        let n = SEQ.fetch_add(1, Ordering::SeqCst);
+        let dir =
+            std::env::temp_dir().join(format!("ltop-report-stream-{}-{n}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("ltop-session-1.jsonl");
+        std::fs::write(&p, SAMPLE).unwrap();
+        p
+    }
+
+    /// 流式(aggregate_file)与物化(load+build)必须产出一致 Report
+    /// —— 0.2.10 流式化守门:run 已切流式,聚合语义漂移在此暴露
+    #[test]
+    fn streaming_aggregation_matches_materialized() {
+        let p = sample_file();
+        let (snaps, skipped) = load(&p, false).unwrap();
+        let materialized = build(snaps, skipped, PathBuf::from("t.jsonl"));
+        let (acc, s_skipped, s_snaps) = aggregate_file(&p, false, None).unwrap();
+        assert_eq!(s_snaps, 3);
+        assert_eq!(s_skipped, skipped, "两条路径 skipped 口径一致");
+        assert_eq!(
+            materialized,
+            acc.finish(s_skipped, PathBuf::from("t.jsonl"))
+        );
+
+        // --proc 过滤路径同样必须一致(流式在喂入前逐行 retain)
+        let (mut snaps, skipped) = load(&p, false).unwrap();
+        for s in &mut snaps {
+            s.procs.retain(|pr| name_match("chrome", &pr.name));
+            s.conns.retain(|c| {
+                c.process
+                    .as_deref()
+                    .is_some_and(|pn| name_match("chrome", pn))
+            });
+        }
+        let materialized = build(snaps, skipped, PathBuf::from("t.jsonl"));
+        let (acc, s_skipped, _) = aggregate_file(&p, false, Some("chrome")).unwrap();
+        assert_eq!(
+            materialized,
+            acc.finish(s_skipped, PathBuf::from("t.jsonl"))
+        );
+
+        if let Some(dir) = p.parent() {
+            let _ = std::fs::remove_dir_all(dir);
+        }
     }
 
     #[test]

@@ -48,9 +48,15 @@ macOS 没有 eBPF; 同样六个盒子读 Apple 原生源:
   传输不计入。（eBPF 路径在系统调用处计数，不漏。）
 - **系统对非 Apple 签名二进制隐藏部分本地网络**——与"本地网络"隐私开关
   无关: 邻居表枚举为空，单条路由查询返回的 MAC 被脱敏成接口合成地址，
-  `getifaddrs` 字节计数冻结（全部与 Apple 签名工具同秒交叉验证过）。ltop
-  的绕法: NET 盒改用 `netstat -ib` 计数，LAN 盒经路由 socket 逐条探测内核
-  缓存重建邻居列表——IP、mDNS 主机名和流量链路是真的; MAC 显示 `—`。
+  `getifaddrs` 字节计数冻结（全部与 Apple 签名工具同秒交叉验证过）。
+  macOS 27 更进一步: 从应用里 shell 出的 Apple 签名 `arp` 也返回空，
+  `getifaddrs` 把所有网卡 MAC 报成 `02:00:00:00:00:00`（读取权改由未公开
+  的 `com.apple.developer.networking.topology-observation` entitlement 按
+  「责任进程归因 × 平台签名」双维度门控）。ltop 的绕法: NET 盒改用
+  `netstat -ib` 计数，LAN 盒经路由 socket 逐条探测内核缓存重建邻居列表，
+  `ltop lan-setup` 另装一个每用户 launchd 代理，经 Apple 平台签名工具
+  轮转 `arp`/`ifconfig` 快照——LAN/NET 盒显示真实 MAC，免 root、免
+  entitlement。未启用时 MAC 显示 `—`。
 - 裸终端的帧buffer 字体可能缺盲文字形; 走 ssh 或用正经终端模拟器则齐全。
 
 ## 分发渠道回顾
@@ -67,4 +73,6 @@ macOS 没有 eBPF; 同样六个盒子读 Apple 原生源:
 - CONNS 的 TCP 总量含整条连接生命周期（内核语义）——见
   [FAQ](faq.md#conns-总量包含-ltop-启动之前的流量)。
 - `ltop-bpf` 重启后 eBPF 计数从零开始; UI 经快照实例 ID 自动重新基线。
+- 配置文件: 未知键与注释行在保存时保留（0.2.10+），但**已知键**携带本版本
+  不认识的值时（如更新版本新增的排序名），会回落默认并在下次保存时被重写。
 - macOS 只计活 socket（nettop 语义）: 一个采样周期内完成的传输不计。

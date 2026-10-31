@@ -317,7 +317,19 @@ impl LanCollector {
             let raw = arp_an_output();
             // 正常输出至少含 incomplete 条目;0 行 = 被隐私机制静默拦截
             self.arp_blocked = raw.lines().next().is_none();
-            parse_arp_an(&raw)
+            let mut parsed = parse_arp_an(&raw);
+            if self.arp_blocked {
+                // 27 门控:app 归因下连 Apple 签名 arp 都被蒙空(实测),退避
+                // 到 launchd 代理快照(ltop lan-setup 安装,只读文件零门控)
+                if let Some(snap) = crate::collect::lan_snapshot::load_arp_entries() {
+                    self.arp_blocked = false;
+                    parsed = snap
+                        .into_iter()
+                        .map(|(ip, mac, iface)| (ip, Some(mac), iface))
+                        .collect();
+                }
+            }
+            parsed
         };
         for (ip, mac, iface) in entries {
             let complete = mac.is_some();
@@ -654,11 +666,7 @@ fn query_id() -> u16 {
         .map(|d| d.subsec_nanos())
         .unwrap_or(0);
     let c = COUNTER.fetch_add(0x9E37_79B9, Ordering::Relaxed);
-    let x = nanos
-        .wrapping_mul(0x9E37_79B1)
-        ^ c
-        ^ (c >> 16)
-        ^ std::process::id();
+    let x = nanos.wrapping_mul(0x9E37_79B1) ^ c ^ (c >> 16) ^ std::process::id();
     (((x >> 8) ^ x) & 0xFFFF) as u16
 }
 
@@ -826,9 +834,7 @@ fn resolve_nbns(ip: Ipv4Addr) -> Option<String> {
         let until = Instant::now() + Duration::from_millis(400);
         while Instant::now() < until {
             match sock.recv_from(&mut buf) {
-                Ok((n, src))
-                    if src.ip() == ip && reply_id_matches(&buf[..n], id) =>
-                {
+                Ok((n, src)) if src.ip() == ip && reply_id_matches(&buf[..n], id) => {
                     if let Some(name) = parse_nbns_response(&buf[..n]) {
                         let name = name.trim_end_matches('\0').trim().to_lowercase();
                         // a reverse-encoded address or an empty string is not a name

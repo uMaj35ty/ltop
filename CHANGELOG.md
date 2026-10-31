@@ -3,6 +3,198 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.13] - 2026-10-31
+
+### Added
+
+- **btop-style scrollbar for the disks list** — an overflowing DISKS box
+  draws a scrollbar in its right edge (`↑`/`↓` arrows, one-row `█` thumb on
+  a blank track, focus-independent). The track is interactive: click above/
+  below the thumb to page, grab the thumb and drag to scroll (mouse-drag
+  events were previously ignored). The wheel already scrolled without focus;
+  now the affordance is visible
+- **the disks list is keyboard-browsable** — `d` (mounts expand/collapse)
+  now also aims the arrow/Home/End/g/G keys at the disks box, waking up the
+  scroll-only branch of `jump_selection`; disks never enters the p/c/l focus
+  model, so zoom/enter/k are untouched
+- **fs type tail in the DISKS device label** — the filesystem type renders
+  as a dim ` · ext4` suffix after the device name (identity info that stays
+  visible on narrow terminals, where the pretty-alias/mount tail truncates
+  first)
+
+### Removed
+
+- **the device tree on macOS** — the DISKS box there now lists mounted
+  volumes only. VMs and simulators attach their virtual disks as
+  host-visible synthesized devices — often a dozen or more per machine —
+  and the host cannot see anything about their internal capacity or usage,
+  so those rows would be pure noise (one physical SSD listed 30+ nodes).
+  Linux keeps the full tree: a Linux VM's disks never appear as host block
+  devices (they are plain files in a filesystem), so the tree reflects real
+  hardware — disk → partition → dm with unmounted rows, where LUKS/LVM
+  layering is the point. The macOS list falls out of the same source — an
+  empty tree falls back to a flat mounted-volumes table (same rows,
+  scrollbar, mount expand/collapse and fs-type tail)
+
+### Fixed
+
+- **pid-reuse guard on kill/restart confirmations** — the kill and restart
+  dialogs now snapshot the target's command line when they open and
+  re-verify the pid against the process ledger before any signal: a process
+  that exits while the dialog is open and has its pid recycled can no longer
+  route a SIGTERM to an unrelated process (restart relaunches only after a
+  verified exit, or directly when the verified process already exited)
+- **PageUp/PageDown page by visible height** — they previously stepped 3
+  rows, indistinguishable from one arrow press; the page size now matches
+  the box's capacity and is reused by the scrollbar's track clicks
+
+### Changed
+
+- **absolute used bytes in the DISKS USED cell** — the cell now reads
+  bar + percent + used (dim), e.g. `▓▓░ 3% 12.7GiB`. On macOS the used
+  figure comes from `getattrlist(ATTR_VOL_SPACEUSED)` — the same per-volume
+  source `df` uses — because statfs' `f_bfree` on APFS is the container's
+  shared pool: `total − free` came out identical on every volume of a
+  container (400 GiB each on a machine whose volumes actually use
+  12.7 / 375 / 1.8 GiB). statfs' container-level total stays as the
+  capacity figure (df's Total column matches). The USED column widens
+  16 → 21; applies to tree rows and volume rows alike
+- **first-run refresh defaults to 2.0s** — `tick_ms` ships as 2000 (was
+  1000): plenty for a monitor's cadence, gentler on idle machines. Config
+  files that name `tick_ms` explicitly are unaffected, and `+`/`-` still
+  steps ±250 ms
+- **the DISKS title badge counts mounted volumes, not tracked devices** —
+  the old `N dev` was the rate/capacity data-plane size, which on macOS
+  includes the always-zero synthesized APFS layer and every mounted
+  simulator runtime image (one physical SSD reported as "32 dev"). The
+  badge is now `N vol` = devices carrying at least one mountpoint; on Linux
+  the tree below still shows the full physical hierarchy
+- **CI gains a supply-chain gate and a format gate** — `cargo-deny`
+  (RustSec advisories, license allowlist, registry provenance, `deny.toml`)
+  and `cargo fmt --check` join the test/clippy matrix; the tree is
+  rustfmt-normalized
+- the `deploy/aur/.SRCINFO` copy now tracks the PKGBUILD it describes
+  (it was a v0.2.4 fossil; the PKGBUILD itself already references
+  `v$pkgver`, so per-release regeneration keeps the service-file source and
+  checksums aligned)
+
+### Internal
+
+- Tests: scrollbar render (arrows/thumb positions, no-overflow case),
+  hit-test and drag-mapping geometry kernels (pure, no shared state), `d`
+  key targeting, page-size stepping, jump keys on disks, fstype tail
+  rendering, the macOS volumes-fallback list (mounted only, badge count),
+  and the pid-reuse verdict matrix
+
+## [0.2.12] - 2026-10-29
+
+### Fixed
+
+- **dim text visibility across themes**: btop's `inactive_fg` is decorative
+  by convention, but ltop renders table headers, session labels and tips
+  with it — 52 built-in themes sat below a 3:1 contrast ratio and three
+  (everforest-dark-hard/-medium, gruvbox_material_dark) shipped an
+  inactive_fg identical to the background (invisible). The palette now
+  enforces a WCAG 3:1 floor at load: dim is blended toward the text color
+  until it reads, capped short of plain text so the hierarchy survives.
+  Applies to builtins, `--theme` files and omarchy hot reloads alike;
+  transparent-background themes are left untouched (not measurable)
+- **on-palette accent fallback**: 27 built-in themes ship without
+  `graph_text`, silently leaving IPs, clock and values in the Dracula
+  fallback cyan. `graph_text` now falls back to `main_fg`, then `title`
+- omarchy-void shipped without `main_fg` and silently inherited the
+  Dracula text color
+- `--theme <file>` failures no longer fall back silently: a warning names
+  the file that could not be loaded
+- unattributed connections (macOS: other users' / system sockets, the
+  `NO_UID` sentinel) now group and label as `n/a` instead of printing the
+  raw `uid:4294967295`; documented in the FAQ alongside `sudo ltop`
+
+### Changed
+
+- **selection/expansion contrast is theme-derived, not hardcoded**: the
+  two-line selection overlay sweeps the download-gradient hue over the
+  theme background until it is both visible against the row background
+  and readable under its span colors (previously a fixed 12% wash that
+  vanished on themes whose gradient start ≈ the background); the left
+  anchor bar falls back to a readable fg when accent blends into the
+  wash. Expanded CONNS aggregate rows and tracked/pinned rows (CONNS,
+  PROCS, LAN) now keep their hue but move luminance until the theme text
+  reads at WCAG 3:1, and their foreground picks the better-reading of
+  the theme's two anchors instead of hardcoded black/white
+- eBPF helper updated to aya 0.16 (aya-obj unified at 0.6; no API changes)
+- **udp snapshots carry a schema version** (`"v":1` leading field);
+  `ltop --dump` shows the running daemon's version, so a stale helper
+  left behind by PATH shadowing (`/usr/local/bin` before `~/.cargo/bin`)
+  becomes detectable. Pre-versioning helpers (≤0.2.11) read back as none
+
+## [0.2.11] - 2026-10-25
+
+Docs-site performance and a LAN-box usability closure: the macOS privacy
+hint now tells you the fix, chapter images are natively rendered at small
+size, and the AtomGit mirror joins the documented channels.
+
+### Added
+
+- **LAN box hint when macOS gates neighbour MACs**: the box now shows an
+  actionable dim footer — `ltop lan-setup` restores real MACs (no root) —
+  instead of only describing the restriction; it also renders when the
+  RTM scan has populated mac-less rows (list non-empty), the state users
+  actually hit. Clears itself once the snapshot agent supplies MACs
+- AtomGit mirror documented as a channel: clone URL in the installation
+  chapters (en/zh) and the skills pages (China-network friendly)
+
+### Changed
+
+- **Chapter screenshots natively rendered at small size**: the
+  introduction and tui chapter images are real terminal captures
+  (asciinema + agg glyph rendering, text crisp) shipped as lossless WebP
+  — pixel-identical, 3.3× smaller than the previous PNGs (intro
+  107→33 KB, tall 135→37 KB, wide 161→49 KB)
+- lan-setup reminders in the README quick-install (en/zh) and the site
+  quickstart step 1
+- compat chapter (en/zh): documented the known-key config fallback
+  limitation
+
+## [0.2.10] - 2026-10-24
+
+Tech-debt and QoL line: long-window `report` no longer loads whole capture
+files, real MAC addresses on macOS behind the 27 privacy gate, ledger and
+config hygiene.
+
+### Added
+
+- **`ltop lan-setup` (macOS)** — installs a per-user launchd agent that
+  rotates `arp -a -n` / `ifconfig` snapshots every 30 s via Apple platform
+  binaries, so the LAN and NET boxes show real neighbour and interface MACs
+  on macOS 27 (which gates that data by responsible-process attribution ×
+  platform signature: even Apple-signed `arp` run from an app comes back
+  empty, and `getifaddrs` MACs read `02:00:00:00:00:00`). No root, no
+  entitlements; `--remove` undoes it; missing/stale snapshots fall back to
+  the previous in-process paths. `ltop lan-setup --remove` reverts cleanly
+- **eBPF sk_ino invalidation** — `kprobe/inet_sock_destruct` clears the
+  sk→inode cache when a socket dies, closing the low-probability
+  mis-attribution after SLAB address reuse that the 0.2.7 audit documented
+  (kernels without the symbol fall back to the old LRU-eviction semantics)
+
+### Changed
+
+- **`ltop report` streams** — snapshots are aggregated line-by-line instead
+  of materialized; a 7-day × 5 s window (~120 k snapshots) no longer sits
+  fully in RAM (OOM risk on long watch captures). Output is byte-identical
+  (equivalence test pins both paths)
+- **proc ledger keyed by pid with generation reset** — a process renaming
+  itself no longer splits into two ledger rows (name follows the latest
+  comm), and a pid reuse zeroes the old generation's counters instead of
+  silently mixing them
+- **config writes are atomic** (same-dir tmp + rename) and unknown keys /
+  comment lines are preserved verbatim across saves instead of being
+  silently dropped
+- **CLI usage errors follow one convention** — `ltop[ sub]: <message>
+  (try --help)`, bilingual per the user's language setting, exit code 1
+- **udp writer switch clears `last_inodes`** — the detail panel no longer
+  lists inode rows from a previous ltop-bpf generation after it takes over
+
 ## [0.2.9] - 2026-10-24
 
 Network & security audit across all four release targets (Linux/macOS ×

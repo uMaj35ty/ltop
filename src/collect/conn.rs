@@ -104,10 +104,16 @@ impl ConnSort {
     }
 }
 
-/// 进程分组的归属键:有归属用进程名,否则 uid 标签。
+/// 进程分组的归属键:有归属用进程名,否则 uid 标签;NO_UID(=u32::MAX,
+/// mac 上归不上的他人/系统 socket)显示 n/a,与名称列一致,不再把哨兵
+/// 值原样打成 uid:4294967295。
 /// 键是名字本身——不同 pid 的同名进程(如多 worker)归入同组。
 pub(crate) fn owner_key(c: &Conn) -> String {
-    c.proc.clone().unwrap_or_else(|| format!("uid:{}", c.uid))
+    match &c.proc {
+        Some(p) => p.clone(),
+        None if c.uid == crate::collect::nettop::NO_UID => "n/a".to_string(),
+        None => format!("uid:{}", c.uid),
+    }
 }
 
 /// 同名进程的连接相邻;组按会话合计流量(收+发)降序,组内按合计降序、
@@ -381,8 +387,8 @@ impl ConnCollector {
     }
 
     pub fn user_name(&self, uid: u32) -> String {
-        // mac 他人进程的连接没有 uid 信息(nettop 不提供),显示 n/a
-        #[cfg(target_os = "macos")]
+        // mac 他人进程的连接没有 uid 信息(nettop 不提供),显示 n/a;
+        // (uid_t)-1 在 Linux 同为非法值,检查不分平台
         if uid == crate::collect::nettop::NO_UID {
             return "n/a".to_string();
         }
@@ -751,6 +757,21 @@ mod tests {
             first_seen: None,
             dead_at: None,
         }
+    }
+
+    #[test]
+    fn no_uid_rows_label_and_group_as_na() {
+        // mac:归不上的他人/系统 socket 携带 NO_UID 哨兵;分组键必须与
+        // 名称列一致显示 n/a,而不是把 4294967295 打出来
+        let mut c = udp_row(1);
+        c.uid = crate::collect::nettop::NO_UID;
+        assert_eq!(owner_key(&c), "n/a");
+        // 有归属时进程名优先;普通 uid 行仍是 uid: 标签
+        c.proc = Some("mdnsresponder".into());
+        assert_eq!(owner_key(&c), "mdnsresponder");
+        c.proc = None;
+        c.uid = 1000;
+        assert_eq!(owner_key(&c), "uid:1000");
     }
 
     #[test]

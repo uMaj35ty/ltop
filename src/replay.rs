@@ -671,7 +671,10 @@ mod tests {
         );
         let ses = load_str("cur_schema", cur);
         assert_eq!(ses.host, "lima", "watch 头的 host 必须解析");
-        assert_eq!(ses.start, 1700000000, "watch_start 必须被识别(0 = 显示 1970)");
+        assert_eq!(
+            ses.start, 1700000000,
+            "watch_start 必须被识别(0 = 显示 1970)"
+        );
         assert_eq!(ses.interval_s, 5);
         let dl = ses.procs.iter().find(|a| a.name == "dl").unwrap();
         assert_eq!(dl.disk_r, 1000, "disk_read 差分");

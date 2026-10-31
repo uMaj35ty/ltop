@@ -304,7 +304,10 @@ fn fs_usage(path: &str) -> Option<(u64, u64)> {
     Some((total, used))
 }
 
-/// mac:statfs(APFS 卷报的是容器级容量,与 diskutil 一致)
+/// mac:total = statfs f_blocks(APFS 卷报容器级容量,与 df 的 Total 列
+/// 同口径);used = getattrlist ATTR_VOL_SPACEUSED 逐卷真实已用——statfs
+/// 的 f_bfree 在 APFS 上是容器级共享池,total−free 对容器内每个卷都算出
+/// 同一个数(df 正是用 getattrlist 才拿到逐卷 Used 的),失败才回退差值
 #[cfg(target_os = "macos")]
 fn fs_usage(path: &str) -> Option<(u64, u64)> {
     let c = CString::new(path).ok()?;
@@ -315,8 +318,54 @@ fn fs_usage(path: &str) -> Option<(u64, u64)> {
     }
     let fr = st.f_bsize as u64;
     let total = st.f_blocks as u64 * fr;
-    let used = total.saturating_sub(st.f_bfree as u64 * fr);
+    let used = volume_spaceused(&c).unwrap_or_else(|| total.saturating_sub(st.f_bfree as u64 * fr));
     Some((total, used))
+}
+
+/// getattrlist(ATTR_VOL_SPACEUSED):逐卷真实已用字节,df 的 Used 列同源
+#[cfg(target_os = "macos")]
+fn volume_spaceused(c: &CString) -> Option<u64> {
+    #[repr(C)]
+    struct AttrList {
+        bitmapcount: u16,
+        reserved: u16,
+        commonattr: u32,
+        volattr: u32,
+        dirattr: u32,
+        fileattr: u32,
+        forkattr: u32,
+    }
+    const ATTR_BIT_MAP_COUNT: u16 = 5;
+    const ATTR_VOL_INFO: u32 = 0x8000_0000;
+    const ATTR_VOL_SPACEUSED: u32 = 0x0080_0000;
+    extern "C" {
+        fn getattrlist(
+            path: *const libc::c_char,
+            attrlist: *const AttrList,
+            attrbuf: *mut libc::c_void,
+            bufsize: libc::size_t,
+            options: u32,
+        ) -> libc::c_int;
+    }
+    let attrs = AttrList {
+        bitmapcount: ATTR_BIT_MAP_COUNT,
+        reserved: 0,
+        commonattr: 0,
+        volattr: ATTR_VOL_INFO | ATTR_VOL_SPACEUSED,
+        dirattr: 0,
+        fileattr: 0,
+        forkattr: 0,
+    };
+    // 返回布局:u32 长度头(实测=12)后紧跟 u64 值,偏移 4——实测
+    // 0x032E2CD000=12.7GiB 与 df 的 Used 一致(无 8 字节自然对齐)
+    let mut buf = [0u8; 16];
+    // SAFETY: buf is fully owned for the duration of the call; the attribute
+    // set requests exactly one u64, which fits the 16-byte buffer
+    let r = unsafe { getattrlist(c.as_ptr(), &attrs, buf.as_mut_ptr().cast(), buf.len(), 0) };
+    if r != 0 {
+        return None;
+    }
+    Some(u64::from_ne_bytes(buf[4..12].try_into().unwrap()))
 }
 
 #[cfg(target_os = "linux")]
@@ -329,37 +378,13 @@ fn read_size(sysdir: &std::path::Path) -> Option<u64> {
         .map(|s| s * 512)
 }
 
-/// mac:BSD 名前缀分组(disk3s1s1 → disk3);无容量(sysctl 盘大小另查,暂缺)
+/// mac:树已砍。registry 树被合成 APFS 管道层与模拟器镜像淹没(一台
+/// 物理盘的机器能列出 30+ 节点),而宿主本就看不见 VM guest 内部的
+/// 挂载与速率——物理层级在 mac 上没有信息量。draw 侧对空树回退到
+/// 挂载卷平铺;Linux 保留完整物理层级(LUKS/LVM 有意义)。
 #[cfg(target_os = "macos")]
 fn build_block_tree() -> Vec<TreeNode> {
-    let (_, names) = crate::collect::iokit::disk_counters();
-    let mut roots: Vec<(String, Vec<TreeNode>)> = Vec::new();
-    for n in &names {
-        let node = TreeNode {
-            name: n.clone(),
-            pretty: None,
-            size: None,
-            children: Vec::new(),
-        };
-        if let Some(parent) = crate::collect::iokit::slice_parent(n) {
-            match roots.iter_mut().find(|(r, _)| *r == parent) {
-                Some((_, ch)) => ch.push(node),
-                None => roots.push((parent, vec![node])),
-            }
-        } else if !roots.iter().any(|(r, _)| r == n) {
-            roots.push((n.clone(), Vec::new()));
-        }
-    }
-    roots.sort_by(|a, b| a.0.cmp(&b.0));
-    roots
-        .into_iter()
-        .map(|(name, children)| TreeNode {
-            name,
-            pretty: None,
-            size: None,
-            children,
-        })
-        .collect()
+    Vec::new()
 }
 
 /// Build the physical hierarchy: disk -> partition -> dm (LUKS/LVM).

@@ -21,13 +21,21 @@ if pkill -x ltop-bpf 2>/dev/null; then
         sleep 0.2
     done
 fi
+# 0.2.10 起 sock_destruct(inet_sock_destruct)是第 11 个探针;挂载列表
+# 没有它 ≈ 用了 0.2.10 之前的旧产物(release 目录没重编)
 if pgrep -x ltop-bpf >/dev/null; then
-    echo "ltop-bpf 已在运行,直接复用现有实例(flock 保证全局单实例)"
+    echo "ltop-bpf 已在运行,直接复用现有实例(flock 保证全局单实例;跳过探针清单检查)"
 else
-    "$BIN" --interval 300 &
+    LTOP_SMOKE_LOG=$(mktemp)
+    "$BIN" --interval 300 > "$LTOP_SMOKE_LOG" 2>&1 &
     DAEMON=$!
-    trap 'kill $DAEMON 2>/dev/null' EXIT
+    trap 'kill $DAEMON 2>/dev/null; rm -f "$LTOP_SMOKE_LOG"' EXIT
     sleep 1 # 等 kprobe attach 完成
+    if grep -q inet_sock_destruct "$LTOP_SMOKE_LOG"; then
+        echo "sock_destruct 探针: ✓ 已挂载(0.2.10 sk_ino 失效钩子)"
+    else
+        echo "sock_destruct 探针: ✗ 未挂载 —— $BIN 疑似 0.2.10 之前的旧产物,先 cargo build --release 再跑"
+    fi
 fi
 
 GW="$GW" python3 - <<'PY'

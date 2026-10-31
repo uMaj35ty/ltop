@@ -170,6 +170,8 @@ fn host_name() -> String {
 }
 
 pub struct App {
+    /// Config::load() 里的 extra 行(未知键/注释),save_config 回写
+    config_extra: Vec<String>,
     pub net: NetCollector,
     pub lan: LanCollector,
     pub disk: DiskCollector,
@@ -229,6 +231,12 @@ pub struct App {
     pub visible: [bool; BOX_COUNT],
     /// per-box list scroll offset (mouse wheel / arrow keys)
     pub scroll: [usize; BOX_COUNT],
+    /// disks-scrollbar thumb drag in progress: rows from the thumb top where
+    /// the grab started (Some while the button is held on the thumb)
+    pub sb_drag: Option<u16>,
+    /// cmdline snapshot taken when a kill/restart confirmation opened; the
+    /// pid is re-verified against it before any signal (pid-reuse guard)
+    pub confirm_cmd: Option<Vec<String>>,
     pub io_graph: IoGraphMode,
     pub disks_expanded: bool,
     /// braille graph style, settable per scope (menu graphs / global `g`)
@@ -241,6 +249,9 @@ pub struct App {
 impl App {
     pub fn new(cli_log_interval: Option<Duration>) -> Self {
         let cfg = Config::load();
+        // load 时收下的未知键/注释行,save_config 原样带回(否则唯一保存
+        // 路径仍然丢内容——0.2.10 review HIGH #1)
+        let config_extra: Vec<String> = cfg.extra.clone();
         let hostname = host_name();
         let log_interval = cli_log_interval.unwrap_or(Duration::from_millis(cfg.log_interval_ms));
         let mut app = Self {
@@ -256,6 +267,7 @@ impl App {
             nettop: crate::collect::nettop::NettopCollector::new(),
             log: MonLog::new(log_interval, cfg.log_retention_days, hostname.clone()),
             lang: cfg.lang,
+            config_extra,
             hostname,
             ticks: 0,
             tick: Duration::from_millis(1000),
@@ -282,6 +294,8 @@ impl App {
             layout: cfg.layout,
             visible: cfg.boxes,
             scroll: [0; BOX_COUNT],
+            sb_drag: None,
+            confirm_cmd: None,
             io_graph: IoGraphMode::Both,
             disks_expanded: false,
             graph_net: cfg.graph_net,
@@ -315,6 +329,7 @@ impl App {
     /// Snapshot current user-adjustable state into the config file
     pub fn save_config(&self) {
         Config {
+            extra: self.config_extra.clone(),
             lang: self.lang,
             layout: self.layout,
             tick_ms: self.tick.as_millis() as u64,
