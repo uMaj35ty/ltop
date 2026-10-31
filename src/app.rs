@@ -233,6 +233,7 @@ pub struct App {
     pub scroll: [usize; BOX_COUNT],
     /// disks-scrollbar thumb drag in progress: rows from the thumb top where
     /// the grab started (Some while the button is held on the thumb)
+    pub sb_drag: Option<u16>,
     /// cmdline snapshot taken when a kill/restart confirmation opened; the
     /// pid is re-verified against it before any signal (pid-reuse guard)
     pub confirm_cmd: Option<Vec<String>>,
@@ -293,6 +294,7 @@ impl App {
             layout: cfg.layout,
             visible: cfg.boxes,
             scroll: [0; BOX_COUNT],
+            sb_drag: None,
             confirm_cmd: None,
             io_graph: IoGraphMode::Both,
             disks_expanded: false,

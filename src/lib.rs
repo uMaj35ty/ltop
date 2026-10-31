@@ -623,9 +623,13 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
             }
             KeyCode::Char('r') => app.proc.sort = app.proc.sort.next(),
             // `d` matches the [d]isks title letter; `e` now belongs to the
-            // lan box (order cycle)
+            // lan box (order cycle). Also aims the arrow/Home/End keys at the
+            // disks box (the DISKS branch of jump_selection scrolls instead
+            // of selecting) — the visible scrollbar thumb is the feedback,
+            // so the disks list is browsable without stealing p/c/l focus
             KeyCode::Char('d') => {
                 app.disks_expanded = !app.disks_expanded;
+                app.last_focus = app::BOX_DISKS;
             }
             KeyCode::Char('f') => {
                 app.conn.filter = app.conn.filter.next();
@@ -731,11 +735,15 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
                     app.scroll[b] = app.scroll[b].saturating_add(3);
                 }
             }
+            // page keys page by the box's visible height (not 3 rows — that
+            // was the same step as one arrow press); draw clamps the offset
             KeyCode::PageUp => {
-                app.scroll[app.last_focus] = app.scroll[app.last_focus].saturating_sub(3);
+                let page = ui::box_capacity(app.last_focus).max(1);
+                app.scroll[app.last_focus] = app.scroll[app.last_focus].saturating_sub(page);
             }
             KeyCode::PageDown => {
-                app.scroll[app.last_focus] = app.scroll[app.last_focus].saturating_add(3);
+                let page = ui::box_capacity(app.last_focus).max(1);
+                app.scroll[app.last_focus] = app.scroll[app.last_focus].saturating_add(page);
             }
             KeyCode::Char('s') => {
                 app.lan.sweep_enabled = !app.lan.sweep_enabled;
@@ -1115,6 +1123,16 @@ fn handle_mouse(app: &mut App, m: &crossterm::event::MouseEvent) {
         return;
     }
     match m.kind {
+        MouseEventKind::Drag(MouseButton::Left) => {
+            // thumb drag: the grab offset recorded at Down maps the cursor
+            // row back to a list offset
+            if let Some(grab) = app.sb_drag {
+                ui::scrollbar_drag(app, m.row, grab);
+            }
+        }
+        MouseEventKind::Up(MouseButton::Left) => {
+            app.sb_drag = None;
+        }
         MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => {
             if let Some(idx) = ui::hit_box(m.column, m.row) {
                 if m.kind == MouseEventKind::ScrollUp {
@@ -1125,6 +1143,31 @@ fn handle_mouse(app: &mut App, m: &crossterm::event::MouseEvent) {
             }
         }
         MouseEventKind::Down(MouseButton::Left) => {
+            // disks 滚动条是纯滚动控件:点轨道/箭头翻页,点滑块进入拖拽;
+            // 不参与双击详情,也不触碰聚焦/选中态(盒未渲染时滚动条必不存在)
+            if ui::box_rect(app::BOX_DISKS).is_some() {
+                let (sb_len, sb_visible, sb_off) = ui::disks_scroll_state(app);
+                match ui::scrollbar_hit(m.column, m.row, sb_len, sb_visible, sb_off) {
+                    Some(ui::SbHit::Thumb { grab }) => {
+                        app.sb_drag = Some(grab);
+                        app.last_click = None;
+                        return;
+                    }
+                    Some(ui::SbHit::PageUp) => {
+                        app.scroll[app::BOX_DISKS] =
+                            app.scroll[app::BOX_DISKS].saturating_sub(sb_visible.max(1));
+                        app.last_click = None;
+                        return;
+                    }
+                    Some(ui::SbHit::PageDown) => {
+                        app.scroll[app::BOX_DISKS] =
+                            app.scroll[app::BOX_DISKS].saturating_add(sb_visible.max(1));
+                        app.last_click = None;
+                        return;
+                    }
+                    None => {}
+                }
+            }
             // 双击(同格 400ms 内两次):直接打开该行 detail(procs/conns)
             if let Some((t0, c0, r0)) = app.last_click {
                 if t0.elapsed() < std::time::Duration::from_millis(400)
@@ -1895,6 +1938,51 @@ mod tests {
     /// p/c focus: first press focuses, second press unfocuses — and unfocusing
     /// must also stop the two-line selection overlay from rendering (that
     /// lingering overlay read as "focus didn't cancel")
+    #[test]
+    fn d_key_aims_keys_at_disks_and_toggles_mounts() {
+        use crossterm::event::KeyCode;
+        let mut app = App::new(None);
+        let before = app.disks_expanded;
+        handle_key(&mut app, KeyCode::Char('d'), KeyModifiers::empty());
+        assert_eq!(app.last_focus, app::BOX_DISKS);
+        assert_ne!(app.disks_expanded, before);
+        // disks 不进 focus 模型:zoom/enter/k 都不受影响
+        assert!(!app.focus[app::BOX_DISKS]);
+        handle_key(&mut app, KeyCode::Char('d'), KeyModifiers::empty());
+        assert_eq!(app.disks_expanded, before);
+        assert_eq!(app.last_focus, app::BOX_DISKS, "方向键目标不随展开切换改变");
+    }
+
+    #[test]
+    fn jump_keys_reach_disks_once_it_is_last_focus() {
+        use crossterm::event::KeyCode;
+        let mut app = App::new(None);
+        handle_key(&mut app, KeyCode::Char('d'), KeyModifiers::empty());
+        handle_key(&mut app, KeyCode::Char('G'), KeyModifiers::empty());
+        assert_eq!(app.scroll[app::BOX_DISKS], usize::MAX);
+        handle_key(&mut app, KeyCode::Char('g'), KeyModifiers::empty());
+        assert_eq!(app.scroll[app::BOX_DISKS], 0);
+    }
+
+    #[test]
+    fn page_keys_step_by_box_capacity() {
+        use crossterm::event::KeyCode;
+        use ratatui::backend::TestBackend;
+        use ratatui::Terminal;
+        let mut app = App::new(None);
+        for i in 0..app::BOX_COUNT {
+            app.visible[i] = i == app::BOX_DISKS;
+        }
+        let mut term = Terminal::new(TestBackend::new(120, 40)).unwrap();
+        term.draw(|f| ui::draw(f, &app)).unwrap(); // BOX_AREAS 就位
+        let cap = ui::box_capacity(app.last_focus).max(1);
+        handle_key(&mut app, KeyCode::PageDown, KeyModifiers::empty());
+        assert_eq!(app.scroll[app.last_focus], cap);
+        handle_key(&mut app, KeyCode::PageUp, KeyModifiers::empty());
+        assert_eq!(app.scroll[app.last_focus], 0);
+    }
+
+    /// pid 复用防护:只有快照 cmdline 的活进程才允许发信号
     #[test]
     fn confirm_verify_blocks_recycled_pids() {
         let cmd = vec!["sleep".to_string(), "30".to_string()];
