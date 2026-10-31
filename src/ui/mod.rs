@@ -1982,7 +1982,7 @@ fn disk_row(app: &App, node: &TreeNode, label: String) -> Row<'static> {
                 } else {
                     0.0
                 },
-                d.total,
+                d.used,
             ),
             Some(d.fstype.as_str()),
             fmt_speed(d.rate_r),
@@ -2022,7 +2022,7 @@ fn vol_row(app: &App, d: &DiskDev) -> Row<'static> {
         d.name.clone(),
         rest,
         Some(d.fstype.as_str()),
-        usage_bar(frac, d.total),
+        usage_bar(frac, d.used),
         fmt_speed(d.rate_r),
         fmt_speed(d.rate_w),
     )
@@ -2042,16 +2042,14 @@ fn mounts_tail(app: &App, d: &DiskDev, rest: &mut String) {
     }
 }
 
-/// 条 + 百分比 + 绝对容量(mac 卷化后这是唯一能读到 G 数的地方;0 容量
-/// 不显示——未知就是未知,不画个假 0B)
-fn usage_bar(frac: f64, total: u64) -> Line<'static> {
+/// 条 + 百分比 + 本卷已用量(APFS 容器内各卷的 total 同为容器容量,
+/// 没有区分度;used 才是每卷自己的数字。0B 是真值,照画)
+fn usage_bar(frac: f64, used: u64) -> Line<'static> {
     let mut spans = vec![
         braille_bar(frac, 10, palette().used.at(frac as f32)),
         Span::styled(format!(" {:>3.0}%", frac * 100.0), text()),
     ];
-    if total > 0 {
-        spans.push(Span::styled(format!(" {}", fmt_bytes(total as f64)), dim()));
-    }
+    spans.push(Span::styled(format!(" {}", fmt_bytes(used as f64)), dim()));
     Line::from(spans)
 }
 
@@ -4661,11 +4659,11 @@ mod tests {
                 .any(|r| r.contains("disk3s1") && r.contains("· apfs")),
             "mounted volume row with fstype tail"
         );
-        // USED 列带绝对容量(total=100B)
+        // USED 列带本卷已用量(used=25B)
         assert!(
             rows.iter()
-                .any(|r| r.contains("disk3s1") && r.contains("100B")),
-            "capacity renders in the USED cell"
+                .any(|r| r.contains("disk3s1") && r.contains("25B")),
+            "used bytes render in the USED cell"
         );
         assert!(
             rows.iter()

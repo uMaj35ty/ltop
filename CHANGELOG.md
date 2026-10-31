@@ -50,6 +50,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- **absolute used bytes in the DISKS USED cell** — the cell now reads
+  bar + percent + used (dim), e.g. `▓▓░ 3% 12.7GiB`: on APFS every volume
+  in a container reports the container's capacity as its total, so a total
+  figure repeated on every row carried no information; the per-volume used
+  figure is what distinguishes them. The USED column widens 16 → 21;
+  applies to tree rows and volume rows alike
 - **first-run refresh defaults to 2.0s** — `tick_ms` ships as 2000 (was
   1000): plenty for a monitor's cadence, gentler on idle machines. Config
   files that name `tick_ms` explicitly are unaffected, and `+`/`-` still
