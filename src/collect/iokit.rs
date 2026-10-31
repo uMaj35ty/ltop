@@ -25,10 +25,11 @@ use std::ffi::{c_char, c_int, c_void};
 type IoObject = u32;
 
 /// BSD device name -> (bytes_read, bytes_written, ops_read, ops_write)
-/// for leaf IOMedias; plus the full name list for the device tree.
-/// (per-name [read B, write B, read ops, write ops], BSD names of every
-/// IOMedia (leaves + whole disks), per-name capacity in bytes)
-pub fn disk_counters() -> (HashMap<String, [u64; 4]>, Vec<String>, HashMap<String, u64>) {
+/// for leaf IOMedias; plus the full name list for the device tree and the
+/// per-name capacity (bytes) that every IOMedia carries
+pub type DiskCounters = (HashMap<String, [u64; 4]>, Vec<String>, HashMap<String, u64>);
+
+pub fn disk_counters() -> DiskCounters {
     let mut out = HashMap::new();
     let mut names = Vec::new();
     let mut sizes: HashMap<String, u64> = HashMap::new();
