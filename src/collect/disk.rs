@@ -304,7 +304,10 @@ fn fs_usage(path: &str) -> Option<(u64, u64)> {
     Some((total, used))
 }
 
-/// mac:statfs(APFS 卷报的是容器级容量,与 diskutil 一致)
+/// mac:total = statfs f_blocks(APFS 卷报容器级容量,与 df 的 Total 列
+/// 同口径);used = getattrlist ATTR_VOL_SPACEUSED 逐卷真实已用——statfs
+/// 的 f_bfree 在 APFS 上是容器级共享池,total−free 对容器内每个卷都算出
+/// 同一个数(df 正是用 getattrlist 才拿到逐卷 Used 的),失败才回退差值
 #[cfg(target_os = "macos")]
 fn fs_usage(path: &str) -> Option<(u64, u64)> {
     let c = CString::new(path).ok()?;
@@ -315,8 +318,61 @@ fn fs_usage(path: &str) -> Option<(u64, u64)> {
     }
     let fr = st.f_bsize as u64;
     let total = st.f_blocks as u64 * fr;
-    let used = total.saturating_sub(st.f_bfree as u64 * fr);
+    let used = volume_spaceused(&c).unwrap_or_else(|| total.saturating_sub(st.f_bfree as u64 * fr));
     Some((total, used))
+}
+
+/// getattrlist(ATTR_VOL_SPACEUSED):逐卷真实已用字节,df 的 Used 列同源
+#[cfg(target_os = "macos")]
+fn volume_spaceused(c: &CString) -> Option<u64> {
+    #[repr(C)]
+    struct AttrList {
+        bitmapcount: u16,
+        reserved: u16,
+        commonattr: u32,
+        volattr: u32,
+        dirattr: u32,
+        fileattr: u32,
+        forkattr: u32,
+    }
+    const ATTR_BIT_MAP_COUNT: u16 = 5;
+    const ATTR_VOL_INFO: u32 = 0x8000_0000;
+    const ATTR_VOL_SPACEUSED: u32 = 0x0080_0000;
+    extern "C" {
+        fn getattrlist(
+            path: *const libc::c_char,
+            attrlist: *const AttrList,
+            attrbuf: *mut libc::c_void,
+            bufsize: libc::size_t,
+            options: u32,
+        ) -> libc::c_int;
+    }
+    let attrs = AttrList {
+        bitmapcount: ATTR_BIT_MAP_COUNT,
+        reserved: 0,
+        commonattr: 0,
+        volattr: ATTR_VOL_INFO | ATTR_VOL_SPACEUSED,
+        dirattr: 0,
+        fileattr: 0,
+        forkattr: 0,
+    };
+    // 返回布局:u32 长度头,其后属性值自然对齐 → u64 落在 buf[1]
+    let mut buf = [0u64; 2];
+    // SAFETY: buf is fully owned for the duration of the call; the attribute
+    // set requests exactly one u64, which fits the two-word buffer
+    let r = unsafe {
+        getattrlist(
+            c.as_ptr(),
+            &attrs,
+            buf.as_mut_ptr().cast(),
+            std::mem::size_of::<u64>() * 2,
+            0,
+        )
+    };
+    if r != 0 {
+        return None;
+    }
+    Some(buf[1])
 }
 
 #[cfg(target_os = "linux")]
