@@ -968,6 +968,9 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
                     if let Some(p) = app.proc.procs.iter().find(|p| p.pid as u64 == id) {
                         if let Some(cmd) = &p.cmdline {
                             if p.alive {
+                                // snapshot the cmdline now: the dialog's y is
+                                // verified against it before the signal
+                                app.confirm_cmd = Some(cmd.clone());
                                 app.menu = MenuState::ConfirmRestart(p.pid);
                             } else {
                                 let _ = start_cmd(cmd);
@@ -988,6 +991,14 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
                     _ => None,
                 };
                 if let Some(pid) = pid {
+                    // same pid-reuse guard as restart: anchor the dialog to
+                    // the cmdline it was opened with
+                    app.confirm_cmd = app
+                        .proc
+                        .procs
+                        .iter()
+                        .find(|p| p.pid == pid)
+                        .and_then(|p| p.cmdline.clone());
                     app.menu = MenuState::ConfirmKill(pid);
                 }
             }
@@ -996,45 +1007,50 @@ fn handle_key(app: &mut App, code: KeyCode, modifiers: KeyModifiers) {
         },
         MenuState::ConfirmKill(pid) => match code {
             KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
-                kill_pid(pid);
                 app.menu = MenuState::None;
+                let anchor = app.confirm_cmd.take();
+                // no anchor (cmdline unknown): behave as before; with one,
+                // the pid must still be that cmdline's live process
+                let verified = match anchor {
+                    None => true,
+                    Some(cmd) => {
+                        matches!(
+                            confirm_verify(&app.proc.procs, pid, &cmd),
+                            ConfirmAction::Signal
+                        )
+                    }
+                };
+                if verified {
+                    kill_pid(pid);
+                }
             }
             KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc | KeyCode::Char('q') => {
+                app.confirm_cmd = None;
                 app.menu = MenuState::None;
             }
             _ => {}
         },
         MenuState::ConfirmRestart(pid) => match code {
             KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
-                let cmd = app
-                    .proc
-                    .procs
-                    .iter()
-                    .find(|p| p.pid == pid)
-                    .and_then(|p| p.cmdline.clone());
-                if let Some(cmd) = cmd {
-                    kill_pid(pid);
-                    // relaunch from a worker thread: the old instance may take
-                    // a moment to exit (releasing ports/singleton locks), and
-                    // the TUI must not freeze while waiting for it
-                    std::thread::spawn(move || {
-                        for _ in 0..40 {
-                            // kill(0) 探活(EPERM = 活着但没权限发信号)——
-                            // 跨平台,Linux /proc 探测的同义替换
-                            let alive = unsafe { libc::kill(pid as libc::pid_t, 0) } == 0
-                                || std::io::Error::last_os_error().raw_os_error()
-                                    == Some(libc::EPERM);
-                            if !alive {
-                                break;
-                            }
-                            std::thread::sleep(std::time::Duration::from_millis(50));
-                        }
-                        let _ = start_cmd(&cmd);
-                    });
-                }
                 app.menu = MenuState::None;
+                if let Some(cmd) = app.confirm_cmd.take() {
+                    match confirm_verify(&app.proc.procs, pid, &cmd) {
+                        ConfirmAction::Signal => {
+                            kill_pid(pid);
+                            relaunch_when_gone(pid, cmd);
+                        }
+                        // exited while the dialog was open: starting it now
+                        // is exactly the restart the user asked for
+                        ConfirmAction::Exited => {
+                            let _ = start_cmd(&cmd);
+                        }
+                        // pid recycled or gone: signal nothing, launch nothing
+                        ConfirmAction::Mismatch => {}
+                    }
+                }
             }
             KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc | KeyCode::Char('q') => {
+                app.confirm_cmd = None;
                 app.menu = MenuState::None;
             }
             _ => {}
@@ -1183,6 +1199,57 @@ pub(crate) fn kill_pid(pid: u32) {
     unsafe {
         libc::kill(pid as i32, libc::SIGTERM);
     }
+}
+
+/// verdict of the pid-reuse guard for a confirmed kill/restart: the pid from
+/// the dialog is re-checked against the process ledger before any signal —
+/// a process that exited while the dialog was open may have had its pid
+/// recycled already, and the signal would land on an unrelated process
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ConfirmAction {
+    /// pid alive, cmdline matches the snapshot: safe to signal
+    Signal,
+    /// same ledger entry but already exited: nothing to signal; a restart
+    /// may still launch it
+    Exited,
+    /// pid gone or now running a different cmdline: do not signal
+    Mismatch,
+}
+
+fn confirm_verify(
+    procs: &[crate::collect::proc::ProcRow],
+    pid: u32,
+    cmd: &[String],
+) -> ConfirmAction {
+    match procs.iter().find(|p| p.pid == pid) {
+        Some(p) if p.cmdline.as_deref() == Some(cmd) => {
+            if p.alive {
+                ConfirmAction::Signal
+            } else {
+                ConfirmAction::Exited
+            }
+        }
+        _ => ConfirmAction::Mismatch,
+    }
+}
+
+/// relaunch a verified-then-SIGTERMed process from a worker thread: the old
+/// instance may take a moment to exit (releasing ports/singleton locks), and
+/// the TUI must not freeze while waiting. Probe is kill(pid, 0) (EPERM =
+/// alive without signal rights); if the pid were recycled inside the 2 s
+/// window the wait simply times out and the relaunch proceeds.
+fn relaunch_when_gone(pid: u32, cmd: Vec<String>) {
+    std::thread::spawn(move || {
+        for _ in 0..40 {
+            let alive = unsafe { libc::kill(pid as libc::pid_t, 0) } == 0
+                || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM);
+            if !alive {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        let _ = start_cmd(&cmd);
+    });
 }
 
 /// Launch a captured command line detached from the terminal: own session
@@ -1828,6 +1895,41 @@ mod tests {
     /// p/c focus: first press focuses, second press unfocuses — and unfocusing
     /// must also stop the two-line selection overlay from rendering (that
     /// lingering overlay read as "focus didn't cancel")
+    #[test]
+    fn confirm_verify_blocks_recycled_pids() {
+        let cmd = vec!["sleep".to_string(), "30".to_string()];
+        let mk =
+            |pid: u32, alive: bool, cmdline: Option<Vec<String>>| crate::collect::proc::ProcRow {
+                pid,
+                name: "x".into(),
+                net_recv: 0,
+                net_sent: 0,
+                net_rr: 0.0,
+                net_sr: 0.0,
+                udp_recv: 0,
+                udp_sent: 0,
+                udp_rr: 0.0,
+                udp_sr: 0.0,
+                disk_r: 0,
+                disk_w: 0,
+                disk_rr: 0.0,
+                disk_wr: 0.0,
+                uptime_s: None,
+                alive,
+                cmdline,
+            };
+        let procs = vec![
+            mk(7, true, Some(cmd.clone())),
+            mk(8, false, Some(cmd.clone())),
+            // pid 9 已被内核复用,跑的是别的程序
+            mk(9, true, Some(vec!["other".into()])),
+        ];
+        assert_eq!(confirm_verify(&procs, 7, &cmd), ConfirmAction::Signal);
+        assert_eq!(confirm_verify(&procs, 8, &cmd), ConfirmAction::Exited);
+        assert_eq!(confirm_verify(&procs, 9, &cmd), ConfirmAction::Mismatch);
+        assert_eq!(confirm_verify(&procs, 42, &cmd), ConfirmAction::Mismatch);
+    }
+
     #[test]
     fn p_and_c_second_press_cancels_focus() {
         use crossterm::event::KeyCode;
