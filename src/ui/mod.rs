@@ -14,7 +14,7 @@ use crate::app::{
     BOX_DISKIO, BOX_DISKS, BOX_LAN, BOX_NET, BOX_PROCS,
 };
 use crate::collect::conn::{sock_str, Conn, ConnFilter, ConnSort};
-use crate::collect::disk::TreeNode;
+use crate::collect::disk::{DiskDev, TreeNode};
 use crate::collect::lan::Neighbor;
 use crate::config::{Config, Lang};
 use crate::theme::*;
@@ -451,7 +451,7 @@ fn box_ideal_rows(app: &App, idx: usize) -> u16 {
         BOX_LAN => list_ideal_rows(app.lan.neighbors.len()),
         BOX_CONNS => list_ideal_rows(app.conn.conns.len()),
         BOX_PROCS => list_ideal_rows(app.proc.procs.len()),
-        BOX_DISKS => list_ideal_rows(app.disk.tree.len() * 2),
+        BOX_DISKS => list_ideal_rows(disk_rows(app).len()),
         _ => GRAPH_MIN_ROWS,
     }
 }
@@ -1021,11 +1021,7 @@ pub fn list_len(app: &App, idx: usize) -> usize {
         BOX_LAN => app.lan.neighbors.len(),
         BOX_CONNS => conn_items(app).len(),
         BOX_PROCS => procs_display(app).len(),
-        BOX_DISKS => {
-            let mut flat: Vec<(&TreeNode, String)> = Vec::new();
-            emit_tree_rows(&app.disk.tree, "", 0, &mut flat);
-            flat.len()
-        }
+        BOX_DISKS => disk_rows(app).len(),
         _ => 0,
     }
 }
@@ -1855,10 +1851,53 @@ fn graph_section(
     );
 }
 
-fn draw_disks(f: &mut Frame, area: Rect, app: &App, focused: bool) {
+/// DISKS 行源:物理树(Linux,含未挂载结构行)或挂载卷平铺(mac——
+/// build_block_tree 恒空,以及任何真无块设备的机器)。树的空/非空就是
+/// 平台分叉,输入/滚动条/布局全部经这一个源头。
+enum DiskRows<'a> {
+    Tree(Vec<(&'a TreeNode, String)>),
+    Vols(Vec<&'a DiskDev>),
+}
+
+impl DiskRows<'_> {
+    fn len(&self) -> usize {
+        match self {
+            Self::Tree(v) => v.len(),
+            Self::Vols(v) => v.len(),
+        }
+    }
+
+    fn rows(&self, app: &App, off: usize) -> Vec<Row<'static>> {
+        match self {
+            Self::Tree(v) => v
+                .iter()
+                .skip(off)
+                .map(|(node, label)| disk_row(app, node, label.clone()))
+                .collect(),
+            Self::Vols(v) => v.iter().skip(off).map(|d| vol_row(app, d)).collect(),
+        }
+    }
+}
+
+fn disk_rows(app: &App) -> DiskRows<'_> {
     let mut flat: Vec<(&TreeNode, String)> = Vec::new();
     emit_tree_rows(&app.disk.tree, "", 0, &mut flat);
-    let flat_len = flat.len();
+    if flat.is_empty() {
+        DiskRows::Vols(
+            app.disk
+                .devices
+                .iter()
+                .filter(|d| !d.mounts.is_empty())
+                .collect(),
+        )
+    } else {
+        DiskRows::Tree(flat)
+    }
+}
+
+fn draw_disks(f: &mut Frame, area: Rect, app: &App, focused: bool) {
+    let src = disk_rows(app);
+    let flat_len = src.len();
     // 表头之下的可视行数封顶:滚到底后停在完整最后一页,与 LAN/CONNS/PROCS
     // 的 clamped_offset 同语义;draw 与滚动条共用这一个偏移
     let visible = (area.height.saturating_sub(3)).max(1) as usize; // borders + header
@@ -1895,11 +1934,7 @@ fn draw_disks(f: &mut Frame, area: Rect, app: &App, focused: bool) {
         return;
     }
 
-    let rows: Vec<Row> = flat
-        .into_iter()
-        .skip(off)
-        .map(|(node, label)| disk_row(app, node, label))
-        .collect();
+    let rows: Vec<Row> = src.rows(app, off);
     let headers = ["DEV", "USED", "R/S", "W/S"];
     let header = Row::new(headers).style(dim().add_modifier(Modifier::BOLD));
     // the scrollbar column takes the rightmost content column when active;
@@ -1928,16 +1963,7 @@ fn disk_row(app: &App, node: &TreeNode, label: String) -> Row<'static> {
             if let Some(p) = &d.pretty {
                 rest.push_str(&format!(" ({p})"));
             }
-            if let Some(m) = d.mounts.first() {
-                if app.disks_expanded {
-                    rest.push_str(&format!(" {}", d.mounts.join(" ")));
-                } else {
-                    rest.push_str(&format!(" {m}"));
-                    if d.mounts.len() > 1 {
-                        rest.push_str(&format!(" +{}", d.mounts.len() - 1));
-                    }
-                }
-            }
+            mounts_tail(app, d, &mut rest);
         }
         // mapper alias is still useful for unmounted devices (e.g. closed LUKS)
         None => {
@@ -1948,27 +1974,90 @@ fn disk_row(app: &App, node: &TreeNode, label: String) -> Row<'static> {
     }
     // usage bars only for rows backed by a filesystem (one per dev);
     // structural nodes (whole disks, carrier partitions) show their size
-    let usage = if let Some(d) = dev {
-        let frac = if d.total > 0 {
-            d.used as f64 / d.total as f64
-        } else {
-            0.0
-        };
-        Line::from(vec![
-            braille_bar(frac, 10, palette().used.at(frac as f32)),
-            Span::styled(format!(" {:>3.0}%", frac * 100.0), text()),
-        ])
-    } else if let Some(sz) = node.size {
-        Line::from(Span::styled(fmt_bytes(sz as f64), text()))
-    } else {
-        Line::from(Span::styled("", dim()))
+    let (usage, fstype, rate_r, rate_w) = match dev {
+        Some(d) => (
+            usage_bar(if d.total > 0 {
+                d.used as f64 / d.total as f64
+            } else {
+                0.0
+            }),
+            Some(d.fstype.as_str()),
+            fmt_speed(d.rate_r),
+            fmt_speed(d.rate_w),
+        ),
+        None => match node.size {
+            Some(sz) => (
+                Line::from(Span::styled(fmt_bytes(sz as f64), text())),
+                None,
+                String::new(),
+                String::new(),
+            ),
+            None => (
+                Line::from(Span::styled("", dim())),
+                None,
+                String::new(),
+                String::new(),
+            ),
+        },
     };
-    let rate_r = dev.map(|d| fmt_speed(d.rate_r)).unwrap_or_default();
-    let rate_w = dev.map(|d| fmt_speed(d.rate_w)).unwrap_or_default();
-    // fs type as a dim tail right after the name: identity info that stays
-    // visible on narrow terminals, where the pretty/mount tail truncates first
+    disk_cells(label, rest, fstype, usage, rate_r, rate_w)
+}
+
+/// 挂载卷行(mac 平铺形态):与树行同四列,标签即设备名
+fn vol_row(app: &App, d: &DiskDev) -> Row<'static> {
+    let mut rest = String::new();
+    if let Some(p) = &d.pretty {
+        rest.push_str(&format!(" ({p})"));
+    }
+    mounts_tail(app, d, &mut rest);
+    let frac = if d.total > 0 {
+        d.used as f64 / d.total as f64
+    } else {
+        0.0
+    };
+    disk_cells(
+        d.name.clone(),
+        rest,
+        Some(d.fstype.as_str()),
+        usage_bar(frac),
+        fmt_speed(d.rate_r),
+        fmt_speed(d.rate_w),
+    )
+}
+
+/// mounts 展开/折叠尾注(first +N / all),树行与卷行共用
+fn mounts_tail(app: &App, d: &DiskDev, rest: &mut String) {
+    if let Some(m) = d.mounts.first() {
+        if app.disks_expanded {
+            rest.push_str(&format!(" {}", d.mounts.join(" ")));
+        } else {
+            rest.push_str(&format!(" {m}"));
+            if d.mounts.len() > 1 {
+                rest.push_str(&format!(" +{}", d.mounts.len() - 1));
+            }
+        }
+    }
+}
+
+fn usage_bar(frac: f64) -> Line<'static> {
+    Line::from(vec![
+        braille_bar(frac, 10, palette().used.at(frac as f32)),
+        Span::styled(format!(" {:>3.0}%", frac * 100.0), text()),
+    ])
+}
+
+/// 四列单元格组装(树行/卷行共用)。fs type 是名字后的暗色尾巴:身份
+/// 信息,窄终端下先截断的是 pretty/mount 尾,它仍在
+fn disk_cells(
+    label: String,
+    rest: String,
+    fstype: Option<&str>,
+    usage: Line<'static>,
+    rate_r: String,
+    rate_w: String,
+) -> Row<'static> {
     let mut dev_spans = vec![Span::styled(label, text())];
-    if let Some(fs) = dev.map(|d| d.fstype.as_str()).filter(|f| !f.is_empty()) {
+    if let Some(fs) = fstype.filter(|f| !f.is_empty()) {
         dev_spans.push(Span::styled(format!(" · {fs}"), dim()));
     }
     dev_spans.push(Span::styled(rest, text()));
@@ -4537,6 +4626,44 @@ mod tests {
         assert!(
             row.contains("· ext4"),
             "dim fstype tail after the name: {row}"
+        );
+    }
+
+    /// 树为空(mac)→ 挂载卷平铺:未挂载设备不出现,badge 报卷数
+    #[test]
+    fn disks_vols_fallback_lists_mounted_only() {
+        let mut app = disks_overflow_app(0); // 空树
+        let mk = |name: &str, fstype: &str, mounts: Vec<&str>| crate::collect::disk::DiskDev {
+            name: name.into(),
+            fstype: fstype.into(),
+            mounts: mounts.into_iter().map(String::from).collect(),
+            total: 100,
+            used: 25,
+            ..Default::default()
+        };
+        app.disk.devices = vec![
+            mk("disk3s1", "apfs", vec!["/"]),
+            mk("disk3s5", "apfs", vec!["/System/Volumes/Data"]),
+            mk("disk0s3", "", vec![]), // 无挂载:不得出现
+        ];
+        let rows = render_grid(&app);
+        assert!(
+            rows.iter()
+                .any(|r| r.contains("disk3s1") && r.contains("· apfs")),
+            "mounted volume row with fstype tail"
+        );
+        assert!(
+            rows.iter()
+                .any(|r| r.contains("disk3s5") && r.contains("/System/Volumes/Data")),
+            "second volume renders its mount"
+        );
+        assert!(
+            !rows.iter().any(|r| r.contains("disk0s3")),
+            "unmounted device must not render in the vols fallback"
+        );
+        assert!(
+            rows.iter().any(|r| r.contains("2 vol")),
+            "badge counts mounted volumes: {rows:?}"
         );
     }
 

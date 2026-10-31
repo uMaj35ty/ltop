@@ -21,10 +21,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   as a dim ` · ext4` suffix after the device name (identity info that stays
   visible on narrow terminals, where the pretty-alias/mount tail truncates
   first)
-- **macOS disk tree sizes** — the device tree on mac now shows capacities
-  (whole disks and slices alike) from the IOMedia `Size` registry property,
-  matching the Linux `/sys/block/*/size` behavior; previously every
-  structural row on mac was blank
+
+### Removed
+
+- **the device tree on macOS** — the DISKS box there now lists mounted
+  volumes only. The IOKit registry tree was dominated by synthesized APFS
+  plumbing and simulator runtime images (one physical SSD listed 30+
+  nodes), and the host cannot see mounts inside VM guests anyway, so the
+  physical hierarchy carried no information on mac. Linux keeps the full
+  tree: disk → partition → dm with unmounted rows, where LUKS/LVM layering
+  is the point. The macOS list falls out of the same source — an empty
+  tree falls back to a flat mounted-volumes table (same rows, scrollbar,
+  mount expand/collapse and fs-type tail)
 
 ### Fixed
 
@@ -44,8 +52,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   the old `N dev` was the rate/capacity data-plane size, which on macOS
   includes the always-zero synthesized APFS layer and every mounted
   simulator runtime image (one physical SSD reported as "32 dev"). The
-  badge is now `N vol` = devices carrying at least one mountpoint; the
-  device tree below still shows the full physical hierarchy
+  badge is now `N vol` = devices carrying at least one mountpoint; on Linux
+  the tree below still shows the full physical hierarchy
 - **CI gains a supply-chain gate and a format gate** — `cargo-deny`
   (RustSec advisories, license allowlist, registry provenance, `deny.toml`)
   and `cargo fmt --check` join the test/clippy matrix; the tree is
@@ -60,7 +68,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Tests: scrollbar render (arrows/thumb positions, no-overflow case),
   hit-test and drag-mapping geometry kernels (pure, no shared state), `d`
   key targeting, page-size stepping, jump keys on disks, fstype tail
-  rendering, and the pid-reuse verdict matrix
+  rendering, the macOS volumes-fallback list (mounted only, badge count),
+  and the pid-reuse verdict matrix
 
 ## [0.2.12] - 2026-10-29
 

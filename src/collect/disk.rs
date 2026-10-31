@@ -329,41 +329,13 @@ fn read_size(sysdir: &std::path::Path) -> Option<u64> {
         .map(|s| s * 512)
 }
 
-/// mac:BSD 名前缀分组(disk3s1s1 → disk3);容量来自 IOMedia "Size"
-/// (leaves 与 whole media 都有,与 Linux 的 /sys/block/*/size 对齐)
+/// mac:树已砍。registry 树被合成 APFS 管道层与模拟器镜像淹没(一台
+/// 物理盘的机器能列出 30+ 节点),而宿主本就看不见 VM guest 内部的
+/// 挂载与速率——物理层级在 mac 上没有信息量。draw 侧对空树回退到
+/// 挂载卷平铺;Linux 保留完整物理层级(LUKS/LVM 有意义)。
 #[cfg(target_os = "macos")]
 fn build_block_tree() -> Vec<TreeNode> {
-    let (_, names, sizes) = crate::collect::iokit::disk_counters();
-    let mut roots: Vec<(String, Vec<TreeNode>)> = Vec::new();
-    for n in &names {
-        let node = TreeNode {
-            name: n.clone(),
-            pretty: None,
-            size: sizes.get(n).copied(),
-            children: Vec::new(),
-        };
-        if let Some(parent) = crate::collect::iokit::slice_parent(n) {
-            match roots.iter_mut().find(|(r, _)| *r == parent) {
-                Some((_, ch)) => ch.push(node),
-                None => roots.push((parent, vec![node])),
-            }
-        } else if !roots.iter().any(|(r, _)| r == n) {
-            roots.push((n.clone(), Vec::new()));
-        }
-    }
-    roots.sort_by(|a, b| a.0.cmp(&b.0));
-    roots
-        .into_iter()
-        .map(|(name, children)| {
-            let size = sizes.get(&name).copied();
-            TreeNode {
-                name,
-                pretty: None,
-                size,
-                children,
-            }
-        })
-        .collect()
+    Vec::new()
 }
 
 /// Build the physical hierarchy: disk -> partition -> dm (LUKS/LVM).
@@ -466,7 +438,7 @@ fn build_block_tree() -> Vec<TreeNode> {
 /// mac:IOKit 叶子 IOMedia 的字节/操作计数(整盘聚合对象已跳过)
 #[cfg(target_os = "macos")]
 fn parse_diskstats() -> HashMap<String, DiskRaw> {
-    let (map, _, _) = crate::collect::iokit::disk_counters();
+    let (map, _) = crate::collect::iokit::disk_counters();
     map.into_iter()
         .map(|(k, v)| {
             (

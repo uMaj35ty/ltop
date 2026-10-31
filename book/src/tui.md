@@ -30,10 +30,14 @@ pins the neighbour and filters CONNS to that peer.
 ### 3 / 4 — DISK I/O and DISKS
 
 Read/write rate charts (deduplicated across stacked devices — `nvme0n1` and
-its `dm-0(root)` child are one sample, not two) beside a physical device tree
-with capacity bars and live per-device rates. The fs type rides along as a
-dim tail after each device name. `d` expands the mount tree and aims the
-arrow/jump keys at the disks list; `i` switches the chart mode. An
+its `dm-0(root)` child are one sample, not two) beside the device list:
+capacity bars and live per-device rates, the fs type as a dim tail after
+each name. On **Linux** this is the full physical tree (disk → partition →
+dm, unmounted rows included — LUKS/LVM layering stays readable). On
+**macOS** it lists mounted volumes only: the registry tree there is
+dominated by synthesized APFS plumbing and simulator images, and the host
+cannot see mounts inside VM guests anyway. `d` expands the mount list and
+aims the arrow/jump keys at the disks list; `i` switches the chart mode. An
 overflowing list gets a btop-style scrollbar in its right edge — click the
 track to page, drag the thumb to scroll, no focus needed (the wheel already
 worked this way).
