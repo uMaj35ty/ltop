@@ -31,8 +31,12 @@ pins the neighbour and filters CONNS to that peer.
 
 Read/write rate charts (deduplicated across stacked devices — `nvme0n1` and
 its `dm-0(root)` child are one sample, not two) beside a physical device tree
-with capacity bars and live per-device rates. `d` expands the mount tree;
-`i` switches the chart mode.
+with capacity bars and live per-device rates. The fs type rides along as a
+dim tail after each device name. `d` expands the mount tree and aims the
+arrow/jump keys at the disks list; `i` switches the chart mode. An
+overflowing list gets a btop-style scrollbar in its right edge — click the
+track to page, drag the thumb to scroll, no focus needed (the wheel already
+worked this way).
 
 ### 5 — CONNS
 
@@ -111,10 +115,11 @@ export: `--replay [--csv OUT]`. Details in [The data plane](data.md).
 | `r` | procs sort cycle |
 | `f` / `o` | conns filter cycle / sort cycle |
 | `enter`, `←→` on a group head | collapse / expand process group |
-| `d` | expand/collapse disk mount tree |
+| `d` | expand/collapse disk mount tree; arrow/jump keys then target the disks list |
 | `e` | lan sort: ip → hostname → mac → iface |
 | `n` / `i` | net / disk chart mode |
-| `↑↓` `PgUp` `PgDn` / wheel | move selection; wheel scrolls the list under the cursor; click selects |
+| `↑↓` `PgUp` `PgDn` / wheel | move selection; PgUp/PgDn page by visible height; wheel scrolls the list under the cursor; click selects |
+| disks scrollbar | click the track to page, drag the thumb to scroll — works without focus |
 | `enter` on a lan row | pin neighbour + filter CONNS to that peer |
 | `enter` on a conns/procs row | detail panel (track `t`/`space`, kill `k`, relaunch `s`, copy `y`) |
 | `z` | zoom the focused box full-screen |

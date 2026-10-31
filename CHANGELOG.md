@@ -3,6 +3,59 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **btop-style scrollbar for the disks list** — an overflowing DISKS box
+  draws a scrollbar in its right edge (`↑`/`↓` arrows, one-row `█` thumb on
+  a blank track, focus-independent). The track is interactive: click above/
+  below the thumb to page, grab the thumb and drag to scroll (mouse-drag
+  events were previously ignored). The wheel already scrolled without focus;
+  now the affordance is visible
+- **the disks list is keyboard-browsable** — `d` (mounts expand/collapse)
+  now also aims the arrow/Home/End/g/G keys at the disks box, waking up the
+  scroll-only branch of `jump_selection`; disks never enters the p/c/l focus
+  model, so zoom/enter/k are untouched
+- **fs type tail in the DISKS device label** — the filesystem type renders
+  as a dim ` · ext4` suffix after the device name (identity info that stays
+  visible on narrow terminals, where the pretty-alias/mount tail truncates
+  first)
+- **macOS disk tree sizes** — the device tree on mac now shows capacities
+  (whole disks and slices alike) from the IOMedia `Size` registry property,
+  matching the Linux `/sys/block/*/size` behavior; previously every
+  structural row on mac was blank
+
+### Fixed
+
+- **pid-reuse guard on kill/restart confirmations** — the kill and restart
+  dialogs now snapshot the target's command line when they open and
+  re-verify the pid against the process ledger before any signal: a process
+  that exits while the dialog is open and has its pid recycled can no longer
+  route a SIGTERM to an unrelated process (restart relaunches only after a
+  verified exit, or directly when the verified process already exited)
+- **PageUp/PageDown page by visible height** — they previously stepped 3
+  rows, indistinguishable from one arrow press; the page size now matches
+  the box's capacity and is reused by the scrollbar's track clicks
+
+### Changed
+
+- **CI gains a supply-chain gate and a format gate** — `cargo-deny`
+  (RustSec advisories, license allowlist, registry provenance, `deny.toml`)
+  and `cargo fmt --check` join the test/clippy matrix; the tree is
+  rustfmt-normalized
+- the `deploy/aur/.SRCINFO` copy now tracks the PKGBUILD it describes
+  (it was a v0.2.4 fossil; the PKGBUILD itself already references
+  `v$pkgver`, so per-release regeneration keeps the service-file source and
+  checksums aligned)
+
+### Internal
+
+- Tests: scrollbar render (arrows/thumb positions, no-overflow case),
+  hit-test and drag-mapping geometry kernels (pure, no shared state), `d`
+  key targeting, page-size stepping, jump keys on disks, fstype tail
+  rendering, and the pid-reuse verdict matrix
+
 ## [0.2.12] - 2026-10-29
 
 ### Fixed
