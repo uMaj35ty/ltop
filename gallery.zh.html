@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ltop — 图廊</title>
+<meta name="description" content="ltop 真实截图：classic/wide/tall 布局、详情面板、连接缩放与搜索、Omarchy 主题跟随演示。全部实拍，非摆拍。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0e14'/%3E%3Crect x='6' y='6' width='6' height='20' fill='%233fd06c'/%3E%3Crect x='15' y='14' width='4' height='12' fill='%23ff5c7a'/%3E%3Crect x='22' y='10' width='4' height='16' fill='%2356c8ff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css?v=10">
+<style>
+  .gal-hero { padding: 56px 0 8px; text-align: center; }
+  .gal-hero h1 { font-size: clamp(24px, 3.6vw, 36px); margin: 0 0 14px; }
+  .gal-hero .lead { margin-bottom: 10px; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap nav-inner">
+    <a class="logo" href="index.zh.html"><b>l</b>top</a>
+    <div class="links">
+      <a href="index.zh.html#features">功能</a>
+      <a href="index.zh.html#quickstart">快速上手</a>
+      <a href="index.zh.html#roadmap" class="docsy">路线图</a>
+      <a href="gallery.zh.html" class="docsy">画廊</a>
+      
+      <a href="skills.zh.html" class="docsy">Skills</a>
+      <a href="docs/zh/" class="docsy">文档</a>
+          </div>
+      <span class="nav-row2"><a href="https://github.com/uMaj35ty/ltop" class="gh">GitHub ↗</a><a href="gallery.html" class="lang" hreflang="en">English</a></span>
+  </div>
+</nav>
+
+<section class="gal-hero">
+  <div class="wrap">
+    <h1><span style="color:var(--green)">图廊</span></h1>
+    <p class="lead">全部真实截图，非摆拍——点开看大图。</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="gal">
+      <figure>
+        <a href="assets/screenshots/main.webp"><div class="frame">
+          <img loading="lazy" src="assets/screenshots/main.webp" alt="Classic 布局，Steam 下载进行中">
+        </div></a>
+        <h3>Classic 布局实况——<code>Tab</code> 循环 #1</h3>
+        <p>Steam 下载进行中：NET 图表爬升（RX 8.8MiB/s）、LAN 邻居在线、CONNS 按进程折叠
+        （steam ×50，组 Σ 高亮）、PROCS 每进程整场网络+磁盘列、DISKS 设备树带容量条。</p>
+      </figure>
+
+      <figure>
+        <a href="assets/screenshots/wide-conns-detail.webp"><div class="frame">
+          <img loading="lazy" src="assets/screenshots/wide-conns-detail.webp" alt="Wide 布局：连接详情面板">
+        </div></a>
+        <h3>Wide 布局，连接详情——任意行上 <code>enter</code></h3>
+        <p>firefox 的一条连接开在详情面板：协议与状态、本地/远端端点、inode、流量 Σ 与速率。
+        面板内：<code>space</code>/<code>t</code> 追踪置顶，<code>y</code> 复制任意字段
+        （OSC 52——ssh 下也直达本地剪贴板），<code>k</code> 终止。下方退出的进程灰显保留
+        （标 <code>(gone)</code>），总量还在。</p>
+      </figure>
+
+      <figure>
+        <a href="assets/screenshots/tall-procs-detail.webp"><div class="frame">
+          <img loading="lazy" src="assets/screenshots/tall-procs-detail.webp" alt="Tall 布局：进程详情面板与捕获的完整命令行">
+        </div></a>
+        <h3>Tall 布局，进程详情+复制——<code>Tab</code> 循环 #3</h3>
+        <p>steamwebhelper 开在详情面板：uid、内核状态、线程数、RSS、exe/cwd——完整捕获的命令行，
+        选中段高亮可 <code>y</code> 复制；下方 traffic/disk 分组，整盒在 tall 布局上放大。</p>
+      </figure>
+
+      <figure>
+        <a href="assets/screenshots/conns-zoom-search.webp"><div class="frame">
+          <img loading="lazy" src="assets/screenshots/conns-zoom-search.webp" alt="CONNS 盒全屏缩放，带 steam 搜索过滤">
+        </div></a>
+        <h3>缩放+搜索——<code>z</code> 与 <code>/</code></h3>
+        <p>CONNS 全屏缩放（<code>z</code>）加实时搜索（<code>/ steam</code>，页脚显示当前过滤）：
+        107 条连接折成进程组——steam ×24、steamwebhelper ×11、steam ×69——组头各带 Σ，UDP 行有
+        标签且由 eBPF 助手计量。</p>
+      </figure>
+
+      <figure>
+        <a href="assets/screenshots/detail-copy-fields.webp"><div class="frame">
+          <img loading="lazy" src="assets/screenshots/detail-copy-fields.webp" alt="进程详情面板：分组字段与剪贴板复制">
+        </div></a>
+        <h3>详情字段，分组可复制——<code>↑↓</code> 与 <code>y</code></h3>
+        <p>详情面板把进程的身份、流量、磁盘数字分组；<code>↑↓</code> 移动字段光标，
+        <code>y</code> 把选中值复制到剪贴板（OSC 52，不依赖 X11）。主题菜单
+        （<code>m</code>）在后面候着。</p>
+      </figure>
+
+      <figure>
+        <a href="assets/screenshots/classic-six-boxes.webp"><div class="frame">
+          <img loading="lazy" src="assets/screenshots/classic-six-boxes.webp" alt="Classic 布局——全宽桌面上的六盒总览">
+        </div></a>
+        <h3>Classic 全宽——六盒总览</h3>
+        <p>早期全宽截图：盲文吞吐图表、带流量的 LAN 邻居、按组 Σ 折叠的连接、每进程会话账本、磁盘树。</p>
+      </figure>
+
+      <figure>
+        <a href="assets/screenshots/wide-detail-panel.webp"><div class="frame">
+          <img loading="lazy" src="assets/screenshots/wide-detail-panel.webp" alt="Wide 布局：进程详情面板">
+        </div></a>
+        <h3>Wide 布局，进程详情——<code>Tab</code> 循环 #2</h3>
+        <p>图表横贯上方、表格在下——进程开在详情面板，带完整命令行、逐连接 UDP 分解，主题菜单在背后。</p>
+      </figure>
+
+      <figure>
+        <a href="assets/screenshots/tall-process-groups.webp"><div class="frame">
+          <img loading="lazy" src="assets/screenshots/tall-process-groups.webp" alt="Tall 布局：分组连接与被追踪行">
+        </div></a>
+        <h3>Tall 布局，连接分组</h3>
+        <p>窄终端的单列布局：CONNS 按进程分组排序、组头带总量、黄色被追踪行跨重排不丢。</p>
+      </figure>
+
+      <figure>
+        <a href="assets/screenshots/omarchy-theme-follow.gif"><div class="frame">
+          <img loading="lazy" src="assets/screenshots/omarchy-theme-follow.gif" alt="动画：桌面切换 Omarchy 主题时 ltop 实时变色">
+        </div></a>
+        <h3>主题跟随桌面——<code>--follow-theme</code></h3>
+        <p>Sakura → Tokyo Night → Gruvbox → Hackerman → Sakura，全程实时：加
+        <code>--follow-theme</code> 后 Omarchy 桌面切主题，运行中的 ltop 跟着变色，无需重启。
+        任何 btop 主题文件也可直接加载：<code>ltop --theme ~/my.theme</code>。</p>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot-inner">
+    <span class="l"><b>l</b>top — localist top · MIT · 无遥测，免 root</span>
+    <div class="foot-links">
+      <a href="docs/zh/">文档</a>
+      <a href="https://crates.io/crates/ltop">crates.io</a>
+      <a href="https://github.com/uMaj35ty/ltop/releases">Releases</a>
+      <a href="https://github.com/uMaj35ty/ltop">GitHub</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

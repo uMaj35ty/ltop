@@ -1,0 +1,32 @@
+/* Screenshot framing: the captures are full-desktop dark terminal shots and
+   need a visible edge on any background. */
+.content img {
+    border-radius: 8px;
+    border: 1px solid rgba(128, 128, 128, 0.35);
+    margin: 0.6rem 0 1.2rem;
+}
+.content figcaption,
+.content em.caption {
+    display: block;
+    font-size: 0.88em;
+    color: var(--fg-color, inherit);
+    opacity: 0.75;
+    margin: -0.8rem 0 1.4rem;
+}
+/* language toggle injected by theme/lang.js */
+.right-buttons a.lang-toggle {
+    display: inline-block;
+    padding: 3px 12px;
+    border: 1px solid var(--icons, #888);
+    border-radius: 6px;
+    color: var(--icons, #888);
+    font-size: 0.85em;
+    line-height: 1.5;
+    text-decoration: none;
+}
+.right-buttons a.lang-toggle:hover {
+    color: var(--links, #4183c4);
+    border-color: var(--links, #4183c4);
+    text-decoration: none;
+}
+

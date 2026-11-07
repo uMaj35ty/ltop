@@ -1,0 +1,60 @@
+# Azure Glow Theme for Btop
+# Electric blues and radiant cyan with deep abyss backgrounds
+
+theme[main_bg]="#0a0a14"
+theme[main_fg]="#b4dcff"
+
+theme[title]="#00aaff"
+theme[hi_fg]="#d0f0ff"
+theme[selected_bg]="#00334d"
+theme[selected_fg]="#00ccff"
+theme[inactive_fg]="#00334d"
+
+theme[proc_misc]="#b4dcff"
+
+theme[cpu_box]="#00aaff"
+theme[mem_box]="#00e5ff"
+theme[net_box]="#00ccff"
+theme[proc_box]="#0099ff"
+
+theme[div_line]="#00334d"
+
+theme[graph_text]="#66ccff"
+
+# CPU gradients - from deep azure (low) to sky cyan to electric blue (high)
+theme[cpu_start]="#0055ff"
+theme[cpu_mid]="#00ccff"
+theme[cpu_end]="#00f0ff"
+
+# Memory gradients - from icy blue to bright cyan
+theme[mem_start]="#66d9ff"
+theme[mem_mid]="#00bfff"
+theme[mem_end]="#0099cc"
+
+# Network gradients - from bright cyan to aqua
+theme[download_start]="#00e5ff"
+theme[download_mid]="#00ccff"
+theme[download_end]="#0099ff"
+
+theme[upload_start]="#00ccff"
+theme[upload_mid]="#00b3ff"
+theme[upload_end]="#66ccff"
+
+# Process gradients - vibrant cyan to aqua blue
+theme[process_start]="#00e5ff"
+theme[process_mid]="#00ccff"
+theme[process_end]="#0099ff"
+
+# Temperature gradients - from cool blue to brighter cyan
+theme[temp_start]="#66d9ff"
+theme[temp_mid]="#00ccff"
+theme[temp_end]="#0099ff"
+
+# Battery gradient - cool cyan tones
+theme[battery_start]="#00e5ff"
+theme[battery_mid]="#00ccff"
+theme[battery_end]="#0099ff"
+
+theme[clock]="#d0f0ff"
+theme[input_text]="#ffffff"
+theme[error_text]="#00ffff"
