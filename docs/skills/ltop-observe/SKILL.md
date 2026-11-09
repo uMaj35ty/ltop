@@ -124,6 +124,18 @@ keeping those and mention the disk cost instead.
   platform binaries so the boxes show real MACs (30 s cadence).
 - `procs[].disk_*` covers only processes owned by the current user.
 
+## Fleet (multi-node snapshots from one place)
+
+`ltop fleet --once` pulls `ltop --json` from several nodes over SSH in one
+round and prints an aggregate table (per-node rx/tx, procs, conns, top
+talker). Use it to answer "which machine is busy" across a LAN in a single
+step; then drill into a single node with plain `ssh node ltop --json` for
+the full snapshot (same schema). Nodes need only an installed ltop (>=
+0.2.3) and key auth; a non-interactive ssh session has no PATH on macOS —
+give the full remote command via `--cmd '/opt/homebrew/bin/ltop --json'`.
+`ltop fleet setup <target>` installs a key and verifies a node. There is no
+`fleet --json` machine-readable output yet (roadmap).
+
 ## Diagnostic recipes
 
 - **Network slow?** `ltop --json` → sort `net.interfaces[]` by

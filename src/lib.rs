@@ -365,7 +365,7 @@ fn run(
 }
 
 /// OSC 52:把文本写入终端本地剪贴板(base64;零依赖,ssh 场景直达本地)
-fn osc52_copy(text: &str) {
+pub(crate) fn osc52_copy(text: &str) {
     const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut b64 = String::new();
     for chunk in text.as_bytes().chunks(3) {

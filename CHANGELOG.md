@@ -3,6 +3,42 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased] — 0.3.0-beta (fleet)
+
+### Added
+
+- **`ltop fleet` — SSH multi-node aggregation** (0.3.0-beta branch): the
+  manager polls each node's `ltop --json` (schema v1, additive-only
+  contract; nodes need any ltop ≥ 0.2.3, no new software) and aggregates
+  rx/tx (non-lo), process/connection counts and the top talker per node.
+- **Dedicated TUI** (own event loop, self-contained `fleet/ui.rs`): Σ
+  rx/tx sparklines with damped peaks, node table with sort cycling
+  (`s`: config/rx/tx/procs/conns, selection anchored to the node),
+  pause/resume (`p`), pull-now (`r`), per-node detail popup (`enter`,
+  rebuilt live from the last good snapshot), bilingual help (`h`),
+  OSC 52 copy of `ssh <node> 'kill <pid>'` (`c` — copy-only, ltop never
+  executes anything on nodes beyond the read-only snapshot command).
+  `--once` and non-tty stdout keep a one-line-per-round CLI output (the
+  future headless daemon shape).
+- **`ltop fleet setup <target>` key doctor**: finds a local pubkey, hands
+  the one-time authorization to `ssh-copy-id` (ltop never touches
+  passwords), verifies `--json` + version on the node, resolves the remote
+  binary path and prints the force-command `authorized_keys` line.
+- **`~/.config/ltop/fleet.conf`** node table: line format with unknown
+  lines preserved, atomic write, 0600 on new files, `--save` merges CLI
+  hosts, 64-node cap.
+
+### Changed
+
+- Poller hardening: per-node ssh children are killed on pull timeout (no
+  orphan accumulation), pipes are read concurrently (a full pipe cannot
+  stall the child), ControlMaster/ControlPersist reuses authenticated
+  connections across rounds (socket in `XDG_RUNTIME_DIR`, 0600).
+- ssh stderr is classified into actionable bilingual hints (missing key →
+  setup, host key, key permissions, resolve, unreachable, remote command
+  missing/old node, bad snapshot, timeout); details are sanitized and
+  truncated before display.
+
 ## [0.2.13] - 2026-10-31
 
 ### Added

@@ -6,6 +6,7 @@
 - [TUI 界面](tui.md)
 - [主题](themes.md)
 - [LAN 发现](lan.md)
+- [Fleet 多机聚合](fleet.md)
 - [eBPF 计费](ebpf.md)
 - [数据面](data.md)
 - [AI 代理](ai.md)

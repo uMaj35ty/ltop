@@ -109,7 +109,20 @@ fn poll_round(
     handles.into_iter().filter_map(|h| h.join().ok()).collect()
 }
 
-/// 后台轮询线程:每轮 apply 进共享态;stop 置位后本轮结束即退出
+/// poller 控制信号(TUI 事件循环写):三个独立布尔。
+/// 刻意不用单个 u8 命令字——swap 消费模式会把 PAUSE 当一次性命令
+/// 吞掉(UI 显示已暂停、poller 照跑的假死,冒烟实测抓到)。
+/// pause/stop 是电平信号谁读都行;refresh 是一次性脉冲,由 poller
+/// 独占消费(swap false)。
+#[derive(Clone, Default)]
+struct PollerCtl {
+    stop: Arc<AtomicBool>,
+    pause: Arc<AtomicBool>,
+    refresh: Arc<AtomicBool>,
+}
+
+/// 后台轮询线程:每轮 apply 进共享态;stop 置位后本轮结束即退出;
+/// pause 期间整轮跳过(保持睡眠),refresh 立刻打断睡眠拉一轮
 fn spawn_poller(
     nodes: Vec<(String, String)>,
     interval: u64,
@@ -117,11 +130,21 @@ fn spawn_poller(
     master: bool,
     zh: bool,
     shared: Arc<Mutex<FleetShared>>,
-    stop: Arc<AtomicBool>,
+    ctl: PollerCtl,
 ) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
         let poll = Duration::from_secs(timeout);
         loop {
+            // 暂停:整轮跳过,200ms 粒度盯 stop(电平信号,可反复进出)
+            while ctl.pause.load(Ordering::Relaxed) {
+                if ctl.stop.load(Ordering::Relaxed) {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(200));
+            }
+            if ctl.stop.load(Ordering::Relaxed) {
+                return;
+            }
             let rounds = poll_round(&nodes, poll, master, zh);
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -130,10 +153,17 @@ fn spawn_poller(
             if let Ok(mut s) = shared.lock() {
                 s.apply(rounds, now);
             }
-            // 分片睡眠:stop 一到即响应,不等满 interval
+            // 分片睡眠:stop / refresh / pause 一到即响应,不等满 interval
             for _ in 0..interval * 5 {
-                if stop.load(Ordering::Relaxed) {
+                if ctl.stop.load(Ordering::Relaxed) {
                     return;
+                }
+                // refresh 是一次性脉冲:唯一消费者,swap(false) 取走
+                if ctl.refresh.swap(false, Ordering::Relaxed) {
+                    break;
+                }
+                if ctl.pause.load(Ordering::Relaxed) {
+                    break; // 提前结束睡眠,外层 while 接管暂停
                 }
                 std::thread::sleep(Duration::from_millis(200));
             }
@@ -374,7 +404,8 @@ fn run_cli(
 }
 
 /// TUI 前端:poller 后台线程 + 自有事件循环(AlternateScreen)。
-/// 键位:↑↓ 选择 / enter 详情 / h 帮助 / esc 关弹窗 / q 退出。
+/// 键位:↑↓ 选择 / enter 详情 / s 排序 / p 暂停 / r 立即刷新 /
+/// c 复制 ssh kill 命令(OSC52,只复制不执行)/ h 帮助 / q 退出。
 fn run_tui(
     nodes: Vec<(String, String)>,
     interval: u64,
@@ -426,7 +457,7 @@ fn run_tui(
     let mut terminal = setup()?;
 
     let shared = Arc::new(Mutex::new(FleetShared::new(&nodes)));
-    let stop = Arc::new(AtomicBool::new(false));
+    let ctl = PollerCtl::default();
     let poller = spawn_poller(
         nodes,
         interval,
@@ -434,7 +465,7 @@ fn run_tui(
         master,
         zh,
         Arc::clone(&shared),
-        Arc::clone(&stop),
+        ctl.clone(),
     );
 
     let mut ui = ui::UiState::new();
@@ -451,6 +482,13 @@ fn run_tui(
                     round: 0,
                     sum_hist: Vec::new(),
                 });
+            // 展示序按当前排序模式算;选中/移动都锚定 target 字符串
+            let displayed = ui::sorted_order(&view.order, &view.samples, ui.sort);
+            if ui.sel_target.is_empty() {
+                if let Some(first) = displayed.first() {
+                    ui.sel_target = first.clone();
+                }
+            }
             terminal.draw(|f| ui::draw(f, &view, &mut ui, zh))?;
 
             if crossterm::event::poll(Duration::from_millis(250))? {
@@ -465,6 +503,25 @@ fn run_tui(
                             return Ok(())
                         }
                         KeyCode::Char('h') | KeyCode::Char('?') => ui.help = !ui.help,
+                        KeyCode::Char('s') if !ui.help => ui.sort = ui.sort.next(),
+                        KeyCode::Char('p') if !ui.help => {
+                            ui.paused = !ui.paused;
+                            ctl.pause.store(ui.paused, Ordering::Relaxed);
+                        }
+                        KeyCode::Char('r') if !ui.help => {
+                            ctl.refresh.store(true, Ordering::Relaxed)
+                        }
+                        // 决策在 fleet,动手在用户终端:只复制,永不执行
+                        KeyCode::Char('c') if !ui.help && ui.detail.is_none() => {
+                            let pid = view
+                                .samples
+                                .get(&ui.sel_target)
+                                .and_then(|s| s.top.as_ref())
+                                .and_then(|t| t.pid);
+                            if let Some(cmd) = ui::kill_cmd(&ui.sel_target, pid) {
+                                crate::osc52_copy(&cmd);
+                            }
+                        }
                         KeyCode::Esc => {
                             ui.help = false;
                             ui.detail = None;
@@ -474,31 +531,22 @@ fn run_tui(
                         KeyCode::Down if ui.detail.is_some() => {
                             ui.detail_scroll = ui.detail_scroll.saturating_add(1)
                         }
-                        KeyCode::Down => {
-                            let n = view.order.len().max(1);
-                            ui.selected = (ui.selected + 1) % n;
-                        }
+                        KeyCode::Down => ui.move_selection(&displayed, 1),
                         KeyCode::Up if ui.help => {}
                         KeyCode::Up if ui.detail.is_some() => {
                             ui.detail_scroll = ui.detail_scroll.saturating_sub(1)
                         }
-                        KeyCode::Up => {
-                            let n = view.order.len().max(1);
-                            ui.selected = (ui.selected + n - 1) % n;
-                        }
-                        KeyCode::Enter if !ui.help => {
-                            let t = view.order.get(ui.selected).cloned();
-                            match &ui.detail {
-                                Some(open) if Some(open) == t.as_ref() => {
-                                    ui.detail = None;
-                                    ui.detail_scroll = 0;
-                                }
-                                _ => {
-                                    ui.detail = t;
-                                    ui.detail_scroll = 0;
-                                }
+                        KeyCode::Up => ui.move_selection(&displayed, -1),
+                        KeyCode::Enter if !ui.help => match &ui.detail {
+                            Some(open) if *open == ui.sel_target => {
+                                ui.detail = None;
+                                ui.detail_scroll = 0;
                             }
-                        }
+                            _ => {
+                                ui.detail = Some(ui.sel_target.clone());
+                                ui.detail_scroll = 0;
+                            }
+                        },
                         _ => {}
                     }
                 }
@@ -506,7 +554,7 @@ fn run_tui(
         }
     })();
 
-    stop.store(true, Ordering::Relaxed);
+    ctl.stop.store(true, Ordering::Relaxed);
     let _ = poller.join();
     drop(terminal);
     restore();
@@ -532,7 +580,7 @@ fn render(state: &FleetShared, zh: bool) -> String {
                 let (tn, tv) = r
                     .top
                     .as_ref()
-                    .map(|(n, v)| (crate::sanitize_text(n), *v))
+                    .map(|t| (crate::sanitize_text(&t.name), t.bps))
                     .unwrap_or(("-".to_string(), 0.0));
                 let host = crate::sanitize_text(&r.hostname);
                 let ms = r

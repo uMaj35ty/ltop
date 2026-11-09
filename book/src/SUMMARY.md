@@ -6,6 +6,7 @@
 - [The TUI](tui.md)
 - [Themes](themes.md)
 - [LAN discovery](lan.md)
+- [Fleet](fleet.md)
 - [eBPF accounting](ebpf.md)
 - [The data plane](data.md)
 - [AI agents](ai.md)

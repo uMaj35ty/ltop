@@ -46,6 +46,28 @@ LAN 盒会主动查询本地网络:
 逐查询随机化并与源地址一同校验;所有解析器是有界检查的安全 Rust;不可
 信字符串在进入任何终端输出前会被净化;eBPF 快照读取有文件大小上限。
 
+## Fleet(SSH 多机聚合,0.3.0-beta)
+
+`ltop fleet` 从构造上就是密钥专用:每次拉取都带 `ssh -o BatchMode=yes`,
+密码认证根本不可能发生,也就不可能挂住轮询。ltop 永不存储、询问或转发
+密码/口令——一次性装钥(`ltop fleet setup <目标>`)把终端原样交给
+`ssh-copy-id`,任何密码提示都属于 ssh 而非 ltop。`fleet.conf` 里没有
+`password =` 字段,将来也不会有。
+
+- **不引凭据库**:fleet 直接调用系统 `ssh`;host key 校验永不放松
+  (没有 `StrictHostKeyChecking=no` 这类开关;首连指纹确认发生在你自己的
+  ssh 会话里)。
+- **管理机密钥就是影响面**:它能读所有装了它的节点的指标。`fleet setup`
+  会打印推荐的 *force-command* authorized_keys 行(锁死为 `ltop --json`
+  且禁转发)——密钥泄漏也只能读指标。
+- **控制只到复制为止**:`c` 键把 `ssh <节点> 'kill <pid>'` 复制进剪贴板
+  (OSC 52);ltop 自己对节点执行的操作只有只读快照命令。
+- **远端字符串按敌意输入处理**:主机名/进程名/ssh stderr 在落终端前一律
+  净化(剥控制符)并截断;stderr 只做子串分类,从不原样回显。
+  `fleet.conf` 以 0600 落盘(它暴露内网拓扑);ControlMaster socket 在
+  `XDG_RUNTIME_DIR` 下。
+- 节点数上限 64。
+
 ## 漏洞上报
 
 请使用仓库的 GitHub **Private Vulnerability Reporting**(可利用的问题

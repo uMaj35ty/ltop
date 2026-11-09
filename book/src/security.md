@@ -53,6 +53,32 @@ validated together with the source address, all parsers are bounds-checked
 pure Rust, untrusted strings are sanitized before they reach any terminal
 output, and the eBPF snapshot reader caps file size.
 
+## Fleet (SSH aggregation, 0.3.0-beta)
+
+`ltop fleet` is key-only by construction: every pull runs
+`ssh -o BatchMode=yes`, so password auth cannot hang the poller because it
+cannot happen at all. ltop never stores, asks for, or forwards passwords or
+passphrases — the one-time key installation (`ltop fleet setup <target>`)
+hands the terminal to `ssh-copy-id`, and any password prompt belongs to
+ssh, not ltop. There is no `password =` field in `fleet.conf`.
+
+- **No credential library**: fleet shells out to the system `ssh`; host-key
+  verification is never relaxed (no `StrictHostKeyChecking=no` escape hatch;
+  first-contact fingerprint confirmation happens in your own ssh session).
+- **The manager key is the blast radius**: it can read metrics from every
+  node it is installed on. `fleet setup` prints the recommended
+  *force-command* authorized_keys line locked to exactly `ltop --json` with
+  forwarding disabled — a leaked key can then only read metrics.
+- **Control is copy-only**: the `c` key copies `ssh <node> 'kill <pid>'`
+  to the clipboard (OSC 52); ltop never executes anything on a node beyond
+  the read-only snapshot command.
+- **Remote strings are adversarial**: hostnames, process names and ssh
+  stderr are sanitized (control characters stripped) and truncated before
+  reaching the terminal; stderr is classified by substring match, never
+  echoed raw. `fleet.conf` is written 0600 (it reveals LAN topology);
+  ControlMaster sockets live under `XDG_RUNTIME_DIR`.
+- Node count is capped at 64.
+
 ## Reporting a vulnerability
 
 Please use GitHub **Private Vulnerability Reporting** on the repository

@@ -64,6 +64,39 @@ address; the parsers are bounds-checked pure Rust with fuzz-resistant
 fallbacks. The TUI renders untrusted strings through ratatui (control
 characters dropped), and the CLI output paths sanitize them explicitly.
 
+### `ltop fleet` (SSH multi-node aggregation; 0.3.0-beta)
+
+- **Key-only, batch-mode.** Every pull runs `ssh -o BatchMode=yes` —
+  password auth cannot hang the poller because it cannot happen at all.
+  ltop never stores, asks for, or forwards passwords or key passphrases;
+  the one-time key installation (`ltop fleet setup`) hands the terminal
+  to `ssh-copy-id` and any password prompt belongs to ssh, not ltop.
+  There is no `password =` field in `fleet.conf` and none will be added.
+- **No credential library.** fleet shells out to the system `ssh` binary;
+  there is no in-process SSH implementation. Host-key verification is
+  never relaxed: there is no `StrictHostKeyChecking=no` convenience flag,
+  and first-contact fingerprint confirmation happens interactively in the
+  user's own ssh session.
+- **The manager key is the blast radius.** Whoever holds the fleet key
+  can read metrics from every node it is installed on. The recommended
+  hardening (printed by `fleet setup`) is a per-node *force-command*
+  authorized_keys line locked to exactly `ltop --json` with port/agent/
+  X11 forwarding disabled — a leaked key can then only read metrics.
+- **Control surface is copy-only.** The `c` key copies a
+  `ssh <node> 'kill <pid>'` line to the clipboard (OSC 52). ltop itself
+  never executes anything on a node beyond the read-only snapshot
+  command. Decide in fleet, act in your own terminal.
+- **Untrusted data everywhere.** Hostnames, process names and ssh stderr
+  come from remote machines and are treated as adversarial: everything
+  is sanitized (control characters stripped) and truncated before it can
+  reach the terminal; stderr is classified by substring match and never
+  echoed raw. The `fleet.conf` node table is written **0600** (it
+  reveals LAN topology); ControlMaster sockets live in
+  `XDG_RUNTIME_DIR` (0700 on systemd hosts) with ssh's own 0600 socket
+  permissions.
+- Node count is capped at 64 so a typo'd config cannot become a fork
+  bomb.
+
 ### Known, by-design trade-offs (not vulnerabilities)
 
 - `--out`/`--csv`/`--replay` accept arbitrary paths **within the calling

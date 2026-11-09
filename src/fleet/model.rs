@@ -15,12 +15,20 @@ pub struct NodeSample {
     pub tx: f64,
     pub procs: usize,
     pub conns: usize,
-    /// 最活跃进程(按 net_bps 收发合计)
-    pub top: Option<(String, f64)>,
+    /// 最活跃进程(按 net_bps 收发合计;pid 供 c 键拼 ssh kill 命令)
+    pub top: Option<TopProc>,
     /// 本轮拉取耗时(管理机侧口径,含 ssh 握手)
     pub latency_ms: Option<u64>,
     /// 拉取/解析失败的一行话(已本地化、已 sanitize;该节点本轮缺席)
     pub error: Option<String>,
+}
+
+/// 最活跃进程(name/bps 已 sanitize 由渲染侧把关;pid 给控制命令拼装)
+#[derive(Clone, Debug, PartialEq)]
+pub struct TopProc {
+    pub name: String,
+    pub pid: Option<u32>,
+    pub bps: f64,
 }
 
 /// ssh 失败的分类:决定给用户哪句可操作提示
@@ -158,8 +166,14 @@ pub fn aggregate(target: &str, snap: &Snapshot, latency_ms: u64) -> NodeSample {
     let top = snap
         .procs
         .iter()
-        .map(|p| (p.name.clone(), p.net_bps_recv + p.net_bps_sent))
-        .max_by(|a, b| a.1.total_cmp(&b.1));
+        .max_by(|a, b| {
+            (a.net_bps_recv + a.net_bps_sent).total_cmp(&(b.net_bps_recv + b.net_bps_sent))
+        })
+        .map(|p| TopProc {
+            name: p.name.clone(),
+            pid: Some(p.pid),
+            bps: p.net_bps_recv + p.net_bps_sent,
+        });
     NodeSample {
         target: target.to_string(),
         hostname: snap.meta.hostname.clone(),
@@ -292,7 +306,12 @@ mod tests {
         assert_eq!(n.tx, 50.0);
         assert_eq!(n.procs, 1);
         assert_eq!(n.latency_ms, Some(12));
-        assert_eq!(n.top.as_ref().map(|(n, _)| n.as_str()), Some("top"));
+        assert_eq!(n.top.as_ref().map(|t| t.name.as_str()), Some("top"));
+        assert_eq!(
+            n.top.as_ref().and_then(|t| t.pid),
+            Some(1),
+            "pid 供 c 键拼 kill 命令"
+        );
     }
 
     /// 两节点样本互不串扰(聚合是逐快照的)
