@@ -14,7 +14,7 @@ use crate::app::App;
 
 pub const SCHEMA: u32 = 1;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Snapshot {
     pub schema: u32,
     pub meta: Meta,
@@ -25,7 +25,7 @@ pub struct Snapshot {
     pub procs: Vec<ProcSnapshot>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Meta {
     pub hostname: String,
     pub ts: u64,
@@ -36,7 +36,7 @@ pub struct Meta {
     pub udp_helper: bool,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct IfaceSnapshot {
     pub name: String,
     pub operstate: String,
@@ -54,13 +54,13 @@ pub struct IfaceSnapshot {
     pub alive_tx: u64,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct NetSnapshot {
     pub selected: String,
     pub interfaces: Vec<IfaceSnapshot>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct NeighborSnapshot {
     pub ip: String,
     /// None on macOS (system sanitizes MACs for non-Apple-signed binaries)
@@ -72,14 +72,14 @@ pub struct NeighborSnapshot {
     pub tracked: bool,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct LanSnapshot {
     pub subnets: Vec<String>,
     pub gateways: Vec<String>,
     pub neighbours: Vec<NeighborSnapshot>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct DiskDevSnapshot {
     pub name: String,
     pub mounts: Vec<String>,
@@ -91,14 +91,14 @@ pub struct DiskDevSnapshot {
     pub iops: f64,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct DiskSnapshot {
     pub devices: Vec<DiskDevSnapshot>,
     pub session_read: u64,
     pub session_write: u64,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ConnSnapshot {
     pub proto: String,
     pub local: String,
@@ -114,7 +114,7 @@ pub struct ConnSnapshot {
     pub bps_sent: f64,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ProcSnapshot {
     pub pid: u32,
     pub name: String,
