@@ -1,167 +1,71 @@
-//! fleet:SSH 多机聚合(0.3.0-beta 验证分支的最小实现)。
+//! fleet:SSH 多机聚合(0.3.0-beta)。
 //!
 //! 管理机通过 SSH 周期拉取各节点的 `ltop --json`(schema v1),聚合为
 //! 一张总览表;节点只需已装 ltop(任意 ≥0.2.3 版本),零新增软件。
-//! 本阶段目标是**验证多机聚合的可行性**(异构节点、认证、延迟、schema
-//! 兼容),不是最终形态:fleet capture/report 的多主机维度在后续迭代。
+//! 模块分工:`model` 纯函数(聚合/错误分类)、`poll` ssh 拉取、
+//! `cfg` fleet.conf、`setup` 密钥 doctor;本文件是入口与 CLI 渲染。
+//! 凭据红线:BatchMode 密钥专用,不存不问密码(见 SECURITY.md fleet 段)。
 
+mod cfg;
+mod model;
+mod poll;
+mod setup;
+
+use std::collections::HashMap;
 use std::io::Write;
-use std::process::Command;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 
-use crate::snapshot::Snapshot;
+use model::NodeSample;
+use snapshot::Snapshot;
 
-/// 一个节点一轮的聚合样本
-pub struct NodeSample {
-    pub target: String,
-    pub hostname: String,
-    /// 非 lo 接口的 rx/tx 速率合计(B/s)
-    pub rx: f64,
-    pub tx: f64,
-    pub procs: usize,
-    pub conns: usize,
-    /// 最活跃进程(按 net_bps 收发合计)
-    pub top: Option<(String, f64)>,
-    /// 拉取/解析失败的原因(该节点本轮缺席)
-    pub error: Option<String>,
+use crate::snapshot;
+
+/// 一个节点的常驻状态:最新样本 + 最近一份成功快照(批次② TUI 详情用)
+struct NodeState {
+    sample: NodeSample,
+    /// 最近一次成功的原始快照;失败轮保留上一次(表里以 dim 陈旧呈现)
+    raw: Option<Snapshot>,
+    /// 最近一次成功的时间戳(秒)
+    last_ok: Option<u64>,
 }
 
-/// 从一台节点的 schema v1 快照聚合出样本(纯函数,双平台可测)
-pub fn aggregate(target: &str, snap: &Snapshot) -> NodeSample {
-    let mut rx = 0.0;
-    let mut tx = 0.0;
-    for i in &snap.net.interfaces {
-        if i.name == "lo" {
-            continue;
-        }
-        rx += i.rx_bps;
-        tx += i.tx_bps;
-    }
-    let top = snap
-        .procs
-        .iter()
-        .map(|p| (p.name.clone(), p.net_bps_recv + p.net_bps_sent))
-        .max_by(|a, b| a.1.total_cmp(&b.1));
-    NodeSample {
-        target: target.to_string(),
-        hostname: snap.meta.hostname.clone(),
-        rx,
-        tx,
-        procs: snap.procs.len(),
-        conns: snap.conns.len(),
-        top,
-        error: None,
-    }
-}
+const FLEET_USAGE: &str = "ltop fleet [OPTIONS]        poll nodes and aggregate
+ltop fleet setup <TARGET>   install a key on a node and verify it
 
-fn failed(target: &str, err: String) -> NodeSample {
-    NodeSample {
-        target: target.to_string(),
-        hostname: String::new(),
-        rx: 0.0,
-        tx: 0.0,
-        procs: 0,
-        conns: 0,
-        top: None,
-        error: Some(err),
-    }
-}
-
-/// SSH 拉取一个节点(并发模型:每节点一个线程,超时即该节点缺席)
-fn pull(target: &str, cmd: &str, timeout: Duration) -> NodeSample {
-    use std::sync::mpsc;
-    let (tx, rx) = mpsc::channel();
-    let (t, c) = (target.to_string(), cmd.to_string());
-    std::thread::spawn(move || {
-        // BatchMode:密钥不通时立刻失败,不挂住等密码输入
-        let out = Command::new("ssh")
-            .args(["-o", "BatchMode=yes", "-o", "ConnectTimeout=5", &t, &c])
-            .output();
-        let _ = tx.send(match out {
-            Ok(o) if o.status.success() => Ok(String::from_utf8_lossy(&o.stdout).into_owned()),
-            Ok(o) => Err(format!(
-                "remote exited {}: {}",
-                o.status,
-                String::from_utf8_lossy(&o.stderr).trim()
-            )),
-            Err(e) => Err(e.to_string()),
-        });
-    });
-    let text: String = match rx.recv_timeout(timeout) {
-        Ok(Ok(s)) => s,
-        Ok(Err(e)) => return failed(target, e),
-        Err(_) => return failed(target, format!("timeout after {}s", timeout.as_secs())),
-    };
-    match serde_json::from_str::<Snapshot>(&text) {
-        Ok(snap) => aggregate(target, &snap),
-        Err(e) => failed(target, format!("not a schema-v1 snapshot: {e}")),
-    }
-}
-
-fn render(rows: &[NodeSample]) -> String {
-    let mut out = String::new();
-    out.push_str(&format!(
-        "{:<24} {:>10} {:>10} {:>6} {:>6}  {}\n",
-        "node", "rx", "tx", "procs", "conns", "top talker"
-    ));
-    for r in rows {
-        match &r.error {
-            Some(e) => out.push_str(&format!("{:<24} ⚠ {}\n", r.target, e)),
-            None => {
-                let (tn, tv) = r
-                    .top
-                    .as_ref()
-                    .map(|(n, v)| (n.as_str(), *v))
-                    .unwrap_or(("-", 0.0));
-                out.push_str(&format!(
-                    "{:<24} {:>10} {:>10} {:>6} {:>6}  {} ({}/s)\n",
-                    r.hostname,
-                    crate::fmt_human(r.rx),
-                    crate::fmt_human(r.tx),
-                    r.procs,
-                    r.conns,
-                    tn,
-                    crate::fmt_human(tv),
-                ));
-            }
-        }
-    }
-    out
-}
-
-const FLEET_USAGE: &str = "ltop fleet [OPTIONS]
-
-USAGE:
-    ltop fleet --host <[user@]host>... [OPTIONS]
-
-    --host <TARGET>   node to poll, repeatable (SSH target; key auth required)
+OPTIONS:
+    --host <TARGET>   node to poll, repeatable (SSH target; key auth
+                      required; reads ~/.config/ltop/fleet.conf when
+                      omitted)
     --cmd <COMMAND>   remote command for the most recent --host (or the
                       default for later ones). default: ltop --json — on
                       macOS give the full path, non-interactive ssh has no
                       PATH additions
+    --save            persist the effective node list to fleet.conf
     --once            one round and exit (default: loop)
     --interval <S>    seconds between rounds (default 5, min 1)
     --timeout <S>     per-node pull timeout (default 15)
     -h, --help        this help";
 
-/// fleet 的可选项:每主机独立远端命令(mac 无交互 PATH 下需要全路径)
 pub struct FleetOpts {
-    pub hosts: Vec<(String, String)>,
+    /// None = 用 fleet.conf 的节点表
+    pub hosts: Option<Vec<(String, String)>>,
     pub once: bool,
-    pub interval: u64,
-    pub timeout: u64,
+    pub interval: Option<u64>,
+    pub timeout: Option<u64>,
+    pub save: bool,
 }
 
 /// None = 已打印 help(正常退出路径)
 pub fn parse_args(args: &[String]) -> Result<Option<FleetOpts>> {
     let zh = crate::cli_lang_zh();
     let mut hosts: Vec<(String, String)> = Vec::new();
-    let mut cmd = "ltop --json".to_string();
+    let mut cmd = cfg::DEFAULT_CMD.to_string();
     let mut once = false;
-    let mut interval = 5u64;
-    let mut timeout = 15u64;
+    let mut interval = None;
+    let mut timeout = None;
+    let mut save = false;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -190,181 +94,313 @@ pub fn parse_args(args: &[String]) -> Result<Option<FleetOpts>> {
                 }
                 i += 1;
             }
+            "--save" => save = true,
             "--once" => once = true,
             "--interval" => {
-                interval = args
-                    .get(i + 1)
-                    .and_then(|v| v.parse::<u64>().ok())
-                    .context(crate::pick_s(
-                        zh,
-                        "--interval needs a number of seconds",
-                        "--interval 需要一个秒数",
-                    ))?
-                    .max(1);
+                interval = Some(
+                    args.get(i + 1)
+                        .and_then(|v| v.parse::<u64>().ok())
+                        .context(crate::pick_s(
+                            zh,
+                            "--interval needs a number of seconds",
+                            "--interval 需要一个秒数",
+                        ))?
+                        .max(1),
+                );
                 i += 1;
             }
             "--timeout" => {
-                timeout = args
-                    .get(i + 1)
-                    .and_then(|v| v.parse::<u64>().ok())
-                    .context(crate::pick_s(
-                        zh,
-                        "--timeout needs a number of seconds",
-                        "--timeout 需要一个秒数",
-                    ))?
-                    .max(1);
+                timeout = Some(
+                    args.get(i + 1)
+                        .and_then(|v| v.parse::<u64>().ok())
+                        .context(crate::pick_s(
+                            zh,
+                            "--timeout needs a number of seconds",
+                            "--timeout 需要一个秒数",
+                        ))?
+                        .max(1),
+                );
                 i += 1;
             }
-            a if a.starts_with("--") => {
+            a if a.starts_with('-') => {
                 bail!("ltop fleet: unknown option {a} (try --help)");
             }
-            a => bail!("ltop fleet: unexpected argument {a:?} (options only, try --help)"),
+            a => bail!(
+                "{}",
+                crate::pick_s(
+                    zh,
+                    &format!("ltop fleet: unexpected argument {a:?} (options only; to set up a node use `ltop fleet setup`)",),
+                    &format!("ltop fleet: 多余的参数 {a:?}(只收选项;配置节点用 `ltop fleet setup`)")
+                )
+            ),
         }
         i += 1;
     }
-    if hosts.is_empty() {
-        bail!(crate::pick_s(
-            zh,
-            "ltop fleet: at least one --host is required (try --help)",
-            "ltop fleet: 至少需要一个 --host(见 --help)"
-        ));
-    }
+    let hosts = if hosts.is_empty() { None } else { Some(hosts) };
     Ok(Some(FleetOpts {
         hosts,
         once,
         interval,
         timeout,
+        save,
     }))
 }
 
 pub fn run(args: &[String]) -> Result<()> {
+    // `ltop fleet setup <target>`:密钥 doctor,独立路径,不进轮询
+    if args.first().map(String::as_str) == Some("setup") {
+        return setup::run(&args[1..]);
+    }
+
     let Some(opts) = parse_args(args)? else {
         return Ok(());
     };
-    let hosts = &opts.hosts;
+    let zh = crate::cli_lang_zh();
 
-    let poll = Duration::from_secs(opts.timeout);
+    // 节点表:CLI 覆盖配置;--save 把生效表写回 fleet.conf
+    let mut conf = cfg::FleetConf::load();
+    if let Some(hosts) = &opts.hosts {
+        conf.merge_hosts(hosts);
+    }
+    if conf.nodes.is_empty() {
+        bail!(
+            "{}",
+            crate::pick_s(
+                zh,
+                "ltop fleet: no nodes — pass --host or add nodes to ~/.config/ltop/fleet.conf; to set up a node run `ltop fleet setup <target>`",
+                "ltop fleet: 没有节点 — 用 --host 或在 ~/.config/ltop/fleet.conf 添加;配置新节点用 `ltop fleet setup <目标>`"
+            )
+        );
+    }
+    if opts.save {
+        conf.save().map_err(|e| {
+            anyhow::anyhow!(
+                "{}",
+                crate::pick_s(
+                    zh,
+                    &format!("ltop fleet: cannot write fleet.conf: {e}"),
+                    &format!("ltop fleet: 写 fleet.conf 失败:{e}")
+                )
+            )
+        })?;
+        println!(
+            "{}",
+            crate::pick_s(
+                zh,
+                &format!(
+                    "saved {} node(s) to {}",
+                    conf.nodes.len(),
+                    cfg::FleetConf::path()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_default()
+                ),
+                &format!(
+                    "已保存 {} 个节点到 {}",
+                    conf.nodes.len(),
+                    cfg::FleetConf::path()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_default()
+                )
+            )
+        );
+    }
+
+    let interval = opts.interval.unwrap_or(conf.interval).max(1);
+    let timeout = opts.timeout.unwrap_or(conf.timeout).max(1);
+    let master = conf.master;
+    let nodes: Vec<(String, String)> = conf
+        .nodes
+        .iter()
+        .map(|n| {
+            (
+                n.target.clone(),
+                n.cmd
+                    .clone()
+                    .unwrap_or_else(|| cfg::DEFAULT_CMD.to_string()),
+            )
+        })
+        .collect();
+    let poll = Duration::from_secs(timeout);
+
+    // 常驻状态:失败轮保留上一轮的 raw/last_ok(不"瞬时空白"),样本行换成错误行
+    let mut state: HashMap<String, NodeState> = HashMap::new();
+    let mut round: u64 = 0;
     loop {
-        let mut samples: Vec<NodeSample> = Vec::new();
+        round += 1;
         let mut handles = Vec::new();
-        for (t, c) in hosts {
+        for (t, c) in &nodes {
             let (t, c, poll) = (t.clone(), c.clone(), poll);
-            handles.push(std::thread::spawn(move || pull(&t, &c, poll)));
+            handles.push(std::thread::spawn(move || {
+                poll::pull(&t, &c, poll, master, zh)
+            }));
         }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
         for h in handles {
-            if let Ok(s) = h.join() {
-                samples.push(s);
+            let Ok(r) = h.join() else { continue };
+            let target = r.sample.target.clone();
+            let ok = r.sample.error.is_none();
+            use std::collections::hash_map::Entry;
+            match state.entry(target) {
+                Entry::Vacant(v) => {
+                    v.insert(NodeState {
+                        sample: r.sample,
+                        raw: r.raw,
+                        last_ok: if ok { Some(now) } else { None },
+                    });
+                }
+                Entry::Occupied(mut o) => {
+                    let e = o.get_mut();
+                    e.sample = r.sample;
+                    if ok {
+                        e.raw = r.raw;
+                        e.last_ok = Some(now);
+                    }
+                }
             }
         }
-        print!("\n{}", render(&samples));
+        print!("\n[{}] round {round}\n{}", now_hhmmss(), render(&state, zh));
         std::io::stdout().flush().ok();
         if opts.once {
             return Ok(());
         }
-        std::thread::sleep(Duration::from_secs(opts.interval));
+        std::thread::sleep(Duration::from_secs(interval));
     }
+}
+
+fn now_hhmmss() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    // 本地时区不引入 chrono:直接展示 UTC 无意义,改用相对轮次即可。
+    // 这里保留秒数便于确认轮询确实在走
+    format!("t+{secs}")
+}
+
+/// CLI 总览表(批次②由 TUI 取代)。远端字符串全部 sanitize 后才落表。
+fn render(state: &HashMap<String, NodeState>, zh: bool) -> String {
+    let mut rows: Vec<&NodeState> = state.values().collect();
+    rows.sort_by(|a, b| a.sample.target.cmp(&b.sample.target));
+    let mut out = String::new();
+    out.push_str(&format!(
+        "{:<24} {:>10} {:>10} {:>6} {:>6} {:>6}  {}\n",
+        "node", "rx", "tx", "procs", "conns", "ms", "top talker"
+    ));
+    for st in rows {
+        let r = &st.sample;
+        match &r.error {
+            Some(e) => out.push_str(&format!("{:<24} ⚠ {}\n", r.target, e)),
+            None => {
+                let (tn, tv) = r
+                    .top
+                    .as_ref()
+                    .map(|(n, v)| (crate::sanitize_text(n), *v))
+                    .unwrap_or(("-".to_string(), 0.0));
+                let host = crate::sanitize_text(&r.hostname);
+                let ms = r
+                    .latency_ms
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "-".into());
+                out.push_str(&format!(
+                    "{:<24} {:>10} {:>10} {:>6} {:>6} {:>6}  {} ({}/s)\n",
+                    host,
+                    crate::fmt_human(r.rx),
+                    crate::fmt_human(r.tx),
+                    r.procs,
+                    r.conns,
+                    ms,
+                    tn,
+                    crate::fmt_human(tv),
+                ));
+            }
+        }
+    }
+    let _ = zh;
+    out
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn snap(name: &str, rx: f64, tx: f64) -> Snapshot {
-        use crate::snapshot::*;
-        Snapshot {
-            schema: SCHEMA,
-            meta: Meta {
-                hostname: name.to_string(),
-                ts: 1,
-                version: "test".into(),
-                os: "linux".into(),
-                arch: "aarch64".into(),
-                udp_helper: false,
-            },
-            net: NetSnapshot {
-                selected: "en0".into(),
-                interfaces: vec![IfaceSnapshot {
-                    name: "en0".into(),
-                    operstate: "up".into(),
-                    speed_mbps: None,
-                    duplex: None,
-                    mac: "aa:aa".into(),
-                    addresses: vec![],
-                    rx_bps: rx,
-                    tx_bps: tx,
-                    session_rx: 0,
-                    session_tx: 0,
-                    alive_rx: 0,
-                    alive_tx: 0,
-                }],
-            },
-            lan: LanSnapshot {
-                subnets: vec![],
-                gateways: vec![],
-                neighbours: vec![],
-            },
-            disk: DiskSnapshot {
-                devices: vec![],
-                session_read: 0,
-                session_write: 0,
-            },
-            conns: vec![ConnSnapshot {
-                proto: "tcp".into(),
-                local: "127.0.0.1:1".into(),
-                remote: "127.0.0.1:2".into(),
-                state: "ESTAB".into(),
-                process: Some("top".into()),
-                pid: Some(1),
-                user: "u".into(),
-                inode: 1,
-                bytes_recv: 0,
-                bytes_sent: 0,
-                bps_recv: rx,
-                bps_sent: 0.0,
-            }],
-            procs: vec![ProcSnapshot {
-                pid: 1,
-                name: "top".into(),
-                net_recv: 0,
-                net_sent: 0,
-                net_bps_recv: rx,
-                net_bps_sent: 0.0,
-                udp_recv: 0,
-                udp_sent: 0,
-                disk_read: 0,
-                disk_written: 0,
-                disk_bps_read: 0.0,
-                disk_bps_written: 0.0,
-                alive: true,
-            }],
+    fn arglist(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn parses_host_cmd_pairing_and_flags() {
+        let o = parse_args(&arglist(&[
+            "--host",
+            "air",
+            "--cmd",
+            "/opt/homebrew/bin/ltop --json",
+            "--host",
+            "fedora",
+            "--interval",
+            "3",
+            "--timeout",
+            "9",
+            "--save",
+            "--once",
+        ]))
+        .unwrap()
+        .unwrap();
+        let hosts = o.hosts.unwrap();
+        assert_eq!(
+            hosts[0],
+            ("air".into(), "/opt/homebrew/bin/ltop --json".into())
+        );
+        assert_eq!(
+            hosts[1],
+            ("fedora".into(), "ltop --json".into()),
+            "--cmd 只作用于最近一个 --host,后续主机拿默认命令"
+        );
+        assert_eq!(o.interval, Some(3));
+        assert_eq!(o.timeout, Some(9));
+        assert!(o.save);
+        assert!(o.once);
+    }
+
+    #[test]
+    fn no_hosts_means_use_config() {
+        let o = parse_args(&arglist(&["--once"])).unwrap().unwrap();
+        assert!(o.hosts.is_none());
+    }
+
+    #[test]
+    fn rejects_unknown_options_and_positionals() {
+        assert!(parse_args(&arglist(&["--wat"])).is_err());
+        assert!(parse_args(&arglist(&["fedora"])).is_err());
+        assert!(parse_args(&arglist(&["--interval"])).is_err(), "缺值");
+    }
+
+    #[test]
+    fn help_short_circuits() {
+        let o = parse_args(&arglist(&["-h"])).unwrap();
+        assert!(o.is_none(), "help 打印后返回 None");
+    }
+
+    #[test]
+    fn render_sanitizes_remote_strings() {
+        let mut s = model::fixture::snap("\x1b]0;evil\x07node", 10.0, 5.0);
+        if let Some(p) = s.procs.first_mut() {
+            p.name = "\x1b[31msneaky\x1b[0m".into();
         }
-    }
-
-    /// 聚合口径:lo 不计入,rx/tx 合计,最活跃进程取收发速率和最大者
-    #[test]
-    fn aggregates_rates_and_top_talker() {
-        let mut s = snap("node-a", 100.0, 50.0);
-        // 追加 lo 行:不得计入合计
-        let lo: Snapshot = snap("x", 9999.0, 9999.0);
-        let lo_iface = lo.net.interfaces.into_iter().map(|mut i| {
-            i.name = "lo".into();
-            i
-        });
-        s.net.interfaces.extend(lo_iface);
-        let n = aggregate("a@h", &s);
-        assert_eq!(n.hostname, "node-a");
-        assert_eq!(n.rx, 100.0, "lo 不得计入");
-        assert_eq!(n.tx, 50.0);
-        assert_eq!(n.procs, 1);
-        assert_eq!(n.top.as_ref().map(|(n, _)| n.as_str()), Some("top"));
-    }
-
-    /// 两节点样本互不串扰(聚合是逐快照的)
-    #[test]
-    fn nodes_stay_independent() {
-        let a = aggregate("a", &snap("node-a", 1.0, 1.0));
-        let b = aggregate("b", &snap("node-b", 500.0, 500.0));
-        assert_eq!(a.rx, 1.0);
-        assert_eq!(b.rx, 500.0);
+        let n = model::aggregate("t", &s, 5);
+        let mut st = HashMap::new();
+        st.insert(
+            "t".to_string(),
+            NodeState {
+                sample: n,
+                raw: None,
+                last_ok: None,
+            },
+        );
+        let out = render(&st, false);
+        assert!(!out.contains('\x1b'), "控制符必须被剥掉:{out:?}");
+        assert!(out.contains("evilnode"));
     }
 }
