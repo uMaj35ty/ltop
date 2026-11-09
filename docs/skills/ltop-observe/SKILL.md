@@ -133,8 +133,13 @@ step; then drill into a single node with plain `ssh node ltop --json` for
 the full snapshot (same schema). Nodes need only an installed ltop (>=
 0.2.3) and key auth; a non-interactive ssh session has no PATH on macOS —
 give the full remote command via `--cmd '/opt/homebrew/bin/ltop --json'`.
-`ltop fleet setup <target>` installs a key and verifies a node. There is no
-`fleet --json` machine-readable output yet (roadmap).
+`ltop fleet setup <target>` installs a key and verifies a node. Threshold
+alerts (`alert node rx > 50M`, `alert proc chrome net > 20M`,
+`alert conn ip <ip>`, `alert new-device`, `alert node-down` in
+~/.config/ltop/fleet.conf) push system notifications with hysteresis,
+cooldown and an hourly cap — prefer reading the active-alert state over
+re-polling manually. There is no `fleet --json` machine-readable output
+yet (roadmap).
 
 ## Diagnostic recipes
 

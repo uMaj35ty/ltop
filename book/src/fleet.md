@@ -79,6 +79,32 @@ node      rx     tx   procs conns  ms   top talker
 air    4.5KiB 8.9KiB    4    53  2075  ZCode Helper (2.1KiB/s)
 ```
 
+## Alerts
+
+Threshold rules live in `fleet.conf` and fire **system notifications** on
+the machine running fleet (`notify-send` on Linux, `osascript` on macOS;
+without a desktop session the state stays visible in the TUI/CLI only):
+
+```text
+alert node rx > 50M        # node rx over 50 MB/s
+alert node tx > 1G         # node tx over 1 GB/s
+alert proc chrome net > 20M   # processes matching "chrome" (case-insensitive,
+                              # sums) over 20 MB/s
+alert conn ip 203.0.113.7  # a connection to this IP appears
+alert new-device           # a LAN neighbour not seen before (instant)
+alert node-down            # node unreachable for 3 consecutive rounds
+```
+
+Anti-spam is built in: a rule must hold for **2 consecutive rounds**
+(hysteresis) before firing, re-notifies at most every 10 minutes while it
+stays active, sends a *resolved* notification when it clears, and a
+rolling window caps everything at 20 notifications per hour. `alert
+new-device` is deliberately instant (first sight seeds the baseline, so
+your existing LAN never alarms). The TUI header shows `⚠ N` while alerts
+are active; non-tty runs print `⚠ …`/`✓ resolved …` lines. See
+[Security → Fleet](security.md#fleet-ssh-aggregation-030-beta) for why
+notifications never carry raw remote stderr.
+
 ## Options
 
 | Flag | Meaning |

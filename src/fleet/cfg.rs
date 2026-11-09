@@ -23,6 +23,8 @@ use std::path::PathBuf;
 
 use crate::config::Config;
 
+use super::alerts::{parse_alert_line, AlertRule};
+
 pub const DEFAULT_CMD: &str = "ltop --json";
 /// 节点数硬顶:配置手滑也不许变成 fork bomb
 pub const MAX_NODES: usize = 64;
@@ -40,6 +42,10 @@ pub struct FleetConf {
     pub timeout: u64,
     pub master: bool,
     pub nodes: Vec<NodeCfg>,
+    /// 告警规则(`alert ...` 行)
+    pub alerts: Vec<AlertRule>,
+    /// 语法不认识的 alert 行(启动时警告一次,原行进 extra)
+    pub bad_alerts: Vec<String>,
     /// 未认识的行(含注释),保存时原样回写
     pub extra: Vec<String>,
 }
@@ -51,6 +57,8 @@ impl Default for FleetConf {
             timeout: 15,
             master: true,
             nodes: Vec::new(),
+            alerts: Vec::new(),
+            bad_alerts: Vec::new(),
             extra: Vec::new(),
         }
     }
@@ -89,6 +97,18 @@ impl FleetConf {
         let t = line.trim();
         if t.is_empty() || t.starts_with('#') || t.starts_with(';') {
             self.extra.push(line.to_string());
+            return;
+        }
+        // alert 行是谓词不是 key=value,必须在 split_once 之前拦下
+        // (否则整行落进 extra,告警静默失效——冒烟实测抓到)
+        if t.starts_with("alert ") || t == "alert" {
+            match parse_alert_line(t) {
+                Some(r) => self.alerts.push(r),
+                None => {
+                    self.bad_alerts.push(t.to_string());
+                    self.extra.push(line.to_string());
+                }
+            }
             return;
         }
         let Some((key, value)) = t.split_once('=') else {
@@ -137,6 +157,13 @@ impl FleetConf {
                     self.extra.push(line.to_string());
                 }
             }
+            "alert" => match parse_alert_line(t) {
+                Some(r) => self.alerts.push(r),
+                None => {
+                    self.bad_alerts.push(t.to_string());
+                    self.extra.push(line.to_string());
+                }
+            },
             _ => self.extra.push(line.to_string()),
         }
     }
@@ -158,6 +185,9 @@ impl FleetConf {
             if let Some(c) = &n.cmd {
                 out.push_str(&format!("cmd {} = {}\n", n.target, c));
             }
+        }
+        for a in &self.alerts {
+            out.push_str(&format!("{}\n", a.source()));
         }
         for l in &self.extra {
             out.push_str(l);

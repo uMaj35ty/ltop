@@ -7,8 +7,10 @@
 //! 入口、共享态与两个前端的调度。凭据红线:BatchMode 密钥专用,不存
 //! 不问密码(见 SECURITY.md fleet 段)。
 
+mod alerts;
 mod cfg;
 mod model;
+mod notify;
 mod poll;
 mod setup;
 mod ui;
@@ -35,6 +37,8 @@ struct FleetShared {
     last_ok: HashMap<String, u64>,
     /// Σ(非错误节点)rx/tx 走线,每轮一个样本(TUI 走线用)
     sum_hist: Vec<(f64, f64)>,
+    /// 当前活跃告警(引擎 active():键+规则原文,poller 每轮更新)
+    pub alerts: Vec<(String, String)>,
     round: u64,
 }
 
@@ -48,6 +52,7 @@ impl FleetShared {
             raws: HashMap::new(),
             last_ok: HashMap::new(),
             sum_hist: Vec::new(),
+            alerts: Vec::new(),
             round: 0,
         }
     }
@@ -88,6 +93,7 @@ impl FleetShared {
             raws,
             round: self.round,
             sum_hist: self.sum_hist.clone(),
+            alerts: self.alerts.clone(),
         }
     }
 }
@@ -123,6 +129,7 @@ struct PollerCtl {
 
 /// 后台轮询线程:每轮 apply 进共享态;stop 置位后本轮结束即退出;
 /// pause 期间整轮跳过(保持睡眠),refresh 立刻打断睡眠拉一轮
+#[allow(clippy::too_many_arguments)]
 fn spawn_poller(
     nodes: Vec<(String, String)>,
     interval: u64,
@@ -131,9 +138,12 @@ fn spawn_poller(
     zh: bool,
     shared: Arc<Mutex<FleetShared>>,
     ctl: PollerCtl,
+    rules: Vec<alerts::AlertRule>,
 ) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
         let poll = Duration::from_secs(timeout);
+        let mut engine = alerts::AlertEngine::new(rules, zh);
+        let mut miss: HashMap<String, u32> = HashMap::new();
         loop {
             // 暂停:整轮跳过,200ms 粒度盯 stop(电平信号,可反复进出)
             while ctl.pause.load(Ordering::Relaxed) {
@@ -150,8 +160,52 @@ fn spawn_poller(
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
-            if let Ok(mut s) = shared.lock() {
+            let events = {
+                let mut s = match shared.lock() {
+                    Ok(g) => g,
+                    Err(_) => return,
+                };
                 s.apply(rounds, now);
+                // 逐节点失败连击计数(node-down 用;成功归零)
+                for t in &s.order {
+                    let e = s.samples.get(t).map(|x| x.error.is_some()).unwrap_or(true);
+                    let m = miss.entry(t.clone()).or_insert(0);
+                    if e {
+                        *m += 1;
+                    } else {
+                        *m = 0;
+                    }
+                }
+                let evals: Vec<alerts::NodeEval> = s
+                    .order
+                    .iter()
+                    .map(|t| alerts::NodeEval {
+                        target: t,
+                        sample: s.samples.get(t),
+                        snap: s.raws.get(t),
+                        miss: miss.get(t).copied().unwrap_or(0),
+                    })
+                    .collect();
+                let evs = engine.evaluate(&evals, now);
+                s.alerts = engine.active();
+                evs
+            };
+            // 通知在锁外发:notify-send/osascript 是子进程,不占共享态
+            for ev in events {
+                let (title, body) = match ev {
+                    alerts::AlertEvent::Fire(_, m) | alerts::AlertEvent::ReFire(_, m) => {
+                        ("⚠ ltop fleet".to_string(), m)
+                    }
+                    alerts::AlertEvent::Clear(k) => (
+                        "✓ ltop fleet".to_string(),
+                        crate::pick_s(
+                            zh,
+                            &format!("resolved: {}", k.split('@').next().unwrap_or("")),
+                            &format!("已解除:{}", k.split('@').next().unwrap_or("")),
+                        ),
+                    ),
+                };
+                notify::send(&title, &body);
             }
             // 分片睡眠:stop / refresh / pause 一到即响应,不等满 interval
             for _ in 0..interval * 5 {
@@ -351,6 +405,16 @@ pub fn run(args: &[String]) -> Result<()> {
         );
     }
 
+    for bad in &conf.bad_alerts {
+        eprintln!(
+            "{}",
+            crate::pick_s(
+                zh,
+                &format!("ltop fleet: unrecognized alert line ignored: {bad}"),
+                &format!("ltop fleet: 无法识别的告警行已忽略:{bad}")
+            )
+        );
+    }
     let interval = opts.interval.unwrap_or(conf.interval).max(1);
     let timeout = opts.timeout.unwrap_or(conf.timeout).max(1);
     let master = conf.master;
@@ -370,13 +434,14 @@ pub fn run(args: &[String]) -> Result<()> {
     // --once 永远走非交互(脚本/CI 语义);tty 上默认 TUI,否则逐轮打印
     let interactive = !opts.once && std::io::IsTerminal::is_terminal(&std::io::stdout());
     if interactive {
-        run_tui(nodes, interval, timeout, master, zh)
+        run_tui(nodes, interval, timeout, master, zh, conf.alerts.clone())
     } else {
-        run_cli(nodes, interval, timeout, master, zh, opts.once)
+        run_cli(nodes, interval, timeout, master, zh, opts.once, conf.alerts)
     }
 }
 
 /// CLI 前端:逐轮打印(非 tty 的形态,也是将来无头 daemon 的雏形)
+#[allow(clippy::too_many_arguments)]
 fn run_cli(
     nodes: Vec<(String, String)>,
     interval: u64,
@@ -384,17 +449,70 @@ fn run_cli(
     master: bool,
     zh: bool,
     once: bool,
+    alert_rules: Vec<alerts::AlertRule>,
 ) -> Result<()> {
     let poll = Duration::from_secs(timeout);
     let mut state = FleetShared::new(&nodes);
+    let mut engine = alerts::AlertEngine::new(alert_rules.clone(), zh);
+    let mut miss: HashMap<String, u32> = HashMap::new();
     loop {
         let rounds = poll_round(&nodes, poll, master, zh);
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
-        state.apply(rounds, now);
-        print!("\n[t+{now}] round {}\n{}", state.round, render(&state, zh));
+        let events = {
+            state.apply(rounds, now);
+            for t in &state.order {
+                let e = state
+                    .samples
+                    .get(t)
+                    .map(|x| x.error.is_some())
+                    .unwrap_or(true);
+                let m = miss.entry(t.clone()).or_insert(0);
+                if e {
+                    *m += 1;
+                } else {
+                    *m = 0;
+                }
+            }
+            let evals: Vec<alerts::NodeEval> = state
+                .order
+                .iter()
+                .map(|t| alerts::NodeEval {
+                    target: t,
+                    sample: state.samples.get(t),
+                    snap: state.raws.get(t),
+                    miss: miss.get(t).copied().unwrap_or(0),
+                })
+                .collect();
+            let evs = engine.evaluate(&evals, now);
+            state.alerts = engine.active();
+            evs
+        };
+        for ev in events {
+            match ev {
+                alerts::AlertEvent::Fire(_, m) | alerts::AlertEvent::ReFire(_, m) => {
+                    notify::send("⚠ ltop fleet", &m);
+                    println!("⚠ {m}");
+                }
+                alerts::AlertEvent::Clear(k) => {
+                    let m = crate::pick_s(
+                        zh,
+                        &format!("resolved: {}", k.split('@').next().unwrap_or("")),
+                        &format!("已解除:{}", k.split('@').next().unwrap_or("")),
+                    );
+                    notify::send("✓ ltop fleet", &m);
+                    println!("✓ {m}");
+                }
+            }
+        }
+        print!(
+            "\n[t+{now}] round {}\n{}{}",
+            state.round,
+            render(&state, zh),
+            render_alerts(&state, zh)
+        );
         std::io::stdout().flush().ok();
         if once {
             return Ok(());
@@ -403,15 +521,32 @@ fn run_cli(
     }
 }
 
+/// CLI 尾部:活跃告警一行一条(纯展示)
+fn render_alerts(state: &FleetShared, zh: bool) -> String {
+    if state.alerts.is_empty() {
+        return String::new();
+    }
+    let mut out = String::new();
+    let label = crate::pick_s(zh, "active alerts", "活跃告警");
+    out.push_str(&format!("{label}: {}\n", state.alerts.len()));
+    for (k, _) in &state.alerts {
+        let (rule, target) = k.rsplit_once('@').unwrap_or((k.as_str(), ""));
+        out.push_str(&format!("  ⚠ {rule} — {target}\n"));
+    }
+    out
+}
+
 /// TUI 前端:poller 后台线程 + 自有事件循环(AlternateScreen)。
 /// 键位:↑↓ 选择 / enter 详情 / s 排序 / p 暂停 / r 立即刷新 /
 /// c 复制 ssh kill 命令(OSC52,只复制不执行)/ h 帮助 / q 退出。
+#[allow(clippy::too_many_arguments)]
 fn run_tui(
     nodes: Vec<(String, String)>,
     interval: u64,
     timeout: u64,
     master: bool,
     zh: bool,
+    alert_rules: Vec<alerts::AlertRule>,
 ) -> Result<()> {
     use crossterm::event::{
         Event, KeyCode, KeyEventKind, KeyModifiers, KeyboardEnhancementFlags,
@@ -466,6 +601,7 @@ fn run_tui(
         zh,
         Arc::clone(&shared),
         ctl.clone(),
+        alert_rules,
     );
 
     let mut ui = ui::UiState::new();
@@ -481,6 +617,7 @@ fn run_tui(
                     raws: HashMap::new(),
                     round: 0,
                     sum_hist: Vec::new(),
+                    alerts: Vec::new(),
                 });
             // 展示序按当前排序模式算;选中/移动都锚定 target 字符串
             let displayed = ui::sorted_order(&view.order, &view.samples, ui.sort);

@@ -68,6 +68,29 @@ node      rx     tx   procs conns  ms   top talker
 air    4.5KiB 8.9KiB    4    53  2075  ZCode Helper (2.1KiB/s)
 ```
 
+## 告警
+
+阈值规则写在 `fleet.conf`,触发时在跑 fleet 的那台机器上发**系统通知**
+(Linux `notify-send` / macOS `osascript`;没有桌面会话时状态仍会在
+TUI/CLI 里显示):
+
+```text
+alert node rx > 50M        # 节点收包超 50 MB/s
+alert node tx > 1G         # 节点发包超 1 GB/s
+alert proc chrome net > 20M   # 名字含 "chrome" 的进程(不区分大小写,
+                              # 求和)流量超 20 MB/s
+alert conn ip 203.0.113.7  # 出现到该 IP 的连接
+alert new-device           # LAN 出现没见过的新邻居(瞬时)
+alert node-down            # 节点连续 3 轮失联
+```
+
+防轰炸内建:规则需**连续 2 轮成立**(迟滞)才触发;持续期间至多每
+10 分钟重提一次;回落发*已解除*通知;滚动窗口每小时至多 20 条。
+`alert new-device` 刻意瞬时(首见即入基线,老设备永不误报)。有活跃
+告警时 TUI 头行显示 `⚠ N`;非 tty 运行输出 `⚠ …`/`✓ 已解除…` 行。
+通知为何从不携带远端 stderr 原文,见
+[安全 → Fleet](security.md#fleetssh-多机聚合030-beta)。
+
 ## 选项
 
 | 旗标 | 含义 |

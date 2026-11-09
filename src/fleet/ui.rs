@@ -87,6 +87,8 @@ pub struct UiView {
     pub raws: HashMap<String, Snapshot>,
     pub round: u64,
     pub sum_hist: Vec<(f64, f64)>,
+    /// 当前活跃告警(键+规则原文)
+    pub alerts: Vec<(String, String)>,
 }
 
 /// 阻尼峰值(纯函数;1.0 下限防零除)
@@ -217,6 +219,9 @@ pub fn help_lines(zh: bool) -> Vec<String> {
             "配置新节点: ltop fleet setup <目标>".into(),
             "失败行保留上一轮成功数据(⚠ 为本轮错误)".into(),
             "命令只是复制到剪贴板,由你检查后执行;ltop 永不远程执行".into(),
+            "".into(),
+            "告警: fleet.conf 里 `alert node rx > 50M` 等规则触发时推".into(),
+            "系统通知;头行 ⚠ N 为当前活跃告警数".into(),
         ]
     } else {
         vec![
@@ -235,6 +240,9 @@ pub fn help_lines(zh: bool) -> Vec<String> {
             "Nodes come from ~/.config/ltop/fleet.conf or --host;".into(),
             "set up a node: ltop fleet setup <target>".into(),
             "Failed rounds keep the last good row (⚠ marks this round's error)".into(),
+            "".into(),
+            "Alerts: rules like `alert node rx > 50M` in fleet.conf push".into(),
+            "system notifications; the header ⚠ N counts active alerts".into(),
         ]
     }
 }
@@ -403,12 +411,18 @@ pub fn draw(f: &mut Frame, view: &UiView, ui: &mut UiState, zh: bool) {
     ])
     .split(area);
 
-    // 头行
-    let header = Line::from(Span::styled(
+    // 头行(+活跃告警计数,红)
+    let mut header_spans = vec![Span::styled(
         header_text(view.order.len(), up, view.round, zh),
         title_st,
-    ));
-    Paragraph::new(header).render(chunks[0], f.buffer_mut());
+    )];
+    if !view.alerts.is_empty() {
+        header_spans.push(Span::styled(
+            format!(" ⚠ {} ", view.alerts.len()),
+            Style::new().fg(pal.alert.0[2]).add_modifier(Modifier::BOLD),
+        ));
+    }
+    Paragraph::new(Line::from(header_spans)).render(chunks[0], f.buffer_mut());
 
     // Σ 两行走线:label + sparkline + 当前值;峰值归一到 0..=100
     ui.update_peaks(

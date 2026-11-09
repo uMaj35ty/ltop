@@ -1,0 +1,42 @@
+# ltop fleet headless alert daemon — systemd USER unit template.
+#
+# Install (as your own user, on the machine that watches the fleet):
+#   cp deploy/ltop-fleet.user.service ~/.config/systemd/user/ltop-fleet.service
+#   # adjust ExecStart if ltop is not on the default PATH of user units
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now ltop-fleet
+#   journalctl --user -u ltop-fleet -f
+#
+# Notes:
+# - Nodes and alert rules come from ~/.config/ltop/fleet.conf (see the
+#   Fleet chapter of the manual).
+# - Notifications go through notify-send (Linux) / osascript (macOS);
+#   without a desktop session they simply fail and the alert state stays
+#   visible in `ltop fleet` and in the journal (stderr).
+# - Run `loginctl enable-linger $USER` (once) if alerts should keep
+#   flowing while you are logged out.
+
+[Unit]
+Description=ltop fleet: multi-node aggregation + threshold alerts
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.cargo/bin/ltop fleet
+Restart=on-failure
+RestartSec=5
+# SIGTERM is a clean exit, not a failure to restart on
+SuccessExitStatus=143
+# fleet only spawns ssh (read-only `ltop --json` pulls) and one notifier
+# binary per alert event; it needs no privileges and writes nothing
+# outside the user's config/state dirs.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=default.target

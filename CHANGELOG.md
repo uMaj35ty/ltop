@@ -27,6 +27,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **`~/.config/ltop/fleet.conf`** node table: line format with unknown
   lines preserved, atomic write, 0600 on new files, `--save` merges CLI
   hosts, 64-node cap.
+- **Threshold alerts with system notifications**: `alert node
+  rx/tx > <rate>`, `alert proc <name> net > <rate>`, `alert conn ip <ip>`,
+  `alert new-device` (instant, first-sight baseline) and `alert node-down`
+  (3 missed rounds) in `fleet.conf`; hysteresis (2 consecutive rounds),
+  10-minute re-notify cooldown, resolved notifications, and a rolling
+  20-per-hour cap. Delivery is a zero-dependency shell-out
+  (`notify-send` / macOS `osascript`); a missing notifier never blocks
+  polling. Active alerts show as `⚠ N` in the TUI header and one line per
+  alert in non-tty output.
+- **`deploy/ltop-fleet.user.service`**: systemd *user* unit template for
+  the headless fleet daemon (hardened sandbox, notifications degrade
+  gracefully without a session).
 
 ### Changed
 
