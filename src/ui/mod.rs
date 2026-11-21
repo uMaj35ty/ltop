@@ -3857,7 +3857,6 @@ fn draw_theme_popup(f: &mut Frame, area: Rect, sel: usize, scroll: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::BOX_COUNT;
     use ratatui::layout::Constraint;
 
     /// invisible-selection regression, dark theme: a download gradient
@@ -4070,9 +4069,9 @@ mod tests {
         app.update();
         // PROCS bottom-most: hide every other table box. The live ledger only
         // lists processes with I/O in the sampling window, so inject rows.
-        for i in [BOX_LAN, BOX_CONNS, BOX_DISKS] {
-            app.visible[i] = false;
-        }
+        app.visible[BOX_LAN] = false;
+        app.visible[BOX_CONNS] = false;
+        app.visible[BOX_DISKS] = false;
         app.focus[BOX_PROCS] = true;
         for k in 0..40u32 {
             app.proc.procs.push(crate::collect::proc::ProcRow {
@@ -4268,9 +4267,9 @@ mod tests {
                                       // PROCS alone in the table column: parallel tests share the global
                                       // height allocator, so a stacked layout could squeeze this box until
                                       // the selected row falls outside the viewport and renders no overlay
-        for i in [BOX_LAN, BOX_CONNS, BOX_DISKS] {
-            app.visible[i] = false;
-        }
+        app.visible[BOX_LAN] = false;
+        app.visible[BOX_CONNS] = false;
+        app.visible[BOX_DISKS] = false;
         app.focus[BOX_PROCS] = true;
         app.sel[BOX_PROCS] = Some(1); // display row 1 = aaa (pid 100)
         let mut term = Terminal::new(TestBackend::new(120, 40)).unwrap();
@@ -4373,8 +4372,8 @@ mod tests {
         use ratatui::Terminal;
 
         let mut app = crate::app::App::new(None);
-        for i in 0..BOX_COUNT {
-            app.visible[i] = i == BOX_CONNS;
+        for (i, v) in app.visible.iter_mut().enumerate() {
+            *v = i == BOX_CONNS;
         }
         let n = 200usize;
         for k in 0..n {
@@ -4428,8 +4427,8 @@ mod tests {
         use ratatui::Terminal;
 
         let mut app = crate::app::App::new(None);
-        for i in 0..BOX_COUNT {
-            app.visible[i] = i == BOX_DISKS;
+        for (i, v) in app.visible.iter_mut().enumerate() {
+            *v = i == BOX_DISKS;
         }
         // 5 个盘 × 每盘 12 个分区 = 60+ 行树,远超一屏
         for d in 0..5 {
@@ -4475,8 +4474,8 @@ mod tests {
     /// disks-only app with an overflowing tree: `disks` root × 12 partitions
     fn disks_overflow_app(disks: usize) -> crate::app::App {
         let mut app = crate::app::App::new(None);
-        for i in 0..BOX_COUNT {
-            app.visible[i] = i == BOX_DISKS;
+        for (i, v) in app.visible.iter_mut().enumerate() {
+            *v = i == BOX_DISKS;
         }
         for d in 0..disks {
             app.disk.tree.push(crate::collect::disk::TreeNode {
@@ -4688,9 +4687,11 @@ mod tests {
         use ratatui::Terminal;
 
         let mut app = crate::app::App::new(None);
-        for i in [BOX_NET, BOX_DISKIO, BOX_DISKS, BOX_LAN, BOX_PROCS] {
-            app.visible[i] = false;
-        }
+        app.visible[BOX_NET] = false;
+        app.visible[BOX_DISKIO] = false;
+        app.visible[BOX_DISKS] = false;
+        app.visible[BOX_LAN] = false;
+        app.visible[BOX_PROCS] = false;
         let mk = |inode: u64, recv: u64| crate::collect::conn::Conn {
             proto: crate::collect::conn::IPPROTO_TCP,
             local: ("127.0.0.1".parse().unwrap(), 1000 + inode as u16),
@@ -4791,9 +4792,11 @@ mod tests {
         use ratatui::Terminal;
 
         let mut app = crate::app::App::new(None);
-        for i in [BOX_NET, BOX_DISKIO, BOX_DISKS, BOX_LAN, BOX_PROCS] {
-            app.visible[i] = false;
-        }
+        app.visible[BOX_NET] = false;
+        app.visible[BOX_DISKIO] = false;
+        app.visible[BOX_DISKS] = false;
+        app.visible[BOX_LAN] = false;
+        app.visible[BOX_PROCS] = false;
         let mk = |inode: u64, recv: u64| crate::collect::conn::Conn {
             proto: crate::collect::conn::IPPROTO_TCP,
             local: ("127.0.0.1".parse().unwrap(), 1000 + inode as u16),
@@ -4862,9 +4865,7 @@ mod tests {
 
         let mut app = crate::app::App::new(None);
         app.layout = crate::app::LayoutMode::Classic;
-        for i in 0..BOX_COUNT {
-            app.visible[i] = true;
-        }
+        app.visible.fill(true);
         // LAN 盒高被钉 6 行:标题+表头+3 行设备+边框——3 台应全部可见
         for k in 0..5u32 {
             app.lan.neighbors.insert(
@@ -5033,8 +5034,8 @@ mod tests {
 
         let mut app = crate::app::App::new(None);
         // 盒子开关来自真实 config,测试必须显式设定目标盒
-        for i in 0..BOX_COUNT {
-            app.visible[i] = i == BOX_LAN;
+        for (i, v) in app.visible.iter_mut().enumerate() {
+            *v = i == BOX_LAN;
         }
         for k in 0..30u32 {
             app.lan.neighbors.insert(
@@ -5099,9 +5100,10 @@ mod tests {
         let mut app = crate::app::App::new(None);
         // 过滤/排序/语言来自真实 config:断言前显式钉住
         app.conn.filter = crate::collect::conn::ConnFilter::All;
-        for i in [BOX_NET, BOX_DISKIO, BOX_DISKS, BOX_LAN] {
-            app.visible[i] = false;
-        }
+        app.visible[BOX_NET] = false;
+        app.visible[BOX_DISKIO] = false;
+        app.visible[BOX_DISKS] = false;
+        app.visible[BOX_LAN] = false;
         let mk = |inode: u64, name: &str, proto: u8, state: u8| crate::collect::conn::Conn {
             proto,
             local: ("127.0.0.1".parse().unwrap(), 1000 + inode as u16),
@@ -5219,9 +5221,9 @@ mod tests {
 
         let mut app = crate::app::App::new(None);
         app.layout = crate::app::LayoutMode::Tall;
-        for i in [BOX_LAN, BOX_CONNS, BOX_DISKS] {
-            app.visible[i] = false;
-        }
+        app.visible[BOX_LAN] = false;
+        app.visible[BOX_CONNS] = false;
+        app.visible[BOX_DISKS] = false;
         app.update();
         let mut term = Terminal::new(TestBackend::new(200, 60)).unwrap();
         term.draw(|f| crate::ui::draw(f, &app)).unwrap();
