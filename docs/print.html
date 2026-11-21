@@ -1,0 +1,1356 @@
+<!DOCTYPE HTML>
+<html lang="en" class="ayu sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>ltop — localist top</title>
+        <meta name="robots" content="noindex">
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="btop-styled TUI monitoring for local network, LAN neighbours and disk I/O — with an AI-friendly data plane (schema-v1 JSON, watch + report).">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="favicon-8114d1fc.png">
+        <link rel="stylesheet" href="css/variables-8adf115d.css">
+        <link rel="stylesheet" href="css/general-e96d0476.css">
+        <link rel="stylesheet" href="css/chrome-d279d366.css">
+        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="theme/site-9fcace3e.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "ayu";
+            const default_dark_theme = "ayu";
+            window.path_to_searchindex_js = "searchindex-f6ddc4f5.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc-407b6f2f.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('ayu')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">ltop — localist top</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/uMaj35ty/ltop" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
+<p><strong>ltop</strong> (localist top) is a terminal monitor for a single machine. It answers
+three questions btop, nethogs and iftop each answer only in part:</p>
+<ol>
+<li><strong>Where does the traffic go?</strong> — who talks to whom, on which interface, at
+what rate, with true per-connection and per-process byte accounting
+(TCP <strong>and</strong> UDP).</li>
+<li><strong>What are the processes doing?</strong> — who eats bandwidth and disk right now,
+and who did over the whole session, including processes that already exited.</li>
+<li><strong>What does the LAN look like?</strong> — which devices are on the local network,
+which is the gateway, and what traffic flows to each of them.</li>
+</ol>
+<p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="../assets/screenshots/classic-six-boxes-small.webp" alt="Classic layout — six boxes with live LAN neighbours and grouped connections"><span class="img-wrapper"><img src="../assets/screenshots/classic-six-boxes-small.webp" alt="Classic layout — six boxes with live LAN neighbours and grouped connections"></span></label></p>
+<h2 id="how-it-works"><a class="header" href="#how-it-works">How it works</a></h2>
+<p>Six boxes, one job each (NET, LAN, DISK I/O, DISKS, CONNS, PROCS), rendered
+with <a href="https://ratatui.rs">ratatui</a> in a btop-style braille-chart aesthetic. The main program runs
+<strong>unprivileged</strong> — no root, no setuid, no daemon. On Linux an <em>optional</em>
+privileged helper (<code>ltop-bpf</code>, a tiny eBPF collector) unlocks per-process and
+per-connection byte accounting for TCP and UDP; without it everything else
+keeps working. On macOS the same six boxes read Apple-native sources (nettop,
+libproc, IOKit, the route socket). Every display surface is backed by one
+machine-readable data plane: <code>ltop --json</code> emits a schema-v1 snapshot,
+<code>ltop watch</code> records it headlessly, and <code>ltop report</code> sums a window of it —
+which is what makes ltop usable <strong>by AI agents</strong> (~97 % fewer tokens than
+polling, see <a href="#ai-agents">AI agents</a>).</p>
+<h2 id="highlights"><a class="header" href="#highlights">Highlights</a></h2>
+<ul>
+<li><strong>True per-connection accounting</strong> — every TCP connection shows live B/s and
+cumulative totals; UDP connections are eBPF-metered and get the same
+columns. Closed connections linger as 5-second tombstones so short bursts
+stay readable.</li>
+<li><strong>Per-process totals that survive restarts</strong> — PROCS accumulates network
+(TCP+UDP) and disk I/O per process for the whole session; exited processes
+stay grayed out with their captured command line and can be relaunched with
+one key.</li>
+<li><strong>LAN neighbours with traffic</strong> — passive ARP plus a periodic UDP-knock
+sweep finds same-subnet devices (IP, MAC, mDNS hostname, interface); each
+neighbour carries its live connection count, rate and accumulated bytes,
+and <code>enter</code> pins it and filters CONNS to that peer.</li>
+<li><strong>Headless watch + report</strong> — record a time window to crash-safe JSONL, then
+get exact window sums, peak rates and active time per process/connection as
+a table or ~2 KB of JSON.</li>
+<li><strong>72 embedded btop themes</strong> — any btop theme works as-is; on Omarchy the
+palette can follow the desktop theme, optionally re-coloring a <em>running</em>
+ltop (<code>--follow-theme</code>). UI in English or Chinese (<code>lang = zh</code>).</li>
+<li><strong>Three layouts, one keystroke apart</strong> — <code>Tab</code> cycles classic / wide / tall;
+boxes toggle with <code>1</code>–<code>6</code>; <code>z</code> zooms the focused box full-screen.</li>
+</ul>
+<h2 id="where-to-go-next"><a class="header" href="#where-to-go-next">Where to go next</a></h2>
+<ul>
+<li><a href="#quick-start">Quick start</a> — install and the keys that matter, in two
+minutes.</li>
+<li><a href="#installation">Installation</a> — all channels, platform requirements and
+the eBPF helper deployment.</li>
+<li><a href="#the-tui">The TUI</a> — the full surface: boxes, layouts, key bindings.</li>
+<li><a href="#ai-agents">AI agents</a> — the JSON snapshot, watch + report, and the bundled
+agent skill.</li>
+</ul>
+<h2 id="status"><a class="header" href="#status">Status</a></h2>
+<p>ltop is MIT-licensed, developed daily on Omarchy (Arch Linux), and verified
+per release in QEMU/KVM across five Linux distributions plus on macOS
+hardware — see <a href="#compatibility">Compatibility</a>. Distribution channels: <a href="https://github.com/uMaj35ty/ltop#readme">Homebrew</a>,
+<a href="https://crates.io/crates/ltop">crates.io</a>, and <a href="https://github.com/uMaj35ty/ltop/releases">GitHub Releases</a> tarballs (x86_64 + aarch64); an AUR
+<code>ltop-bin</code> package is ready and pending the AUR reopening registration.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="quick-start"><a class="header" href="#quick-start">Quick start</a></h1>
+<h2 id="1-install-one-line"><a class="header" href="#1-install-one-line">1. Install (one line)</a></h2>
+<pre><code class="language-bash">brew install uMaj35ty/ltop/ltop     # macOS &amp; Linux — prebuilt binaries
+</code></pre>
+<p>or, with a Rust toolchain:</p>
+<pre><code class="language-bash">cargo install ltop                  # compiles from source (crates.io)
+</code></pre>
+<p>or grab a tarball from <a href="https://github.com/uMaj35ty/ltop/releases">GitHub Releases</a> (<code>x86_64</code> / <code>aarch64</code>, Linux and
+macOS). All channels are covered in <a href="#installation">Installation</a>.</p>
+<h2 id="2-run-it"><a class="header" href="#2-run-it">2. Run it</a></h2>
+<pre><code class="language-bash">ltop
+</code></pre>
+<p>No configuration, no root. You land on the classic layout: charts on the left
+(NET up top, DISK I/O below), tables on the right (LAN, CONNS, PROCS, DISKS).</p>
+<h2 id="3-the-keys-that-matter"><a class="header" href="#3-the-keys-that-matter">3. The keys that matter</a></h2>
+<p>Everything is reachable from these ten; the footer always shows the current
+context, and <code>m → help</code> has the full table (also in <a href="#the-tui">The TUI</a>).</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key</th><th>Does</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Tab</code></td><td>cycle layout: classic → wide → tall</td></tr>
+<tr><td><code>1</code>–<code>6</code></td><td>toggle a box (1 net, 2 lan, 3 disk i/o, 4 disks, 5 conns, 6 procs)</td></tr>
+<tr><td><code>/</code></td><td>search processes/connections by name substring</td></tr>
+<tr><td><code>p</code> / <code>c</code> / <code>l</code></td><td>single-focus PROCS / CONNS / LAN (one lights up, the rest dim)</td></tr>
+<tr><td><code>↑↓</code> + <code>enter</code></td><td>select a row → detail panel (full command line, per-connection breakdown, uptime)</td></tr>
+<tr><td><code>enter</code> on a LAN row</td><td>pin the neighbour and filter CONNS to that peer — “show me everything talking to this device”</td></tr>
+<tr><td><code>f</code> / <code>o</code></td><td>CONNS: cycle filter (all/lan/tcp/udp) / sort (proc-grouped, sum, name, rate)</td></tr>
+<tr><td><code>r</code></td><td>PROCS: cycle sort (net-sum, net-rate, disk-sum, disk-rate, name)</td></tr>
+<tr><td><code>z</code></td><td>zoom the focused box full-screen (<code>esc</code> restores)</td></tr>
+<tr><td><code>m</code></td><td>menu: themes, settings, graphs, help</td></tr>
+<tr><td><code>space</code></td><td>pause/resume sampling (bytes missed while paused are back-filled)</td></tr>
+<tr><td><code>q</code></td><td>quit</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="4-optional-per-processper-connection-byte-accounting-linux"><a class="header" href="#4-optional-per-processper-connection-byte-accounting-linux">4. Optional: per-process/per-connection byte accounting (Linux)</a></h2>
+<p>Without this, ltop still works — CONNS shows TCP live rates and PROCS shows
+network totals from socket sampling; what is missing is <em>exact</em> UDP
+per-process accounting and per-connection totals. One command enables it:</p>
+<pre><code class="language-bash">sudo cp target/release/ltop-bpf /usr/local/bin/      # from a release tarball or source build
+sudo cp deploy/ltop-bpf.service /etc/systemd/system/
+sudo systemctl enable --now ltop-bpf
+</code></pre>
+<p>A Homebrew install ships the same binaries; deploy the helper from the same
+release the TUI came from (see <a href="#ebpf-accounting">eBPF accounting</a> and the
+<a href="#per-process-accounting-zeroed-after-an-upgrade">upgrade note</a>).</p>
+<h2 id="5-optional-the-ai-workflow"><a class="header" href="#5-optional-the-ai-workflow">5. Optional: the AI workflow</a></h2>
+<p>The one command to remember:</p>
+<pre><code class="language-bash">ltop watch --duration 10m --proc chrome   # record headlessly (no root, crash-safe);
+                                         # prints the output path
+ltop report &lt;that path&gt; --json            # report takes a single file
+</code></pre>
+<p><code>report</code> prints exact window sums and peaks instead of sampled guesses —
+a 10-minute window costs ~1k tokens as JSON vs ~40k polled via <code>--json</code>.
+See <a href="#ai-agents">AI agents</a>.</p>
+<h2 id="6-make-it-yours"><a class="header" href="#6-make-it-yours">6. Make it yours</a></h2>
+<ul>
+<li><strong>Theme</strong>: <code>m</code> → theme cycles the 72 embedded btop themes; on Omarchy the
+<code>omarchy</code> entry follows the desktop. <code>--theme &lt;file&gt;</code> loads any btop theme
+file; <code>--follow-theme</code> re-colors a running ltop when the desktop theme
+changes. Details in <a href="#themes">Themes</a>.</li>
+<li><strong>Language</strong>: <code>lang = zh</code> in <code>~/.config/ltop/config.conf</code> switches all human
+output (TUI and CLI) to Chinese; JSON keys stay English.</li>
+<li><strong>Settings panel</strong>: <code>m</code> → settings writes <code>~/.config/ltop/config.conf</code>
+(tick rate, log retention, sweep interval, sort defaults, …). See
+<a href="#configuration">The data plane</a>.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
+<p>ltop ships as two binaries:</p>
+<ul>
+<li><strong><code>ltop</code></strong> — the TUI and the whole CLI surface (<code>--json</code>, <code>watch</code>, <code>report</code>,
+…). Runs unprivileged.</li>
+<li><strong><code>ltop-bpf</code></strong> — the optional privileged eBPF collector (Linux only). Not
+needed for ltop to be useful; see <a href="#ebpf-accounting">eBPF accounting</a>.</li>
+</ul>
+<p>Platforms: Linux and macOS on <strong>x86_64 and aarch64</strong>. Prebuilt Linux binaries
+target <strong>glibc 2.35+</strong> (Ubuntu 22.04 LTS baseline); static musl builds are not
+provided.</p>
+<h2 id="homebrew-macos--linux"><a class="header" href="#homebrew-macos--linux">Homebrew (macOS &amp; Linux)</a></h2>
+<p>Prebuilt binaries via the project tap:</p>
+<pre><code class="language-bash">brew install uMaj35ty/ltop/ltop
+</code></pre>
+<p>Upgrades come from the same formula (<code>brew upgrade ltop</code>). The formula no
+longer ships the retired <code>loli</code> symlink; <code>brew upgrade</code> cleans it up
+automatically.</p>
+<h2 id="cratesio"><a class="header" href="#cratesio">crates.io</a></h2>
+<pre><code class="language-bash">cargo install ltop
+</code></pre>
+<p>Compiles from source with the stable Rust toolchain; installs both binaries to
+<code>~/.cargo/bin</code>. Notes:</p>
+<ul>
+<li><strong>No clang needed.</strong> The eBPF object is normally built at compile time with
+the system clang — but when clang (or the <code>bpf</code> target) is unavailable the
+build <em>succeeds</em> with an empty object embedded: the TUI runs normally and
+only UDP per-process accounting is silently absent. <code>ltop-bpf</code> refuses to
+start with a clear message in that case.</li>
+<li>To build the eBPF collector from source you need a clang with the <code>bpf</code>
+target (Arch’s default <code>clang</code> has it).</li>
+</ul>
+<h2 id="github-releases"><a class="header" href="#github-releases">GitHub Releases</a></h2>
+<p>Tarballs for <code>x86_64</code> and <code>aarch64</code>, Linux and macOS, per release. They contain
+both binaries and the systemd unit. Binaries are unsigned — on macOS, drop the
+quarantine attribute first:</p>
+<pre><code class="language-bash">xattr -c ltop-*-darwin.tar.gz
+</code></pre>
+<p>Linux layout after unpacking:</p>
+<pre><code class="language-bash">sudo cp ltop /usr/local/bin/
+sudo cp ltop-bpf /usr/local/bin/          # optional, Linux only
+sudo cp ltop-bpf.service /etc/systemd/system/
+sudo systemctl enable --now ltop-bpf      # optional
+</code></pre>
+<h2 id="aur"><a class="header" href="#aur">AUR</a></h2>
+<p><code>ltop-bin</code> — the package is built and waiting; publication is pending the AUR
+reopening account registration. This page will change when it lands.</p>
+<h2 id="deploying--upgrading-the-ebpf-helper"><a class="header" href="#deploying--upgrading-the-ebpf-helper">Deploying / upgrading the eBPF helper</a></h2>
+<p>Re-deploy the helper <strong>together with</strong> the TUI — a stale <code>ltop-bpf</code> keeps
+writing its snapshot to the old path and per-process accounting silently
+zeroes:</p>
+<pre><code class="language-bash">sudo cp target/release/ltop-bpf /usr/local/bin/
+sudo systemctl restart ltop-bpf
+</code></pre>
+<h2 id="verify"><a class="header" href="#verify">Verify</a></h2>
+<pre><code class="language-bash">ltop --version          # TUI/CLI version
+ltop --json | head -c 300    # a schema-v1 snapshot; "meta.udp_helper": true
+                        # means the eBPF helper is live (Linux)
+sudo ltop-bpf --once    # collector smoke test: sample once, print, exit
+</code></pre>
+<h2 id="building-from-source"><a class="header" href="#building-from-source">Building from source</a></h2>
+<pre><code class="language-bash">git clone https://github.com/uMaj35ty/ltop
+cd ltop
+cargo build --release
+
+# China mirror (same history and tags, Chinese-first README):
+git clone https://atomgit.com/uMaj35ty/ltop
+# artifacts in target/release/: ltop, ltop-bpf (Linux)
+</code></pre>
+<p>Requirements: Rust stable; on Linux, clang with the <code>bpf</code> target for the eBPF
+object (see above for what happens without it). The eBPF probes carry
+per-arch <code>pt_regs</code> register mappings for x86_64 and aarch64; no nightly
+toolchain is involved.</p>
+<p>Tested per release in QEMU/KVM (open-box binaries, kprobe attach, systemd
+unit, silent degrade without the helper) — the matrix lives in
+<a href="#compatibility">Compatibility</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="the-tui"><a class="header" href="#the-tui">The TUI</a></h1>
+<p>Six boxes, one job each. <code>Tab</code> cycles three layouts — <strong>classic</strong> (charts
+left, tables right), <strong>wide</strong> (charts across the top, tables below), <strong>tall</strong>
+(one column) — and boxes toggle with <code>1</code>–<code>6</code>, collapsing cleanly when hidden.
+<code>z</code> zooms the focused box full-screen; <code>esc</code> restores. <code>space</code> freezes the
+frame; bytes transferred while paused are back-filled on resume, so pausing
+never loses accounting.</p>
+<p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="../assets/screenshots/classic-six-boxes-small.webp" alt="Classic layout"><span class="img-wrapper"><img src="../assets/screenshots/classic-six-boxes-small.webp" alt="Classic layout"></span></label></p>
+<h2 id="the-six-boxes"><a class="header" href="#the-six-boxes">The six boxes</a></h2>
+<h3 id="1--net"><a class="header" href="#1--net">1 — NET</a></h3>
+<p>Per-NIC real-time throughput as braille area charts (rx/tx with separate
+gradients), plus link state, speed, duplex, MTU and addresses. Cumulative
+traffic shows twice: since ltop started (resettable) and since the interface
+came up. <code>n</code> switches the chart mode; the NIC cycles with a click on the
+header.</p>
+<h3 id="2--lan"><a class="header" href="#2--lan">2 — LAN</a></h3>
+<p>Same-subnet devices discovered automatically (how: <a href="#lan-discovery">LAN discovery</a>):
+IP, MAC, mDNS hostname, interface; gateways marked. Each neighbour shows its
+live connection count, current rate and accumulated bytes — the numbers link
+into CONNS, so “how much is going to that box” is one glance, and one <code>enter</code>
+pins the neighbour and filters CONNS to that peer.</p>
+<h3 id="3--4--disk-io-and-disks"><a class="header" href="#3--4--disk-io-and-disks">3 / 4 — DISK I/O and DISKS</a></h3>
+<p>Read/write rate charts (deduplicated across stacked devices — <code>nvme0n1</code> and
+its <code>dm-0(root)</code> child are one sample, not two) beside the device list:
+capacity bars and live per-device rates, the fs type as a dim tail after
+each name. On <strong>macOS</strong> the list shows mounted volumes only: VMs and
+simulators attach their virtual disks as host-visible synthesized devices —
+often a dozen or more per machine — and the host cannot see anything about
+their internal capacity or usage, so those rows would be pure noise. On
+<strong>Linux</strong> a VM’s disks never appear as host block devices (they are plain
+files in a filesystem), so the device tree reflects real hardware and stays
+the full physical tree — disk → partition → dm with unmounted rows, where
+LUKS/LVM layering stays readable. <code>d</code> expands the mount list and
+aims the arrow/jump keys at the disks list; <code>i</code> switches the chart mode. An
+overflowing list gets a btop-style scrollbar in its right edge — click the
+track to page, drag the thumb to scroll, no focus needed (the wheel already
+worked this way).</p>
+<h3 id="5--conns"><a class="header" href="#5--conns">5 — CONNS</a></h3>
+<p>Every socket on the system. TCP connections show true per-connection B/s and
+totals; UDP “connections” are eBPF-metered (Linux, via the
+<a href="#ebpf-accounting">eBPF helper</a>) and get the same columns. Rows carry protocol tags
+(<code>tcp</code>/<code>udp</code>, <code>lan</code> for local-peers), and closed connections linger as grayed
+<strong>tombstone rows</strong> for 5 seconds (<code>tombstone_ttl_ms</code> configurable) so a
+finished transfer is still readable. <code>f</code> cycles the filter (all → lan → tcp →
+udp), <code>o</code> cycles sorts — including <strong>proc</strong> grouping, which folds same-name
+processes into an expandable group head (<code>▸ firefox ×17</code> with the group Σ;
+<code>enter</code> on the head collapses/expands, search hits auto-expand).</p>
+<p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="../assets/screenshots/tall-process-groups-small.webp" alt="Tall layout — grouped connections with group totals and a tracked row"><span class="img-wrapper"><img src="../assets/screenshots/tall-process-groups-small.webp" alt="Tall layout — grouped connections with group totals and a tracked row"></span></label></p>
+<h3 id="6--procs"><a class="header" href="#6--procs">6 — PROCS</a></h3>
+<p>Per-process <strong>session totals</strong> for network (TCP+UDP — short-lived connections
+are never missed by sampling, because eBPF counts bytes at the syscall) and
+disk I/O, plus live rates. Exited processes stay grayed out with their
+captured command line; <code>s</code> relaunches one, or <code>enter</code> opens the detail panel
+for a copy of the exact command. <code>r</code> cycles sorts (net-sum → net-rate →
+disk-sum → disk-rate → name). Exited ledgers are evicted after 30 minutes by
+default (<code>proc_exit_retention_min</code>, <code>0</code> = keep forever).</p>
+<h2 id="focus-selection-detail"><a class="header" href="#focus-selection-detail">Focus, selection, detail</a></h2>
+<ul>
+<li><code>p</code> / <code>c</code> / <code>l</code> single-focus PROCS / CONNS / LAN: the chosen box fills the
+screen’s attention (the others dim to stubs). <code>esc</code> clears.</li>
+<li>Arrow-key selection <strong>follows</strong> its process/connection/neighbour across
+re-sorts and group collapse — the row you watch stays the row you watch.</li>
+<li><code>enter</code> on a conns/procs row opens the <strong>detail panel</strong>: processes show
+state, uptime, full captured command line, exe/cwd, RSS and a UDP
+breakdown; connections show protocol, owner, lifetime, totals and rates.
+Inside the panel: <code>space</code>/<code>t</code> pin-tracks the row (tracked rows stay on
+top), <code>k</code> kills, <code>s</code> relaunches, <code>↑↓</code> moves a field cursor and <code>y</code> copies
+the selected value to the clipboard via OSC 52 (works over SSH, no X11
+dependency).</li>
+<li><code>enter</code> on a LAN row pins the neighbour (red highlight, stays on top) and
+filters CONNS to that peer; repeat to unpin, <code>esc</code>/<code>f</code> clear.</li>
+</ul>
+<p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="../assets/screenshots/wide-detail-panel-small.webp" alt="Wide layout — detail panel with captured command line, UDP breakdown and the theme menu"><span class="img-wrapper"><img src="../assets/screenshots/wide-detail-panel-small.webp" alt="Wide layout — detail panel with captured command line, UDP breakdown and the theme menu"></span></label></p>
+<h2 id="search"><a class="header" href="#search">Search</a></h2>
+<p><code>/</code> searches by name substring across processes and connections (<code>Tab</code>
+switches the target box, <code>enter</code> applies, <code>esc</code> clears). Matches also drive
+sorts — a filtered PROCS view is still sorted by your chosen mode.</p>
+<h2 id="kill-guard-rails"><a class="header" href="#kill-guard-rails">Kill-guard rails</a></h2>
+<p><code>k</code> kills the selected process (or closes the socket). Killing <em>other users’</em>
+processes requires <code>allow_global_kill = true</code> in the config; the default
+denies it.</p>
+<h2 id="monitoring-log"><a class="header" href="#monitoring-log">Monitoring log</a></h2>
+<p><code>L</code> (or start with <code>--log</code>) records per-process ledgers to
+<code>~/.local/state/ltop/ltop-log-&lt;ts&gt;.jsonl</code> at <code>log_interval_ms</code> (default 60 s),
+sharing the same schema-v1 snapshot format as <code>watch</code>; retention
+(<code>log_retention_days</code>, default 7) purges old files at startup. Replay and
+export: <code>--replay [--csv OUT]</code>. Details in <a href="#the-data-plane">The data plane</a>.</p>
+<h2 id="full-key-bindings"><a class="header" href="#full-key-bindings">Full key bindings</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key</th><th>Action</th></tr>
+</thead>
+<tbody>
+<tr><td><code>q</code> / <code>Ctrl-C</code></td><td>quit</td></tr>
+<tr><td><code>space</code></td><td>pause/resume sampling (back-fill on resume)</td></tr>
+<tr><td><code>/</code></td><td>search (Tab switches box, enter applies, esc clears)</td></tr>
+<tr><td><code>m</code></td><td>menu: themes / settings / reset / graphs / help / quit</td></tr>
+<tr><td><code>Esc</code></td><td>clear focus &amp; selection; close panels</td></tr>
+<tr><td><code>1</code>–<code>6</code></td><td>toggle boxes: net, lan, disk i/o, disks, conns, procs</td></tr>
+<tr><td><code>Tab</code></td><td>layout classic → wide → tall</td></tr>
+<tr><td><code>p</code> / <code>c</code> / <code>l</code></td><td>single-focus procs / conns / lan</td></tr>
+<tr><td><code>r</code></td><td>procs sort cycle</td></tr>
+<tr><td><code>f</code> / <code>o</code></td><td>conns filter cycle / sort cycle</td></tr>
+<tr><td><code>enter</code>, <code>←→</code> on a group head</td><td>collapse / expand process group</td></tr>
+<tr><td><code>d</code></td><td>expand/collapse disk mount tree; arrow/jump keys then target the disks list</td></tr>
+<tr><td><code>e</code></td><td>lan sort: ip → hostname → mac → iface</td></tr>
+<tr><td><code>n</code> / <code>i</code></td><td>net / disk chart mode</td></tr>
+<tr><td><code>↑↓</code> <code>PgUp</code> <code>PgDn</code> / wheel</td><td>move selection; PgUp/PgDn page by visible height; wheel scrolls the list under the cursor; click selects</td></tr>
+<tr><td>disks scrollbar</td><td>click the track to page, drag the thumb to scroll — works without focus</td></tr>
+<tr><td><code>enter</code> on a lan row</td><td>pin neighbour + filter CONNS to that peer</td></tr>
+<tr><td><code>enter</code> on a conns/procs row</td><td>detail panel (track <code>t</code>/<code>space</code>, kill <code>k</code>, relaunch <code>s</code>, copy <code>y</code>)</td></tr>
+<tr><td><code>z</code></td><td>zoom the focused box full-screen</td></tr>
+<tr><td><code>Home</code>/<code>End</code>/<code>g</code>/<code>G</code></td><td>jump to first/last row</td></tr>
+<tr><td><code>L</code></td><td>toggle the monitoring log</td></tr>
+<tr><td><code>s</code></td><td>LAN sweep on/off (main screen; in detail panels <code>s</code> relaunches)</td></tr>
+<tr><td><code>+</code>/<code>-</code></td><td>refresh interval ±250 ms</td></tr>
+</tbody>
+</table>
+</div>
+<p>Settings worth knowing (all in <code>m</code> → settings, persisted to
+<code>~/.config/ltop/config.conf</code>): refresh <code>tick_ms</code> (default 2000), tombstone
+TTL, the recording toggle (same as the <code>L</code> key), log interval/retention,
+sweep interval, default sort/filter modes, <code>theme</code>, <code>lang</code>,
+<code>proc_expand_default</code> (groups expanded by default), <code>proc_exit_retention_min</code>,
+<code>allow_global_kill</code> (exposes the <code>k</code> key; default off), <code>allow_global_log</code>
+(exposes the <code>L</code> record hotkey; default off).</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="themes"><a class="header" href="#themes">Themes</a></h1>
+<p>ltop reads <strong>btop-compatible theme files</strong>: any btop theme works as-is, and
+you can write your own — including a two-line file that fixes just the
+colours you cannot read on your terminal.</p>
+<p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="../assets/screenshots/omarchy-theme-follow.gif" alt="Omarchy theme following — the palette re-colors live as the desktop theme switches"><span class="img-wrapper"><img src="../assets/screenshots/omarchy-theme-follow.gif" alt="Omarchy theme following — the palette re-colors live as the desktop theme switches"></span></label></p>
+<h2 id="where-themes-live"><a class="header" href="#where-themes-live">Where themes live</a></h2>
+<ul>
+<li><strong>Built-in:</strong> 72 themes — 41 from the btop project’s official collection
+and 31 from Omarchy’s bundled themes — selectable from the theme menu
+(<code>m</code> → theme) or <code>--theme &lt;name&gt;</code> on the command line (see
+<a href="#acknowledgements">Acknowledgements</a>).</li>
+<li><strong>Omarchy:</strong> if <code>~/.local/state/omarchy/current/theme/btop.theme</code> exists,
+the menu also offers <code>omarchy</code> — selecting it follows the desktop theme and
+live-reloads when the desktop theme changes.</li>
+<li><strong><code>--follow-theme</code>:</strong> picked up at startup is the <em>snapshot</em>; adding
+<code>--follow-theme</code> also re-colors a <strong>running</strong> ltop when the desktop theme
+changes. Off by default (it polls the theme file; opt in when you want the
+demo from the GIF above).</li>
+<li><strong>Custom:</strong> put a <code>.theme</code> file in <code>~/.config/ltop/themes/</code>, or load any
+file directly:</li>
+</ul>
+<pre><code class="language-bash">ltop --theme ~/my-colors.theme
+</code></pre>
+<p>A theme loaded with <code>--theme</code> is pinned — it does not follow omarchy.</p>
+<h2 id="file-format"><a class="header" href="#file-format">File format</a></h2>
+<p>Key–value pairs, one per line; <code>#</code> lines are comments. Colours accept
+<code>#RRGGBB</code>, short <code>#RGB</code>, a two-digit grayscale shorthand (<code>#80</code> = mid grey),
+and — for <code>main_bg</code> only — an empty value meaning “terminal default”
+(transparent background, important for terminal-transparency users):</p>
+<pre><code>theme[main_fg] = "#c0caf5"
+theme[inactive_fg] = "#565f89"
+</code></pre>
+<h2 id="acknowledgements"><a class="header" href="#acknowledgements">Acknowledgements</a></h2>
+<p>The built-in theme library stands on the work of others, and this project
+is grateful for it:</p>
+<ul>
+<li><strong>btop</strong> (<a href="https://github.com/aristocratos/btop">aristocratos/btop</a>) by
+Aristocratos — ltop’s theme file format <em>is</em> btop’s, and 41 of the
+embedded themes are converted from btop’s official collection. Thank you
+to Aristocratos and to every theme author in that collection.</li>
+<li><strong>Omarchy</strong> (<a href="https://github.com/dhh/omarchy">dhh/omarchy</a>) by DHH — 31
+embedded themes come from Omarchy’s bundled collection. Thank you to DHH
+and the creators of those themes.</li>
+</ul>
+<p>Any theme written for btop or Omarchy keeps working here — their work
+remains theirs, embedded with credit.</p>
+<h2 id="variable-reference"><a class="header" href="#variable-reference">Variable reference</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key</th><th>Controls</th></tr>
+</thead>
+<tbody>
+<tr><td><code>main_bg</code></td><td>popup/dialog background; leave empty for terminal default</td></tr>
+<tr><td><code>main_fg</code></td><td><strong>body text</strong> — table cells, detail values, help descriptions</td></tr>
+<tr><td><code>inactive_fg</code></td><td><strong>dimmed text</strong> — labels, hints, secondary info, timestamps</td></tr>
+<tr><td><code>hi_fg</code></td><td>highlights: box borders, keybindings, group titles, badges</td></tr>
+<tr><td><code>title</code></td><td>popup/box titles</td></tr>
+<tr><td><code>graph_text</code></td><td>accent: process names, UDP badge, emphasis</td></tr>
+<tr><td><code>net_box</code></td><td>NET box border</td></tr>
+<tr><td><code>proc_box</code></td><td>LAN box border (btop key name kept for compatibility)</td></tr>
+<tr><td><code>mem_box</code></td><td>DISK box border (btop key name kept for compatibility)</td></tr>
+<tr><td><code>download_start/mid/end</code></td><td>download gradient: charts, rx rates, ESTAB badge</td></tr>
+<tr><td><code>upload_start/mid/end</code></td><td>upload gradient: charts, tx rates</td></tr>
+<tr><td><code>used_start/mid/end</code></td><td>disk usage colours</td></tr>
+<tr><td><code>temp_start/mid/end</code></td><td>alert gradient</td></tr>
+</tbody>
+</table>
+</div>
+<p>Gradients must define all three stops (start/mid/end); a gradient missing any
+stop is ignored and the built-in default stays.</p>
+<h2 id="minimal-example"><a class="header" href="#minimal-example">Minimal example</a></h2>
+<p>Only override what you cannot read — everything else falls back to the
+currently selected built-in theme:</p>
+<pre><code>theme[main_fg] = "#e0e0e0"
+theme[inactive_fg] = "#909090"
+</code></pre>
+<p>Save as <code>~/.config/ltop/themes/readable.theme</code>, then pick <code>readable</code> from the
+theme menu.</p>
+<h2 id="full-example"><a class="header" href="#full-example">Full example</a></h2>
+<p>The easiest full theme is copying a built-in btop theme and editing:</p>
+<pre><code class="language-bash">cp /usr/share/btop/themes/dracula.theme ~/.config/ltop/themes/my.theme
+</code></pre>
+<p>For reference, the shape of a complete file (Dracula palette):</p>
+<pre><code>theme[main_bg] = "#282a36"
+theme[main_fg] = "#f8f8f2"
+theme[title] = "#bd93f9"
+theme[hi_fg] = "#8be9fd"
+theme[inactive_fg] = "#6272a4"
+theme[graph_text] = "#ff79c6"
+theme[net_box] = "#bd93f9"
+theme[proc_box] = "#ff79c6"
+theme[mem_box] = "#8be9fd"
+theme[download_start] = "#8be9fd"
+theme[download_mid] = "#8be9fd"
+theme[download_end] = "#57c7ff"
+theme[upload_start] = "#ff79c6"
+theme[upload_mid] = "#ff79c6"
+theme[upload_end] = "#bd93f9"
+theme[used_start] = "#50fa7b"
+theme[used_mid] = "#f1fa8c"
+theme[used_end] = "#ff5555"
+theme[temp_start] = "#50fa7b"
+theme[temp_mid] = "#f1fa8c"
+theme[temp_end] = "#ff5555"
+</code></pre>
+<h2 id="known-limitation"><a class="header" href="#known-limitation">Known limitation</a></h2>
+<p>The LAN box’s MAC column is hidden on macOS regardless of theme — the system
+sanitizes it for non-Apple-signed binaries. See
+<a href="#macos">Compatibility</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="lan-discovery"><a class="header" href="#lan-discovery">LAN discovery</a></h1>
+<p>The LAN box answers “what is on my network” without a root, without nmap, and
+without leaving the TUI. Discovery is two mechanisms:</p>
+<ol>
+<li><strong>Passive</strong> — the kernel’s neighbour (ARP/NDP) table is read on every
+refresh, so any device the machine has spoken to appears immediately, with
+whatever freshness the kernel still holds.</li>
+<li><strong>Active UDP-knock sweep</strong> — a background thread walks the local subnet
+(derived from the interface address + prefix) and sends small UDP packets
+to candidate addresses. The packets themselves usually go unanswered, but
+the attempt forces the kernel to resolve each address via ARP, which makes
+the <em>kernel</em> report the neighbour — ltop never needs raw sockets or root.
+The sweep cadence is <code>sweep_interval_s</code> (default 60 s) and can be turned
+off (<code>sweep = false</code>) for quiet networks.</li>
+</ol>
+<p>The two sources merge per (interface, IP). Hostnames resolve through a
+best-effort chain — mDNS reverse lookup → NetBIOS node status → reverse DNS —
+gateways are flagged, and macOS’s neighbour-table sanitization is
+worked around by probing kernel cache entries through the route socket — see
+<a href="#macos">Compatibility → macOS</a> for what is and is not visible
+there. Real MAC addresses come from <code>ltop lan-setup</code>, a per-user launchd
+agent that rotates <code>arp</code>/<code>ifconfig</code> snapshots through Apple platform
+binaries (no root, no entitlements) — without it MACs show <code>—</code>.</p>
+<h2 id="what-each-neighbour-shows"><a class="header" href="#what-each-neighbour-shows">What each neighbour shows</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Column</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td>IP / hostname</td><td>resolved address, mDNS name when available</td></tr>
+<tr><td>MAC</td><td>hardware address (<code>—</code> on macOS unless <code>ltop lan-setup</code> is installed)</td></tr>
+<tr><td>iface</td><td>which local NIC the neighbour is reachable through</td></tr>
+<tr><td>Σ conns</td><td>live connection count from CONNS to this peer</td></tr>
+<tr><td>rate</td><td>current rx+tx to this peer</td></tr>
+<tr><td>Σ bytes</td><td>accumulated bytes to this peer since ltop started</td></tr>
+</tbody>
+</table>
+</div>
+<p>The traffic columns are the point: the LAN box and CONNS share the connection
+ledger, so each neighbour carries its own live slice of the traffic.</p>
+<h2 id="interactions"><a class="header" href="#interactions">Interactions</a></h2>
+<ul>
+<li><code>e</code> cycles the LAN sort (ip → hostname → mac → iface).</li>
+<li><code>s</code> toggles the background sweep on/off for the current session.</li>
+<li><code>↑↓</code> selects; the selection <em>follows</em> the neighbour across re-sorts and
+sweeps (a device that briefly vanishes from ARP does not lose your place).</li>
+<li><code>enter</code> <strong>pins</strong> the neighbour — it stays at the top with a red highlight —
+and simultaneously <strong>filters CONNS to that peer</strong>. This is the fast path
+for “what exactly is this device doing”: select it, press enter, read the
+per-connection breakdown. Press <code>enter</code> again to unpin; <code>esc</code>/<code>f</code> also
+clear the filter.</li>
+<li><code>l</code> single-focuses the LAN box; <code>z</code> zooms it full-screen (useful on dense
+subnets).</li>
+</ul>
+<h2 id="boundaries-by-design"><a class="header" href="#boundaries-by-design">Boundaries by design</a></h2>
+<ul>
+<li>The subnet is derived from your own interface; ltop does not scan beyond
+the connected prefixes.</li>
+<li>Devices that block ARP entirely (some firewalled hosts) appear only if the
+kernel has a cached entry from other traffic.</li>
+<li>The sweep is UDP-to-nothing: no TCP connects, no port probing, no raw
+packets — it looks like ordinary (failed) delivery attempts to the OS.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="ebpf-accounting"><a class="header" href="#ebpf-accounting">eBPF accounting</a></h1>
+<h2 id="why-it-exists"><a class="header" href="#why-it-exists">Why it exists</a></h2>
+<p>Two hard limits in the usual sources:</p>
+<ul>
+<li><strong>netlink/<code>/proc</code> offers no per-socket byte counters for UDP.</strong> TCP shows
+byte queues, UDP shows nothing usable per socket.</li>
+<li><strong>Per-socket TCP sampling loses short-lived connections.</strong> Anything that
+completes within one sampling tick is invisible — which is exactly the
+traffic you often want to catch (DNS, small requests, chatty helpers).</li>
+</ul>
+<p><code>ltop-bpf</code> solves both by counting bytes where they happen: kprobes on the
+send/recv syscalls (v4 <strong>and</strong> v6) accumulate payload bytes per <strong>pid</strong> and
+per <strong>socket inode</strong> in kernel maps. Both ledgers feed the same UI, so
+PROCS gets per-process totals that cannot miss short-lived connections, and
+CONNS can attribute bytes to individual UDP “connections” like it already
+does for TCP.</p>
+<h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
+<pre><code>ltop-bpf (root, systemd)                 ltop (unprivileged TUI)
+  kprobes send/recv v4+v6                  reads /run/ltop/udp.json
+  pid ledger ─┐                            every tick, diffs the snapshot
+              ├─ /run/ltop/udp.json  ──►   (saturating per-instance diff)
+  inode ledger┘   rewritten every second   merges deltas into its ledgers
+</code></pre>
+<p>The privileged collector and the unprivileged UI communicate through one
+world-readable snapshot file that is rewritten every second. The TUI never
+needs privileges, and the helper never needs to know about terminals.</p>
+<h2 id="deploying"><a class="header" href="#deploying">Deploying</a></h2>
+<pre><code class="language-bash">sudo cp ltop-bpf /usr/local/bin/
+sudo cp ltop-bpf.service /etc/systemd/system/
+sudo systemctl enable --now ltop-bpf
+</code></pre>
+<ul>
+<li><strong>Smoke test:</strong> <code>sudo ltop-bpf --once</code> samples once, prints, exits;
+<code>sudo bash scripts/udp-smoke.sh</code> generates accountable UDP traffic and
+verifies the snapshot end-to-end; <code>python3 scripts/snap-diff.py</code> prints
+per-pid raw deltas.</li>
+<li><strong>Upgrades:</strong> re-deploy the helper together with the TUI (see the
+<a href="#per-process-accounting-zeroed-after-an-upgrade">FAQ</a> for why).</li>
+<li><strong>Building from source</strong> needs a clang with the <code>bpf</code> target; prebuilt
+tarballs carry a compiled-in object.</li>
+</ul>
+<h2 id="keeping-the-data-clean"><a class="header" href="#keeping-the-data-clean">Keeping the data clean</a></h2>
+<p>Guard rails keep kernel counters honest over a long-running session:</p>
+<ol>
+<li><strong>LRU maps with self-eviction.</strong> The pid and socket maps are
+<code>BPF_MAP_TYPE_LRU_HASH</code> (16 384 entries each): idle pids and closed
+sockets evict themselves, so a busy multi-thousand-process box cannot
+exhaust the maps.</li>
+<li><strong>Per-instance identity + saturating diff.</strong> Every helper instance
+(guarded by a <code>flock</code> single-instance lock) stamps its snapshots with a
+unique id; the TUI re-baselines whenever the id changes and diffs with
+saturating arithmetic — pid/socket reuse or a daemon restart with a stale
+file can never produce negative or garbage deltas.</li>
+<li><strong>CO-RE, no per-kernel builds.</strong> The single struct-coupled part (walking
+<code>sk</code> to the socket inode) uses CO-RE relocations resolved against the
+kernel BTF at load time. Kernels without BTF still work (Ubuntu 22.04’s
+baseline is verified) — field offsets simply resolve at load.</li>
+</ol>
+<p>Probes detach automatically on exit — a crashed collector never leaves
+kprobes behind — and register reads pass a 16 MiB value gate so a wild
+<code>len</code> cannot poison the ledgers.</p>
+<h2 id="what-the-numbers-mean"><a class="header" href="#what-the-numbers-mean">What the numbers mean</a></h2>
+<p>The eBPF ledgers count <strong>payload bytes</strong> seen at the syscall. The NET box
+counts <strong>interface bytes</strong> (driver-level, every packet). The two scopes
+differ <em>by design</em> — headers, retransmits, and LAN chatter the process never
+sent through a syscall all live only in the interface numbers — so PROCS
+totals being 10–40 % below the NET box is the expected shape, not a bug. See
+the <a href="#procs-totals-are-lower-than-the-net-box">FAQ entry</a> for
+the exact breakdown.</p>
+<h2 id="when-the-helper-is-absent"><a class="header" href="#when-the-helper-is-absent">When the helper is absent</a></h2>
+<p><code>ltop</code> runs unprivileged by default and never requires the helper: without
+it the UDP per-process columns are simply absent (TCP still works from
+socket sampling) and <code>meta.udp_helper</code> reads <code>false</code> in <code>--json</code>. On macOS
+there is no eBPF and no helper at all — see
+<a href="#macos">Compatibility → macOS</a> for the Apple-native accounting and
+its documented differences.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="the-data-plane"><a class="header" href="#the-data-plane">The data plane</a></h1>
+<p>Every display surface in ltop is backed by one serialized snapshot —
+<strong>schema v1</strong>, versioned with the binary so scripts and agents can rely on
+it. The same structs serialize into all of these:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Surface</th><th>Command</th><th>Shape</th></tr>
+</thead>
+<tbody>
+<tr><td>one-shot snapshot</td><td><code>ltop --json</code></td><td>single JSON object (~8k tokens unfiltered)</td></tr>
+<tr><td>field reference</td><td><code>ltop --schema</code></td><td>versioned machine-readable field list</td></tr>
+<tr><td>monitoring log</td><td><code>L</code> / <code>--log</code></td><td>JSONL, one snapshot per <code>log_interval_ms</code> (default 60 s)</td></tr>
+<tr><td>headless capture</td><td><code>ltop watch</code></td><td>JSONL, one snapshot per <code>--interval</code> (default 5 s)</td></tr>
+<tr><td>window summary</td><td><code>ltop report</code></td><td>human table, or one ~2 KB JSON object with <code>--json</code></td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-bash">ltop --json      # structured snapshot (takes ~1.2 s: two sampling rounds
+                 # so rate fields are populated)
+ltop --schema    # the authoritative field list — versioned with the binary,
+                 # never drifts from it
+</code></pre>
+<p>The snapshot covers five domains: <code>meta</code> (version, os, arch,
+<code>udp_helper</code> flag), <code>net</code> (per-interface rates and cumulative counters),
+<code>procs</code> (per-process network + disk accounting with UDP breakdown),
+<code>conns</code> (per-connection sockets), <code>disk</code> (capacity/throughput), and <code>lan</code>
+(neighbours). Semantics worth knowing are marked right in the output — e.g. macOS MAC
+sanitization (real values once <code>ltop lan-setup</code> is installed).</p>
+<h2 id="monitoring-log-tui"><a class="header" href="#monitoring-log-tui">Monitoring log (TUI)</a></h2>
+<p><code>L</code> in the TUI, or start with <code>--log</code>, records snapshots to
+<code>~/.local/state/ltop/ltop-log-&lt;ts&gt;.jsonl</code>:</p>
+<ul>
+<li><code>log_interval_ms</code> (default 60 000) sets the cadence;
+<code>log_tracked_only = true</code> records only tracked processes.</li>
+<li><code>log_retention_days</code> (default 7) purges old files at startup and when
+toggled.</li>
+</ul>
+<h2 id="headless-watch"><a class="header" href="#headless-watch">Headless watch</a></h2>
+<pre><code class="language-bash">ltop watch --duration 10m --proc chrome   # full syntax in `ltop watch --help`
+</code></pre>
+<ul>
+<li>Stops on <code>--duration</code> (<code>10s</code>/<code>5m</code>/<code>2h</code>), a <code>--stop</code> sentinel file (consumed
+on sight), or SIGINT — which is graceful: the last snapshot lands in the
+file.</li>
+<li>Output defaults to <code>~/.local/state/ltop/ltop-session-&lt;ts&gt;.jsonl</code>, separate
+from the TUI monitoring log and exempt from its retention purge; its own
+<code>--retention</code> (default 7 days, <code>0</code> = keep forever) prunes at start.</li>
+<li>Line-by-line appends are crash-safe; no root required.</li>
+<li><code>--proc &lt;name&gt;</code> focus mode records only matching processes and their
+connections — tracked <strong>by name</strong>, so a restart that changes the pid keeps
+the timeline continuous.</li>
+<li>Write volume scales with the interval (1 s ≈ 8 KB/line ≈ 28 MB/h; the 5 s
+default is ~5–6 MB/h). <code>--retention</code> is the cleanup story.</li>
+</ul>
+<h2 id="report"><a class="header" href="#report">Report</a></h2>
+<pre><code class="language-bash">ltop report &lt;file.jsonl&gt; [--json]
+</code></pre>
+<p>Reads a watch capture <strong>or</strong> a TUI monitoring log (same schema) and produces
+the window summary: per-process window sums (window differencing across pid
+restarts), peak rates, active time, last alive/exited state; per-connection
+sums/peaks/lifetimes keyed by inode (vanished connections keep their last
+known totals); NIC-scope global totals and the peak interval.</p>
+<p>Filters: <code>--top N</code> (default 5, by traffic), <code>--proc</code> (substring, or glob when
+it contains <code>*</code>), <code>--fields net,udp,disk,conns</code>, and <code>--json</code> for the
+machine-readable form. The AI workflow built on this lives in
+<a href="#ai-agents">AI agents</a>.</p>
+<h2 id="legacy-and-debugging"><a class="header" href="#legacy-and-debugging">Legacy and debugging</a></h2>
+<ul>
+<li><code>ltop --dump</code> — one human-readable sampling round to stdout (debugging;
+prefer <code>--json</code> for parsing, the dump truncates and misaligns values).</li>
+<li><code>ltop --replay [--csv OUT] [--top N]</code> — rebuilds session deltas from
+legacy <code>session-*</code> logs (v1, procs-only) and exports CSV. Current-format
+files belong to <code>report</code>; old ones are rejected with a pointer here.</li>
+</ul>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<p><code>~/.config/ltop/config.conf</code> is plain <code>key = value</code>, written by the in-app
+settings panel (<code>m</code> → settings) and safe to hand-edit (applies on restart):</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key</th><th>Default</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>lang</code></td><td><code>en</code></td><td>UI/messages language; <code>zh</code> switches all human output to Chinese (JSON keys stay English)</td></tr>
+<tr><td><code>layout</code></td><td>classic</td><td>start layout (classic/wide/tall)</td></tr>
+<tr><td><code>tick_ms</code></td><td>1000</td><td>refresh interval</td></tr>
+<tr><td><code>graph_net</code> / <code>graph_disk</code></td><td>hybrid / centered</td><td>default chart style</td></tr>
+<tr><td><code>boxes</code></td><td>all on</td><td>visible boxes</td></tr>
+<tr><td><code>log_interval_ms</code></td><td>60000</td><td>monitoring log cadence</td></tr>
+<tr><td><code>log_retention_days</code></td><td>7</td><td>monitoring log purge age</td></tr>
+<tr><td><code>log_tracked_only</code></td><td>false</td><td>log only tracked processes</td></tr>
+<tr><td><code>sweep</code> / <code>sweep_interval_s</code></td><td>true / 60</td><td>LAN UDP-knock sweep on/off and cadence</td></tr>
+<tr><td><code>tombstone_ttl_ms</code></td><td>5000</td><td>how long closed connections linger in CONNS</td></tr>
+<tr><td><code>theme</code></td><td>omarchy</td><td>theme name (see <a href="#themes">Themes</a>)</td></tr>
+<tr><td><code>theme_live_follow</code></td><td>false</td><td>re-color a running ltop on Omarchy theme change (same as <code>--follow-theme</code>)</td></tr>
+<tr><td><code>proc_expand_default</code></td><td>false</td><td>CONNS process groups start expanded</td></tr>
+<tr><td><code>proc_exit_retention_min</code></td><td>30</td><td>evict exited-process ledgers after N minutes (0 = forever)</td></tr>
+<tr><td><code>conn_filter</code> / <code>conn_sort</code> / <code>proc_sort</code> / <code>lan_sort</code></td><td>all / proc / net-sum / ip</td><td>default list modes</td></tr>
+<tr><td><code>allow_global_kill</code></td><td>false</td><td>allow killing other users’ processes</td></tr>
+<tr><td><code>net_graph_coupled</code></td><td>false</td><td>coupled NET chart scaling: when one direction dwarfs the other, the small side renders at its true fraction of the chart height instead of auto-scaling to full height</td></tr>
+<tr><td><code>net_graph_scale_ratio</code></td><td>5</td><td>trigger threshold for the above, in×(2–20); ratios below it keep normal auto-scaling</td></tr>
+</tbody>
+</table>
+</div>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="ai-agents"><a class="header" href="#ai-agents">AI agents</a></h1>
+<p>ltop treats “the machine’s network/disk/LAN state” as data, not as screen
+scraping: one schema-versioned JSON snapshot feeds the TUI, the CLI, the
+logs, and the headless tools. This page is the working reference for using
+ltop from an agent; the same content ships as a ready-made agent skill in
+the repo at <a href="https://github.com/uMaj35ty/ltop/blob/master/docs/skills/ltop-observe/SKILL.md"><code>docs/skills/ltop-observe/SKILL.md</code></a>
+(diagnostic recipes included).</p>
+<h2 id="one-shot-questions---json"><a class="header" href="#one-shot-questions---json">One-shot questions: <code>--json</code></a></h2>
+<pre><code class="language-bash">ltop --json | jq '&lt;query&gt;'     # snapshot; ~1.2 s (two sampling rounds populate rates)
+ltop --schema                  # versioned field reference, drifts never
+</code></pre>
+<p>A single filtered snapshot costs ~1.7k tokens — vs ~22k for the traditional
+shell-command combination (<code>ss</code>/<code>lsof</code>/<code>df</code>/<code>arp</code> output to parse) and ~8k
+unfiltered. For one-shot questions this is the right tool.</p>
+<p>Strict CLI surface: unknown subcommands and typos (<code>ltop repor</code>) exit 1 with
+a clear message — nothing falls into the interactive TUI by accident, and
+JSON keys are always English regardless of <code>lang</code>.</p>
+<h2 id="time-windows-watch--report"><a class="header" href="#time-windows-watch--report">Time windows: <code>watch</code> + <code>report</code></a></h2>
+<p>For “watch this for 10 minutes, then report”, <strong>do not poll</strong> <code>--json</code>
+(~40k tokens per 10 minutes at 5 s cadence). Record once, summarize once:</p>
+<pre><code class="language-bash">ltop watch --duration 10m --proc chrome    # headless, crash-safe, no root
+ltop report &lt;path watch printed&gt; --json    # report takes a single file
+</code></pre>
+<p><code>report --json</code> returns ~2 KB with exact numbers — window sums (last
+snapshot cumulative − first, segmented across pid restarts), peak rates,
+active time — instead of sampled guesses. Measured on a live desktop:
+<strong>~97 % fewer tokens</strong> than polling for the same information.</p>
+<pre><code class="language-json">{"schema":1,"file":"…","host":"…",
+ "window":{"start":…,"end":…,"snapshots":N,"interval_s":S},
+ "totals":{"scope":"nic","nic_rx":…,"nic_tx":…,"peak_ts":…,"peak_rx_bps":…,"peak_tx_bps":…},
+ "procs":[{"name":"chrome","net_recv":…,"net_sent":…,"peak_rx_bps":…,"peak_tx_bps":…,
+           "udp_recv":…,"udp_sent":…,"peak_udp_bps":…,"disk_read":…,"disk_written":…,
+           "peak_disk_bps":…,"active_s":…,"alive":true}],
+ "conns":[{"remote":"1.2.3.4:443","proto":"tcp","recv":…,"sent":…,"peak_rx_bps":…,
+           "peak_tx_bps":…,"duration_s":…,"state":"ESTAB","process":"chrome"}]}
+</code></pre>
+<p><code>--top N</code> (default 5), <code>--proc</code> (substring or <code>*</code> glob) and <code>--fields net,udp,disk,conns</code> trim the output further.</p>
+<h2 id="division-of-labor-with-jq"><a class="header" href="#division-of-labor-with-jq">Division of labor with <code>jq</code></a></h2>
+<p><code>watch</code> output and TUI monitoring logs are plain JSONL — anything <code>report</code>
+does not aggregate is a <code>jq</code> one-liner away (the files share the schema, and
+<code>report</code> reads both). <code>report</code> for window math, <code>jq</code> for arbitrary slices,
+<code>--json</code> for the current instant.</p>
+<h2 id="reading-the-snapshot--the-parts-that-get-misread"><a class="header" href="#reading-the-snapshot--the-parts-that-get-misread">Reading the snapshot — the parts that get misread</a></h2>
+<ul>
+<li><code>meta.udp_helper: true</code> means the Linux eBPF helper is live and UDP
+per-process accounting is complete; when <code>false</code> (or on macOS) UDP numbers
+are partial.</li>
+<li><code>conns[].process</code> is <code>null</code> for sockets owned by <strong>other users</strong> (Linux).
+Do not claim those connections are unrelated to any process — they are
+just not attributable to your uid.</li>
+<li><code>procs[].disk_*</code> covers only processes owned by the current user.</li>
+<li><code>net.interfaces[].session_rx/tx</code> = since ltop started (resettable);
+<code>alive_rx/tx</code> = since the interface came up.</li>
+<li>Process totals are <strong>payload</strong> bytes; interface totals are <strong>NIC</strong> bytes —
+a 10–40 % gap is by design (<a href="#what-the-numbers-mean">why</a>).</li>
+</ul>
+<h2 id="recipes-from-the-bundled-skill"><a class="header" href="#recipes-from-the-bundled-skill">Recipes (from the bundled skill)</a></h2>
+<ul>
+<li><strong>Network slow?</strong> sort <code>net.interfaces[]</code> by <code>rx_bps+tx_bps</code>; check
+<code>operstate</code>/<code>speed_mbps</code>; then the top <code>conns[]</code> on the busy interface —
+<code>conns[].process</code> names the eater (your user only).</li>
+<li><strong>Disk busy?</strong> <code>disk.devices[]</code> for throughput vs capacity, then <code>procs[]</code>
+sorted by disk rates for the writer.</li>
+<li><strong>LAN inventory?</strong> <code>lan.neighbours[]</code> — gateways flagged, mDNS hostnames,
+<code>tracked</code> marks pinned devices.</li>
+<li><strong>“Watch chrome for 10 minutes and report traffic”</strong> — the watch+report
+pair above, with <code>--proc chrome</code> on both commands.</li>
+</ul>
+<h2 id="outlook"><a class="header" href="#outlook">Outlook</a></h2>
+<p>A <code>ltop mcp</code> subcommand (hand-written stdio JSON-RPC wrapping <code>--json</code>,
+watch+report and — later — multi-host fleet aggregation) is on the 0.3
+roadmap; the JSON surfaces above are its intended substrate and are stable
+in schema v1 today.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="compatibility"><a class="header" href="#compatibility">Compatibility</a></h1>
+<h2 id="requirements"><a class="header" href="#requirements">Requirements</a></h2>
+<p>Rust stable for source builds; Linux or macOS on <strong>x86_64 / aarch64</strong>.
+Prebuilt Linux binaries baseline <strong>glibc 2.35</strong> (Ubuntu 22.04 LTS). The eBPF
+accounting is Linux-only and needs a clang with the <code>bpf</code> target at <em>build</em>
+time; at <em>runtime</em> it needs nothing special — no BTF is required, no nightly
+toolchain, no kernel headers.</p>
+<h2 id="tested-environments"><a class="header" href="#tested-environments">Tested environments</a></h2>
+<p>Release tarballs are verified per distribution in QEMU/KVM: open-box binary,
+eBPF probe attach (incl. kprobe), systemd unit, and the silent degrade path
+without the helper. ltop is developed daily on Omarchy (Arch), which doubles
+as the reference desktop.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Environment</th><th>Kernel</th><th>eBPF accounting</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td>Arch Linux (rolling)</td><td>7.2.7</td><td>✓ full</td><td>also the dev machine (Omarchy desktop)</td></tr>
+<tr><td>Ubuntu 24.04 LTS</td><td>6.8</td><td>✓ full</td><td>glibc 2.39</td></tr>
+<tr><td>Ubuntu 22.04 LTS</td><td>5.15</td><td>✓ full</td><td>works <strong>without BTF</strong>; glibc 2.35 baseline</td></tr>
+<tr><td>Ubuntu 24.04 LTS (aarch64)</td><td>6.8</td><td>✓ full</td><td>QEMU aarch64; Pi-class hardware expected to match</td></tr>
+<tr><td>Debian 13</td><td>6.12</td><td>✓ full</td><td>glibc 2.41</td></tr>
+<tr><td>Fedora 44 (Workstation live)</td><td>6.19</td><td>✓ full</td><td>SELinux enforcing: <strong>zero denials</strong></td></tr>
+<tr><td>macOS 27 (Apple Silicon, MacBook Air)</td><td>darwin 27</td><td>n/a (<code>nettop</code> path)</td><td>verified on hardware; see <a href="#macos">macOS</a></td></tr>
+</tbody>
+</table>
+</div>
+<p>Specialty kernels that trim kprobes/BTF (e.g. Ubuntu’s <code>-kvm</code> cloud kernel)
+are the one known trap: use the <code>generic</code> kernel there. That is a kernel
+flavour limitation, not an ltop limitation.</p>
+<h2 id="selinux"><a class="header" href="#selinux">SELinux</a></h2>
+<p>Fedora (enforcing) runs both binaries and the systemd unit with zero
+denials — the helper attaches kprobes through the standard bpf syscall path
+and writes only its world-readable snapshot to <code>/run/ltop/</code>.</p>
+<h2 id="macos"><a class="header" href="#macos">macOS</a></h2>
+<p>macOS has no eBPF; the same six boxes read Apple-native sources:</p>
+<ul>
+<li><strong>PROCS and CONNS</strong> poll <code>nettop</code> (per-process rows and per-socket flows,
+TCP and UDP in one spawn); CONNS attribution scans the caller’s own
+sockets via <code>libproc</code> — other users’ connections show as <code>n/a</code>.</li>
+<li><strong>DISK</strong> reads IOKit <code>IOMedia</code> statistics plus per-process rusage.</li>
+<li><strong>LAN</strong> parses <code>arp -an</code> and the default route — with a workaround for the
+platform’s neighbour-table sanitization (below).</li>
+<li><code>ltop-bpf</code> does not exist on macOS.</li>
+</ul>
+<p>Documented differences from the Linux path:</p>
+<ul>
+<li>Socket counters are <strong>cumulative per live socket</strong>, sampled: a transfer
+that completes within one sampling tick is not counted. (The eBPF path
+counts at the syscall and misses nothing.)</li>
+<li><strong>The system hides parts of the local network from binaries that are not
+signed by Apple</strong> — independent of the Local Network privacy toggle: the
+neighbour table enumerates empty, single-entry route queries answer with
+the MAC sanitized to the interface’s synthetic address, and <code>getifaddrs</code>
+byte counters read frozen (all cross-checked in the same second against
+Apple-signed tools). macOS 27 went further: even Apple-signed <code>arp</code> shelled
+out from an app comes back empty, and <code>getifaddrs</code> reports every interface
+MAC as <code>02:00:00:00:00:00</code> (access is now gated on the undocumented
+<code>com.apple.developer.networking.topology-observation</code> entitlement, by
+responsible-process attribution × platform signature). ltop routes around
+what it can: the NET box counts via <code>netstat -ib</code>, the LAN box rebuilds its
+neighbour list by probing the kernel cache entry-by-entry over the route
+socket, and <code>ltop lan-setup</code> installs a per-user launchd agent that rotates
+<code>arp</code>/<code>ifconfig</code> snapshots through Apple platform binaries — real MACs in
+the LAN and NET boxes, no root, no entitlements. Without it, MAC addresses
+show as <code>—</code>.</li>
+<li>Bare-terminal framebuffer fonts may miss braille glyphs; rendering over
+SSH or in a proper terminal emulator shows them all.</li>
+</ul>
+<h2 id="release-channels-recap"><a class="header" href="#release-channels-recap">Release channels recap</a></h2>
+<p><a href="#installation">Installation</a> has the details: Homebrew (macOS &amp; Linux),
+crates.io (source), GitHub Releases tarballs (x86_64/aarch64), AUR
+<code>ltop-bin</code> pending registration reopening.</p>
+<h2 id="known-limitations"><a class="header" href="#known-limitations">Known limitations</a></h2>
+<ul>
+<li>Connections of other users can only be attributed to the uid level
+(<code>/proc/&lt;pid&gt;/fd</code> is unreadable for them on Linux; <code>n/a</code> via <code>libproc</code> on
+macOS).</li>
+<li>WiFi NICs expose no link <code>speed</code> from the kernel; the field stays empty.</li>
+<li>CONNS TCP totals include the connection’s whole history (kernel
+semantics) — see the <a href="#conns-totals-include-traffic-from-before-ltop-started">FAQ</a>.</li>
+<li>After an <code>ltop-bpf</code> restart the eBPF counters start from zero; the UI
+re-baselines automatically via snapshot instance IDs.</li>
+<li>Config files: unknown keys and comments survive saves (0.2.10+), but a
+<em>known</em> key carrying a value this build doesn’t recognise (e.g. a sort
+name introduced by a newer version) falls back to the default and is
+rewritten on the next save.</li>
+<li>On macOS only live sockets are counted (nettop semantics): a transfer
+completing within one sampling tick is missed.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="compared-to-other-tools"><a class="header" href="#compared-to-other-tools">Compared to other tools</a></h1>
+<p>ltop doesn’t try to replace btop or nethogs. It covers the slice they leave
+open: who talks to whom on this machine and this LAN, per process and per
+connection, with a machine-readable data plane.</p>
+<h2 id="btop--use-both"><a class="header" href="#btop--use-both">btop — use both</a></h2>
+<p>btop owns the system overview: CPU, memory, sensors, every process. ltop
+borrows its visual language (braille charts, box grid, even the theme
+format) but only watches network, disk I/O and the LAN — and watches those
+deeper: per-process session totals that survive restarts, per-connection
+bytes for TCP and UDP, LAN neighbours with per-peer traffic, headless
+capture for later analysis.</p>
+<p>The author runs btop and ltop side by side every day — btop for the
+system, ltop for the traffic — and recommends exactly that setup. Any
+btop theme you already use works in ltop as-is.</p>
+<h2 id="nethogs--per-process-live-only"><a class="header" href="#nethogs--per-process-live-only">nethogs — per process, live only</a></h2>
+<p>nethogs prints a per-process bytes-per-second list (needs root for most of
+it) and forgets everything between refreshes. ltop keeps session ledgers:
+exited processes stay on screen with their totals, TCP and UDP are
+attributed exactly via eBPF, and you also get per-connection rows, disk
+I/O and the LAN dimension. If a live list is all you need and you have
+root, nethogs is smaller; the rest is ltop territory.</p>
+<h2 id="iftop--per-pair-one-interface"><a class="header" href="#iftop--per-pair-one-interface">iftop — per pair, one interface</a></h2>
+<p>iftop shows bandwidth between address pairs on one interface. ltop’s CONNS
+box covers the same view with totals and rates per connection, adds the
+owner process, and links each LAN neighbour to its connections. iftop’s
+remaining advantage: it is preinstalled in more places.</p>
+<h2 id="the-shell-pipeline-ss--lsof--arp--df"><a class="header" href="#the-shell-pipeline-ss--lsof--arp--df">The shell pipeline (ss / lsof / arp / df)</a></h2>
+<p>The comparison that matters for scripts and agents: five output formats to
+parse, root needed for half the answers, no per-socket UDP bytes anywhere,
+and no memory of the last hour. <code>ltop --json</code> answers in one schema-stable
+snapshot (~1.7k tokens filtered), and <code>watch</code> + <code>report</code> turn “what
+happened” into two commands with exact numbers — see <a href="#ai-agents">AI agents</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="faq"><a class="header" href="#faq">FAQ</a></h1>
+<h2 id="the-rx-and-tx-charts-have-the-same-shape"><a class="header" href="#the-rx-and-tx-charts-have-the-same-shape">The rx and tx charts have the same shape</a></h2>
+<p>Not a bug — two effects stacking. Each chart scales to its own window peak
+(btop-style, so small movements stay readable), and during a download your
+uplink is almost entirely TCP ACKs, whose rate tracks the downlink’s packet
+rate one-to-one. The tx/rx ratio you’ll see is ~1/30 — exactly the expected
+ACK share (one ACK per ~2 segments, ~66 bytes per ~2900 bytes of data); the
+graph then blows that tiny waveform up to full height, so the two curves
+look like siblings. When the two directions differ this much, read the
+header numbers, switch the graph mode to Block (<code>m</code> → graphs), or turn on
+coupled scaling so the small side renders at its true fraction of the chart
+height: <code>m</code> → graphs → <code>c</code> (persist with <code>net_graph_coupled = true</code>; the
+trigger ratio is <code>net_graph_scale_ratio</code>, default 5×).</p>
+<h2 id="procs-totals-are-lower-than-the-net-box"><a class="header" href="#procs-totals-are-lower-than-the-net-box">PROCS totals are lower than the NET box</a></h2>
+<p>By design, on every platform. The NET box counts <strong>interface bytes</strong>
+(driver level: every packet, including headers, retransmits and background
+chatter). PROCS counts <strong>payload bytes</strong> attributed to processes (eBPF at
+the syscall on Linux; live-socket accounting on macOS), and only for your
+own processes on some platforms. The gap is the sum of everything that is
+interface traffic but not your processes’ payload. See
+<a href="#what-the-numbers-mean">eBPF accounting → What the numbers mean</a>.</p>
+<h2 id="conns-totals-include-traffic-from-before-ltop-started"><a class="header" href="#conns-totals-include-traffic-from-before-ltop-started">CONNS totals include traffic from before ltop started</a></h2>
+<p>Also by design, and TCP-only: a TCP connection’s Σ comes from the kernel’s
+per-socket counters, which cover the connection’s whole life — including
+time before ltop launched. UDP Σ is session-accumulated by ltop from the
+moment the helper is live. That difference (plus headers) is part of why
+CONNS and PROCS totals don’t match each other either; traffic through a
+proxy is attributed to the proxy process.</p>
+<h2 id="per-process-accounting-zeroed-after-an-upgrade"><a class="header" href="#per-process-accounting-zeroed-after-an-upgrade">Per-process accounting zeroed after an upgrade</a></h2>
+<p>A stale <code>ltop-bpf</code> keeps writing its snapshot to the old path while the new
+TUI diffs against a different file — the symptom is per-process numbers
+silently reading zero. Fix: always re-deploy the helper with the TUI:</p>
+<pre><code class="language-bash">sudo cp ltop-bpf /usr/local/bin/          # from the same release as the TUI
+sudo systemctl restart ltop-bpf
+</code></pre>
+<h2 id="udp-columns-are-missing--partial"><a class="header" href="#udp-columns-are-missing--partial">UDP columns are missing / partial</a></h2>
+<p>On Linux this means the eBPF helper is not running — check
+<code>meta.udp_helper</code> in <code>ltop --json</code> and
+<a href="#deploying">deploy it</a> (no root needed for the TUI itself; TCP
+columns keep working from socket sampling without the helper). On macOS UDP
+per-process numbers come from sampled live sockets and transfers that
+complete within one tick are not counted — a documented platform
+difference, not a bug.</p>
+<h2 id="connsprocess-is-null-for-some-connections"><a class="header" href="#connsprocess-is-null-for-some-connections"><code>conns[].process</code> is null for some connections</a></h2>
+<p>Those sockets belong to <strong>other users</strong> (Linux): attribution scans your own
+uid’s sockets. “null” means “not attributable to you”, not “unrelated to any
+process”.</p>
+<h2 id="conns-has-a-group-named-na-uid4294967295-in-older-versions"><a class="header" href="#conns-has-a-group-named-na-uid4294967295-in-older-versions">CONNS has a group named “n/a” (uid:4294967295 in older versions)</a></h2>
+<p>macOS counterpart of the above: the unprivileged TUI can only attribute
+sockets of <strong>your own user</strong> (libproc, same semantics as reading your own
+<code>/proc/&lt;pid&gt;/fd</code> on Linux). Connections belonging to other users, system
+daemons or the kernel are visible as traffic but not attributable to a
+process, so they group under <code>n/a</code> — 0.2.12 and later; older builds printed
+the raw <code>uid:4294967295</code> sentinel, which is the same bucket. This is a
+permission boundary, not missing data. To see the owners resolved, run
+<code>sudo ltop</code> once (root can enumerate every process and the group empties
+out); only do so if you are comfortable running a monitor as root.</p>
+<h2 id="one-shot---json-takes-12-s"><a class="header" href="#one-shot---json-takes-12-s">One-shot <code>--json</code> takes ~1.2 s</a></h2>
+<p>Two sampling rounds run back-to-back so every rate field is populated from
+a real delta. For scripting, that latency buys you rates instead of
+counters-only; <code>--dump</code> skips it but truncates values — parse <code>--json</code>.</p>
+<h2 id="watch-filled-my-disk"><a class="header" href="#watch-filled-my-disk"><code>watch</code> filled my disk</a></h2>
+<p>Write volume scales with <code>--interval</code>: 1 s ≈ 8 KB/line ≈ 28 MB/h; the 5 s
+default is ~5–6 MB/h. Captures default to <code>--retention 7</code> days (purged at
+the next watch start; <code>0</code> keeps forever). Long-term recording is the
+monitoring log’s job (<code>L</code> / <code>--log</code>), which defaults to 60 s granularity and
+7-day retention.</p>
+<h2 id="the-loli-command-is-gone"><a class="header" href="#the-loli-command-is-gone">The <code>loli</code> command is gone</a></h2>
+<p>Retired in 0.2.4 — it was a leftover from the original <em>localist top</em>
+naming, and tarballs/brew/AUR no longer ship it. Make your own alias if you
+liked it (help follows the invoked name):</p>
+<pre><code class="language-bash">ln -s "$(command -v ltop)" ~/.local/bin/loli
+</code></pre>
+<h2 id="aur-package"><a class="header" href="#aur-package">AUR package?</a></h2>
+<p><code>ltop-bin</code> is built and waiting for the AUR to reopen account registration.
+Until then: Homebrew, crates.io or GitHub Releases.</p>
+<h2 id="missing-braille-glyphs-boxes-render-as--or-blank"><a class="header" href="#missing-braille-glyphs-boxes-render-as--or-blank">Missing braille glyphs (boxes render as <code>?</code> or blank)</a></h2>
+<p>Your terminal font lacks Unicode braille. Use a proper terminal emulator
+fonts-and-all, or render over SSH — bare framebuffer consoles may miss the
+glyphs. On macOS this affects the built-in Terminal’s framebuffer rendering
+in particular.</p>
+<h2 id="old-kernels--cloud-images"><a class="header" href="#old-kernels--cloud-images">Old kernels / cloud images</a></h2>
+<p>glibc 2.35+ and a kernel with kprobes are the runtime floor for the eBPF
+helper; the TUI itself runs on anything the binary links against. Ubuntu’s
+<code>-kvm</code> cloud kernel trims kprobes — use the <code>generic</code> kernel. Ubuntu 22.04’s
+5.15 works <strong>without BTF</strong> (CO-RE resolves at load time).</p>
+<h2 id="does-ltop-phone-home"><a class="header" href="#does-ltop-phone-home">Does ltop phone home?</a></h2>
+<p>No telemetry, ever. The only outbound activity is the LAN sweep: small UDP
+packets to your own subnet (default every 60 s, <code>sweep = false</code> to disable)
+that make the kernel resolve neighbours via ARP — no port probing, no raw
+sockets, no traffic beyond your connected prefixes.</p>
+<h2 id="how-do-i-get-the-report-as-json-for-my-agentscript"><a class="header" href="#how-do-i-get-the-report-as-json-for-my-agentscript">How do I get the report as JSON for my agent/script?</a></h2>
+<pre><code class="language-bash">ltop report &lt;file.jsonl&gt; --json
+</code></pre>
+<p>… and read <a href="#ai-agents">AI agents</a> — including why polling <code>--json</code> in a loop
+wastes ~40k tokens per 10 minutes versus ~1k for a report.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="security"><a class="header" href="#security">Security</a></h1>
+<p>This page describes what ltop touches on your system and network, what it
+refuses to do, and how the untrusted inputs it reads are handled. The
+operational policy (supported versions, how to report a vulnerability) is
+the repository’s <a href="https://github.com/uMaj35ty/ltop/blob/master/SECURITY.md">SECURITY.md</a>.</p>
+<h2 id="privileges"><a class="header" href="#privileges">Privileges</a></h2>
+<ul>
+<li><strong>The TUI runs unprivileged.</strong> Every data source is readable by any
+process: <code>/proc</code>, <code>getifaddrs</code>, PF_ROUTE/netlink dumps, ephemeral UDP
+sockets. Kill/relaunch actions are bounded by the kernel to your own uid.</li>
+<li><strong><code>ltop-bpf</code> is the only privileged component</strong> and it is optional. It
+runs as a systemd service with <code>CAP_BPF</code> + <code>CAP_PERFMON</code> only (plus
+<code>CAP_SYS_RESOURCE</code> on kernels &lt; 5.11), writes a single snapshot file
+under <code>/run/ltop</code>, holds no listening sockets and makes no network
+connections. The shipped unit applies a sandbox: <code>NoNewPrivileges</code>,
+<code>ProtectSystem=strict</code> (only <code>/run/ltop</code> writable), <code>ProtectHome</code>,
+<code>PrivateTmp</code>, kernel-interface protections and a capability bounding set
+without <code>CAP_SYS_ADMIN</code>.</li>
+</ul>
+<h2 id="your-data-on-disk"><a class="header" href="#your-data-on-disk">Your data on disk</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Data</th><th>Location</th><th>Mode</th></tr>
+</thead>
+<tbody>
+<tr><td>Monitoring log (<code>L</code> / <code>--log</code>)</td><td><code>~/.local/state/ltop/</code></td><td>0600</td></tr>
+<tr><td>Watch capture</td><td><code>~/.local/state/ltop/</code></td><td>0600</td></tr>
+<tr><td>Config</td><td><code>~/.config/ltop/config.conf</code></td><td>0644 (preferences only)</td></tr>
+<tr><td>eBPF snapshot</td><td><code>/run/ltop/udp.json</code></td><td>0644, root-owned — <strong>world-readable by design</strong></td></tr>
+</tbody>
+</table>
+</div>
+<p>Session logs and captures hold connection endpoints, process names and
+hostnames, so they are created <code>0600</code> regardless of umask. The eBPF
+snapshot is world-readable because the unprivileged TUI reads it; on a
+shared host this means every local user can see per-process byte totals —
+factor that in before deploying the helper on multi-user machines.</p>
+<p>ltop has <strong>no telemetry</strong>: no update checks, no analytics, nothing leaves
+your machine except the LAN probes below.</p>
+<h2 id="network-behavior"><a class="header" href="#network-behavior">Network behavior</a></h2>
+<p>The LAN box actively queries your local network:</p>
+<ul>
+<li>per-neighbour unicast <strong>mDNS</strong>, <strong>NetBIOS node-status</strong> and <strong>reverse
+DNS</strong> lookups (hostname resolution);</li>
+<li>a configurable UDP “knock” sweep — one empty datagram to discard port 9
+per subnet host, at most 1022 hosts per round, default every 60 s,
+toggleable in settings.</li>
+</ul>
+<p>Everything is scoped to your LAN. Replies are untrusted input and handled
+accordingly: DNS/NBNS transaction IDs are randomized per query and
+validated together with the source address, all parsers are bounds-checked
+pure Rust, untrusted strings are sanitized before they reach any terminal
+output, and the eBPF snapshot reader caps file size.</p>
+<h2 id="reporting-a-vulnerability"><a class="header" href="#reporting-a-vulnerability">Reporting a vulnerability</a></h2>
+<p>Please use GitHub <strong>Private Vulnerability Reporting</strong> on the repository
+(never a public issue for anything exploitable). See
+<a href="https://github.com/uMaj35ty/ltop/blob/master/SECURITY.md">SECURITY.md</a>
+for the full policy.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="contributing"><a class="header" href="#contributing">Contributing</a></h1>
+<p>Issues and PRs are welcome. This page collects the project’s working
+conventions so a first PR looks like the tenth one.</p>
+<h2 id="setup"><a class="header" href="#setup">Setup</a></h2>
+<ul>
+<li>Rust (stable, current), plus <strong>clang with the BPF target</strong> on Linux —
+the eBPF object is compiled from <code>bpf/net_bpf.c</code> by <code>build.rs</code> at build
+time. macOS needs Xcode’s toolchain only.</li>
+<li><code>cargo test</code> must pass and <code>cargo clippy --all-targets -- -D warnings</code>
+must be clean — <strong>zero warnings is a hard gate</strong>, enforced by CI on
+Linux x86_64, Linux aarch64 and macOS.</li>
+</ul>
+<h2 id="conventions-that-ci-and-review-will-hold-you-to"><a class="header" href="#conventions-that-ci-and-review-will-hold-you-to">Conventions that CI and review will hold you to</a></h2>
+<ul>
+<li><strong>Platform-gated code.</strong> macOS-only FFI declarations and functions are
+<code>#[cfg(target_os = "macos")]</code> — ungated extern declarations pull link
+errors into the Linux build, and Linux clippy cannot see macOS-only
+lints, so platform-specific changes are verified on the matching target
+(CI’s <code>test-macos</code>/<code>test-aarch64</code> jobs exist for exactly this).</li>
+<li><strong>Offset-style constants need receipts.</strong> Structure offsets (kinfo_proc,
+socket_fdinfo, rusage_info_v2, …) are pinned against the SDK header and
+verified on real hardware; note the source in a comment, and double-check
+the header rather than trusting second-hand values.</li>
+<li><strong>Untrusted input is sanitized.</strong> Strings from the LAN (mDNS/NBNS
+hostnames), local processes, config and external JSONL files never reach
+a terminal raw: the TUI goes through ratatui (control characters
+dropped), CLI output goes through <code>sanitize_text</code>. New output paths must
+do the same.</li>
+<li><strong>Tests are fixtures, not mocks of each other.</strong> Watch has end-to-end
+tests that consume real <code>ltop watch</code> output; replay ships both current-
+and legacy-format fixtures; UI tests assert on rendered buffers. When you
+fix a bug, pin it: a test that fails against the old code (mutation
+check) is part of the fix.</li>
+<li><strong>Bilingual UI.</strong> User-facing strings go through the <code>tr</code> dictionary in
+<code>src/config.rs</code> — add the English and Chinese entries together. Box
+titles and technical tokens stay English by design.</li>
+<li><strong>Docs follow code.</strong> User-visible changes update the mdBook (both
+languages), the README when the pitch changes, and <code>CHANGELOG.md</code> in the
+established style.</li>
+</ul>
+<h2 id="pull-requests"><a class="header" href="#pull-requests">Pull requests</a></h2>
+<ul>
+<li>Branch from <code>master</code>; keep PRs focused (one behavior per PR).</li>
+<li>The commit message convention is a dense summary line describing the
+what and the why (see <code>git log</code>).</li>
+<li>CI must be green (test + clippy on all three CI targets). The maintainer
+handles releases: tag → signed tarballs → Homebrew tap → crates.io →
+docs site.</li>
+</ul>
+<h2 id="security-sensitive-changes"><a class="header" href="#security-sensitive-changes">Security-sensitive changes</a></h2>
+<p>If your change touches the LAN parsers, the eBPF helper, file permissions
+or anything in <a href="#security">Security</a>, call it out in the PR description.
+The audit baseline lives in the repository’s history (0.2.9); keep the
+property you’re preserving stated explicitly — e.g. “LAN-supplied strings
+never reach a terminal unfiltered”.</p>
+<h2 id="acknowledgements-1"><a class="header" href="#acknowledgements-1">Acknowledgements</a></h2>
+<p>ltop’s look borrows — with gratitude and credit — from two projects and
+the artists behind them:</p>
+<ul>
+<li><strong>btop</strong> (<a href="https://github.com/aristocratos/btop">aristocratos/btop</a>) by
+Aristocratos: the theme format is btop-compatible, and 41 of the built-in
+themes come from btop’s official collection;</li>
+<li><strong>Omarchy</strong> (<a href="https://github.com/dhh/omarchy">dhh/omarchy</a>) by DHH: 31 of
+the built-in themes come from its bundled collection.</li>
+</ul>
+<p>Thank you to Aristocratos, DHH and the creators of every one of those
+themes — see <a href="#acknowledgements">Themes → Acknowledgements</a>.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr-ef4e11c1.min.js"></script>
+        <script src="mark-09e88c2c.min.js"></script>
+        <script src="searcher-09f2665d.js"></script>
+
+        <script src="clipboard-1626706a.min.js"></script>
+        <script src="highlight-abc7f01d.js"></script>
+        <script src="book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="theme/lang-6c111976.js"></script>
+
+        <script>
+        window.addEventListener('load', function() {
+            window.setTimeout(window.print, 100);
+        });
+        </script>
+
+
+    </div>
+    </body>
+</html>

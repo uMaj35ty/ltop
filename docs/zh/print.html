@@ -1,0 +1,1186 @@
+<!DOCTYPE HTML>
+<html lang="zh" class="ayu sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>ltop 中文文档</title>
+        <meta name="robots" content="noindex">
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="btop 风格的终端监控：本地网络、LAN 邻居与磁盘 I/O——附带面向 AI 的数据面（schema-v1 JSON、watch + report）。">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="favicon-8114d1fc.png">
+        <link rel="stylesheet" href="css/variables-8adf115d.css">
+        <link rel="stylesheet" href="css/general-e96d0476.css">
+        <link rel="stylesheet" href="css/chrome-d279d366.css">
+        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="theme/site-9fcace3e.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "ayu";
+            const default_dark_theme = "ayu";
+            window.path_to_searchindex_js = "searchindex-3faf2783.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc-4bb4cf35.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('ayu')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">ltop 中文文档</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/uMaj35ty/ltop" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="简介"><a class="header" href="#简介">简介</a></h1>
+<p><strong>ltop</strong>（localist top）是一款只盯一台机器的终端监控器。btop、nethogs、iftop
+各答对一部分的问题，它三个一起答:</p>
+<ol>
+<li><strong>流量去哪了？</strong> —— 谁在和谁通信、走哪块网卡、速率多少，每连接、每进程
+的字节计费（TCP <strong>和</strong> UDP）都有。</li>
+<li><strong>进程在干什么？</strong> —— 谁正在吃带宽和磁盘，整场会话累计吃了多少；进程退出
+了也留账。</li>
+<li><strong>局域网上有谁？</strong> —— 哪些设备在线、哪个是网关、到每台设备的流量是多少。</li>
+</ol>
+<p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="../../assets/screenshots/classic-six-boxes-small.webp" alt="Classic 布局——六盒、实时 LAN 邻居与进程分组连接"><span class="img-wrapper"><img src="../../assets/screenshots/classic-six-boxes-small.webp" alt="Classic 布局——六盒、实时 LAN 邻居与进程分组连接"></span></label></p>
+<h2 id="工作方式"><a class="header" href="#工作方式">工作方式</a></h2>
+<p>六个盒子各司一职（NET、LAN、DISK I/O、DISKS、CONNS、PROCS），<a href="https://ratatui.rs">ratatui</a>
+渲染，btop 风格的盲文图表。主程序<strong>免特权</strong>运行——不要 root、不要 setuid、
+没有守护进程。Linux 上有一个<em>可选</em>的特权助手（<code>ltop-bpf</code>，小型 eBPF 采集器），
+补齐每进程/每连接的 TCP 与 UDP 字节计费；没有它其余功能照常。macOS 上同样
+六个盒子读 Apple 原生源（nettop、libproc、IOKit、路由 socket）。所有显示面
+背后是同一份数据面: <code>ltop --json</code> 输出 schema-v1 快照，<code>ltop watch</code> 无头录制，
+<code>ltop report</code> 聚合时间窗——这正是 ltop 能被 <strong>AI 代理</strong>直接使用的原因（比轮询
+省 ~97% token，见 <a href="#ai-代理">AI 代理</a>）。</p>
+<h2 id="亮点"><a class="header" href="#亮点">亮点</a></h2>
+<ul>
+<li><strong>真实的逐连接计费</strong> —— 每条 TCP 连接都有实时 B/s 和累计总量；UDP 连接由
+eBPF 计量，列与 TCP 相同。关闭的连接留 5 秒墓碑行，突发流量不会看丢。</li>
+<li><strong>跨重启存活的进程总量</strong> —— PROCS 按进程累计整场会话的网络（TCP+UDP）与
+磁盘 I/O；退出的进程灰显保留，带捕获的完整命令行，一键重启。</li>
+<li><strong>带流量的 LAN 邻居</strong> —— 被动 ARP 加周期 UDP knock 扫描发现同子网设备
+（IP、MAC、mDNS 主机名、接口）；每个邻居带实时连接数、速率和累计字节，
+<code>enter</code> 置顶它并让 CONNS 只看这个对端。</li>
+<li><strong>无头 watch + report</strong> —— 时间窗录成崩溃安全的 JSONL，再聚合出精确的窗口
+总和、峰值速率和活跃时长（人读表格或 ~2 KB JSON）。</li>
+<li><strong>72 套内嵌 btop 主题</strong> —— 任何 btop 主题直接可用；Omarchy 下可跟随桌面
+主题，<code>--follow-theme</code> 让运行中的 ltop 实时变色（默认关）。界面英文或中文
+（<code>lang = zh</code>）。</li>
+<li><strong>三布局一键切换</strong> —— <code>Tab</code> 循环 classic / wide / tall；<code>1</code>–<code>6</code> 开关盒子；
+<code>z</code> 把焦点盒子放大全屏。</li>
+</ul>
+<h2 id="下一步"><a class="header" href="#下一步">下一步</a></h2>
+<ul>
+<li><a href="#快速上手">快速上手</a> —— 安装加最要紧的键，两分钟。</li>
+<li><a href="#安装">安装</a> —— 全渠道、平台要求、eBPF 助手部署。</li>
+<li><a href="#tui-界面">TUI 界面</a> —— 全部界面: 盒子、布局、键位。</li>
+<li><a href="#ai-代理">AI 代理</a> —— JSON 快照、watch + report、打包好的 agent skill。</li>
+</ul>
+<h2 id="现状"><a class="header" href="#现状">现状</a></h2>
+<p>ltop 以 MIT 协议发布，日常开发环境是 Omarchy（Arch Linux），每个 release 在
+QEMU/KVM 的五个发行版加 macOS 实机上验证——见<a href="#兼容性">兼容性</a>。分发渠道:
+<a href="https://github.com/uMaj35ty/ltop#readme">Homebrew</a>、<a href="https://crates.io/crates/ltop">crates.io</a>、<a href="https://github.com/uMaj35ty/ltop/releases">GitHub Releases</a> tarball（x86_64 + aarch64）；AUR
+<code>ltop-bin</code> 打包就绪，等 AUR 开放注册。</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="快速上手"><a class="header" href="#快速上手">快速上手</a></h1>
+<h2 id="1-安装一条命令"><a class="header" href="#1-安装一条命令">1. 安装（一条命令）</a></h2>
+<pre><code class="language-bash">brew install uMaj35ty/ltop/ltop     # macOS 与 Linux —— 预编译二进制
+</code></pre>
+<p>或者有 Rust 工具链的话:</p>
+<pre><code class="language-bash">cargo install ltop                  # 源码编译（crates.io）
+</code></pre>
+<p>或者从 <a href="https://github.com/uMaj35ty/ltop/releases">GitHub Releases</a> 下 tarball（<code>x86_64</code> / <code>aarch64</code>，Linux 与 macOS）。
+全部渠道见<a href="#安装">安装</a>。</p>
+<h2 id="2-运行"><a class="header" href="#2-运行">2. 运行</a></h2>
+<pre><code class="language-bash">ltop
+</code></pre>
+<p>不要 root，不要配置。落地即 classic 布局: 左边图表（上 NET 下 DISK I/O），
+右边表格（LAN、CONNS、PROCS、DISKS）。</p>
+<h2 id="3-最要紧的键"><a class="header" href="#3-最要紧的键">3. 最要紧的键</a></h2>
+<p>下面十个覆盖日常；页脚永远显示当前上下文，完整表在 <code>m → help</code>（也见
+<a href="#tui-界面">TUI 界面</a>）。</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>按键</th><th>作用</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Tab</code></td><td>布局循环: classic → wide → tall</td></tr>
+<tr><td><code>1</code>–<code>6</code></td><td>开关盒子（1 net、2 lan、3 disk i/o、4 disks、5 conns、6 procs）</td></tr>
+<tr><td><code>/</code></td><td>按名字子串搜索进程/连接</td></tr>
+<tr><td><code>p</code> / <code>c</code> / <code>l</code></td><td>单焦点 PROCS / CONNS / LAN（点亮一个，其余变暗）</td></tr>
+<tr><td><code>↑↓</code> + <code>enter</code></td><td>选中行 → 详情面板（完整命令行、逐连接分解、运行时长）</td></tr>
+<tr><td>LAN 行上 <code>enter</code></td><td>置顶该邻居并让 CONNS 只看它——“这台设备到底在干什么”</td></tr>
+<tr><td><code>f</code> / <code>o</code></td><td>CONNS: 过滤循环（all/lan/tcp/udp）/ 排序循环（proc 分组、sum、name、rate）</td></tr>
+<tr><td><code>r</code></td><td>PROCS: 排序循环（net-sum、net-rate、disk-sum、disk-rate、name）</td></tr>
+<tr><td><code>z</code></td><td>焦点盒子全屏缩放（<code>esc</code> 退出）</td></tr>
+<tr><td><code>m</code></td><td>菜单: 主题、设置、图表、帮助</td></tr>
+<tr><td><code>space</code></td><td>暂停/恢复采样（暂停期间漏掉的字节恢复时补齐）</td></tr>
+<tr><td><code>q</code></td><td>退出</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="4-可选-每进程每连接字节计费linux"><a class="header" href="#4-可选-每进程每连接字节计费linux">4. 可选: 每进程/每连接字节计费（Linux）</a></h2>
+<p>没有这一步 ltop 也能用——CONNS 有 TCP 实时速率，PROCS 有来自 socket 抽样的
+网络总量；缺的是<em>精确</em>的 UDP 每进程计费和每连接总量。一条命令开启:</p>
+<pre><code class="language-bash">sudo cp target/release/ltop-bpf /usr/local/bin/      # 从 release tarball 或源码构建
+sudo cp deploy/ltop-bpf.service /etc/systemd/system/
+sudo systemctl enable --now ltop-bpf
+</code></pre>
+<p>Homebrew 装的二进制相同；助手要与 TUI 出自同一个 release（见
+<a href="#ebpf-计费">eBPF 计费</a>和<a href="#升级后每进程计费归零">升级注意事项</a>）。</p>
+<h2 id="5-可选-ai-工作流"><a class="header" href="#5-可选-ai-工作流">5. 可选: AI 工作流</a></h2>
+<p>记住这一对命令:</p>
+<pre><code class="language-bash">ltop watch --duration 10m --proc chrome   # 无头录制（免 root，崩溃安全），
+                                         # 结束时打印输出路径
+ltop report &lt;该路径&gt; --json               # report 只收单个文件
+</code></pre>
+<p><code>report</code> 给出精确的窗口总和与峰值，不是抽样猜测——10 分钟窗口 JSON 约 1k
+token，轮询 <code>--json</code> 要 4 万。见 <a href="#ai-代理">AI 代理</a>。</p>
+<h2 id="6-调成自己喜欢的样子"><a class="header" href="#6-调成自己喜欢的样子">6. 调成自己喜欢的样子</a></h2>
+<ul>
+<li><strong>主题</strong>: <code>m</code> → theme 循环 72 套内嵌 btop 主题；Omarchy 下选 <code>omarchy</code>
+跟随桌面。<code>--theme &lt;file&gt;</code> 加载任意 btop 主题文件；<code>--follow-theme</code>
+让运行中的 ltop 跟着桌面变色。详见<a href="#主题">主题</a>。</li>
+<li><strong>语言</strong>: <code>~/.config/ltop/config.conf</code> 里 <code>lang = zh</code>，所有人类可读输出
+（TUI 和 CLI）切中文；JSON 键恒为英文。</li>
+<li><strong>设置面板</strong>: <code>m</code> → settings 写入 <code>~/.config/ltop/config.conf</code>（刷新率、
+日志保留、扫描间隔、排序默认……）。见<a href="#配置">数据面</a>。</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="安装"><a class="header" href="#安装">安装</a></h1>
+<p>ltop 是两个二进制:</p>
+<ul>
+<li><strong><code>ltop</code></strong> —— TUI 和全部 CLI（<code>--json</code>、<code>watch</code>、<code>report</code>……）。免特权运行。</li>
+<li><strong><code>ltop-bpf</code></strong> —— 可选的特权 eBPF 采集器（仅 Linux）。没有它 ltop 照样有用，
+见 <a href="#ebpf-计费">eBPF 计费</a>。</li>
+</ul>
+<p>平台: Linux 与 macOS，<strong>x86_64 和 aarch64</strong>。预编译 Linux 二进制要求
+<strong>glibc 2.35+</strong>（Ubuntu 22.04 LTS 基线）；不提供静态 musl 包。</p>
+<h2 id="homebrewmacos-与-linux"><a class="header" href="#homebrewmacos-与-linux">Homebrew（macOS 与 Linux）</a></h2>
+<p>项目 tap 的预编译二进制:</p>
+<pre><code class="language-bash">brew install uMaj35ty/ltop/ltop
+</code></pre>
+<p>升级走同一条 formula（<code>brew upgrade ltop</code>）。formula 已不带退役的 <code>loli</code>
+软链；<code>brew upgrade</code> 会自动清掉旧的。</p>
+<h2 id="cratesio"><a class="header" href="#cratesio">crates.io</a></h2>
+<pre><code class="language-bash">cargo install ltop
+</code></pre>
+<p>stable Rust 工具链源码编译；两个二进制都装进 <code>~/.cargo/bin</code>。注意:</p>
+<ul>
+<li><strong>不需要 clang。</strong> eBPF 对象通常在编译期用系统 clang 构建——但 clang（或
+<code>bpf</code> target）不可用时构建照样<em>成功</em>，嵌入空对象: TUI 正常运行，只有 UDP
+每进程计费静默缺席。该情况下 <code>ltop-bpf</code> 启动时会明确报错拒启。</li>
+<li>从源码构建 eBPF 采集器需要带 <code>bpf</code> target 的 clang（Arch 默认 <code>clang</code>
+就有）。</li>
+</ul>
+<h2 id="github-releases"><a class="header" href="#github-releases">GitHub Releases</a></h2>
+<p>每个 release 提供 <code>x86_64</code> 和 <code>aarch64</code>、Linux 与 macOS 的 tarball，内含
+两个二进制和 systemd 单元。二进制未签名——macOS 先去掉隔离属性:</p>
+<pre><code class="language-bash">xattr -c ltop-*-darwin.tar.gz
+</code></pre>
+<p>Linux 侧解包后:</p>
+<pre><code class="language-bash">sudo cp ltop /usr/local/bin/
+sudo cp ltop-bpf /usr/local/bin/          # 可选，仅 Linux
+sudo cp ltop-bpf.service /etc/systemd/system/
+sudo systemctl enable --now ltop-bpf      # 可选
+</code></pre>
+<h2 id="aur"><a class="header" href="#aur">AUR</a></h2>
+<p><code>ltop-bin</code>——打包件已就绪，等 AUR 开放账号注册即发布，届时更新本页。</p>
+<h2 id="部署升级-ebpf-助手"><a class="header" href="#部署升级-ebpf-助手">部署/升级 eBPF 助手</a></h2>
+<p>助手要<strong>随 TUI 一起</strong>重新部署——陈旧的 <code>ltop-bpf</code> 还在往旧路径写快照，
+每进程计费会静默归零:</p>
+<pre><code class="language-bash">sudo cp target/release/ltop-bpf /usr/local/bin/
+sudo systemctl restart ltop-bpf
+</code></pre>
+<h2 id="验证"><a class="header" href="#验证">验证</a></h2>
+<pre><code class="language-bash">ltop --version          # TUI/CLI 版本
+ltop --json | head -c 300    # 一份 schema-v1 快照；"meta.udp_helper": true
+                        # 说明 eBPF 助手在跑（Linux）
+sudo ltop-bpf --once    # 采集器冒烟测试: 采一次、打印、退出
+</code></pre>
+<h2 id="源码构建"><a class="header" href="#源码构建">源码构建</a></h2>
+<pre><code class="language-bash">git clone https://github.com/uMaj35ty/ltop
+cd ltop
+cargo build --release
+
+# 国内镜像(历史与 tag 完全一致,中文优先 README):
+git clone https://atomgit.com/uMaj35ty/ltop
+# 产物在 target/release/: ltop、ltop-bpf（Linux）
+</code></pre>
+<p>要求: Rust stable；Linux 上构建 eBPF 对象需要带 <code>bpf</code> target 的 clang
+（没有会怎样见上文）。eBPF 探针内含 x86_64 与 aarch64 两种架构的 <code>pt_regs</code>
+寄存器映射，全程不需要 nightly。</p>
+<p>每个 release 在 QEMU/KVM 里验证（开箱二进制、kprobe 挂载、systemd 单元、
+无助手时的静默降级）——矩阵见<a href="#兼容性">兼容性</a>。</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="tui-界面"><a class="header" href="#tui-界面">TUI 界面</a></h1>
+<p>六个盒子各司一职。<code>Tab</code> 循环三种布局——<strong>classic</strong>（左图表右表格）、
+<strong>wide</strong>（上图表下表格）、<strong>tall</strong>（单列）——<code>1</code>–<code>6</code> 开关盒子，关掉的盒子
+干净收起。<code>z</code> 把焦点盒子放大全屏，<code>esc</code> 退出。<code>space</code> 冻结画面；暂停期间
+发生的流量在恢复时补齐，不会漏账。</p>
+<p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="../../assets/screenshots/classic-six-boxes-small.webp" alt="Classic 布局"><span class="img-wrapper"><img src="../../assets/screenshots/classic-six-boxes-small.webp" alt="Classic 布局"></span></label></p>
+<h2 id="六个盒子"><a class="header" href="#六个盒子">六个盒子</a></h2>
+<h3 id="1--net"><a class="header" href="#1--net">1 — NET</a></h3>
+<p>每网卡实时吞吐（盲文面积图，rx/tx 独立渐变色），加链路状态、速率、双工、
+MTU 和地址。累计流量显示两份: ltop 启动以来（可重置）和接口启动以来。
+<code>n</code> 切换图表模式；点表头切换网卡。</p>
+<h3 id="2--lan"><a class="header" href="#2--lan">2 — LAN</a></h3>
+<p>自动发现的同子网设备（原理见 <a href="#lan-发现">LAN 发现</a>）: IP、MAC、mDNS 主机名、
+接口，网关有标记。每个邻居带实时连接数、当前速率和累计字节——数字与 CONNS
+联动，“到那台机器的流量是多少“看一眼就知道，<code>enter</code> 置顶邻居并让 CONNS
+只看这个对端。</p>
+<h3 id="3--4--disk-io-与-disks"><a class="header" href="#3--4--disk-io-与-disks">3 / 4 — DISK I/O 与 DISKS</a></h3>
+<p>读/写速率图表（堆叠设备去重——<code>nvme0n1</code> 和它的 <code>dm-0(root)</code> 只算一份），
+旁边是设备列表: 容量条加每设备实时速率，文件系统类型以暗色小字缀在设备名
+后。<strong>macOS</strong> 上只列挂载卷: 虚拟机与模拟器会把虚拟盘以宿主可见的合成设备
+形式挂出来——动辄十几个——而宿主看不到它们内部的容量与用量，这些行只是
+噪声。<strong>Linux</strong> 上 VM 的磁盘不会成为宿主块设备（只是文件系统里的普通文
+件），设备树如实反映硬件，保留完整物理树（盘 → 分区 → dm，含未挂载结构
+行，LUKS/LVM 分层可读）。<code>d</code> 展开
+挂载列表并把方向键/跳转键指向 disks 列表，<code>i</code> 切换图表模式。列表超长时
+右缘出现 btop 式滚动条——点轨道翻页、拖滑块滚动，无需聚焦（滚轮本来就
+不需要）。</p>
+<h3 id="5--conns"><a class="header" href="#5--conns">5 — CONNS</a></h3>
+<p>系统全部 socket。TCP 连接显示真实逐连接 B/s 和总量；UDP 连接由 eBPF 计量
+（Linux，经 <a href="#ebpf-计费">eBPF 助手</a>），列与 TCP 相同。行带协议标签
+（<code>tcp</code>/<code>udp</code>，本地对端标 <code>lan</code>），关闭的连接留 5 秒灰显<strong>墓碑行</strong>
+（<code>tombstone_ttl_ms</code> 可配）——结束的传输在屏幕上还读得到。<code>f</code> 循环过滤
+（all → lan → tcp → udp），<code>o</code> 循环排序——包括 <strong>proc</strong> 分组，同名进程折进
+可展开的组头（<code>▸ firefox ×17</code>，组头带 Σ；组头上 <code>enter</code> 折叠/展开，搜索命中
+自动展开）。</p>
+<p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="../../assets/screenshots/tall-process-groups-small.webp" alt="Tall 布局——分组连接、组总量与被追踪行"><span class="img-wrapper"><img src="../../assets/screenshots/tall-process-groups-small.webp" alt="Tall 布局——分组连接、组总量与被追踪行"></span></label></p>
+<h3 id="6--procs"><a class="header" href="#6--procs">6 — PROCS</a></h3>
+<p>每进程<strong>会话累计</strong>: 网络（TCP+UDP——eBPF 在系统调用处计字节，短命连接不会
+漏）和磁盘 I/O，加实时速率。退出的进程灰显保留，带捕获的命令行；<code>s</code>
+一键重启，或 <code>enter</code> 开详情面板复制完整命令。<code>r</code> 循环排序（net-sum →
+net-rate → disk-sum → disk-rate → name）。退出进程的账本默认 30 分钟后
+清除（<code>proc_exit_retention_min</code>，<code>0</code> = 永久保留）。</p>
+<h2 id="焦点选中与详情"><a class="header" href="#焦点选中与详情">焦点、选中与详情</a></h2>
+<ul>
+<li><code>p</code> / <code>c</code> / <code>l</code> 单焦点 PROCS / CONNS / LAN: 选中的盒子撑满注意力，其余
+变暗成占位。<code>esc</code> 清除。</li>
+<li>方向键选中会<strong>跟着行走</strong>——重排、组折叠之后，你看的还是同一行。</li>
+<li>conns/procs 行上 <code>enter</code> 开<strong>详情面板</strong>: 进程显示状态、运行时长、完整
+捕获命令行、exe/cwd、RSS 和 UDP 分解；连接显示协议、属主、生命周期、
+总量与速率。面板内: <code>space</code>/<code>t</code> 追踪置顶（被追踪的行排最上），<code>k</code> 终止，
+<code>s</code> 重启，<code>↑↓</code> 移动字段光标，<code>y</code> 用 OSC 52 复制选中值（ssh 下直达本地
+剪贴板，不依赖 X11）。</li>
+<li>LAN 行上 <code>enter</code> <strong>置顶</strong>邻居（红色高亮，钉在最上）同时<strong>让 CONNS 只看
+这个对端</strong>；再按一次取消，<code>esc</code>/<code>f</code> 也能清。</li>
+</ul>
+<p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="../../assets/screenshots/wide-detail-panel-small.webp" alt="Wide 布局——详情面板、捕获的完整命令行、UDP 分解与主题菜单"><span class="img-wrapper"><img src="../../assets/screenshots/wide-detail-panel-small.webp" alt="Wide 布局——详情面板、捕获的完整命令行、UDP 分解与主题菜单"></span></label></p>
+<h2 id="搜索"><a class="header" href="#搜索">搜索</a></h2>
+<p><code>/</code> 按名字子串搜索进程与连接（<code>Tab</code> 换目标盒子，<code>enter</code> 应用，<code>esc</code> 清除）。
+过滤后的视图仍按你选的模式排序。</p>
+<h2 id="终止的保护栏"><a class="header" href="#终止的保护栏">终止的保护栏</a></h2>
+<p><code>k</code> 终止选中的进程（或关闭 socket）。终止<em>其他用户</em>的进程需要在配置里开
+<code>allow_global_kill = true</code>，默认拒绝。</p>
+<h2 id="监控日志"><a class="header" href="#监控日志">监控日志</a></h2>
+<p><code>L</code>（或启动时 <code>--log</code>）把每进程账本记到
+<code>~/.local/state/ltop/ltop-log-&lt;ts&gt;.jsonl</code>，间隔 <code>log_interval_ms</code>（默认
+60 秒），格式与 watch 同为 schema-v1 快照；保留期 <code>log_retention_days</code>
+（默认 7 天），启动时清旧。回放与导出: <code>--replay [--csv OUT]</code>。详见
+<a href="#数据面">数据面</a>。</p>
+<h2 id="完整键位表"><a class="header" href="#完整键位表">完整键位表</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>按键</th><th>作用</th></tr>
+</thead>
+<tbody>
+<tr><td><code>q</code> / <code>Ctrl-C</code></td><td>退出</td></tr>
+<tr><td><code>space</code></td><td>暂停/恢复采样（恢复时补齐）</td></tr>
+<tr><td><code>/</code></td><td>搜索（Tab 换盒子，enter 应用，esc 清除）</td></tr>
+<tr><td><code>m</code></td><td>菜单: 主题 / 设置 / 重置 / 图表 / 帮助 / 退出</td></tr>
+<tr><td><code>Esc</code></td><td>清除焦点与选中；关闭面板</td></tr>
+<tr><td><code>1</code>–<code>6</code></td><td>开关盒子: net、lan、disk i/o、disks、conns、procs</td></tr>
+<tr><td><code>Tab</code></td><td>布局 classic → wide → tall</td></tr>
+<tr><td><code>p</code> / <code>c</code> / <code>l</code></td><td>单焦点 procs / conns / lan</td></tr>
+<tr><td><code>r</code></td><td>procs 排序循环</td></tr>
+<tr><td><code>f</code> / <code>o</code></td><td>conns 过滤循环 / 排序循环</td></tr>
+<tr><td>组头上 <code>enter</code>、<code>←→</code></td><td>折叠 / 展开进程组</td></tr>
+<tr><td><code>d</code></td><td>展开/收起磁盘挂载树；方向键/跳转键随即指向 disks 列表</td></tr>
+<tr><td><code>e</code></td><td>lan 排序: ip → hostname → mac → iface</td></tr>
+<tr><td><code>n</code> / <code>i</code></td><td>net / disk 图表模式</td></tr>
+<tr><td><code>↑↓</code> <code>PgUp</code> <code>PgDn</code> / 滚轮</td><td>移动选中；PgUp/PgDn 按可视高度翻页；滚轮滚动光标下的列表；点击选中</td></tr>
+<tr><td>disks 滚动条</td><td>点轨道翻页、拖滑块滚动——无需聚焦</td></tr>
+<tr><td>LAN 行上 <code>enter</code></td><td>置顶邻居 + CONNS 过滤到该对端</td></tr>
+<tr><td>conns/procs 行上 <code>enter</code></td><td>详情面板（追踪 <code>t</code>/<code>space</code>，终止 <code>k</code>，重启 <code>s</code>，复制 <code>y</code>）</td></tr>
+<tr><td><code>z</code></td><td>焦点盒子全屏缩放</td></tr>
+<tr><td><code>Home</code>/<code>End</code>/<code>g</code>/<code>G</code></td><td>跳到首行/末行</td></tr>
+<tr><td><code>L</code></td><td>监控日志开关</td></tr>
+<tr><td><code>s</code></td><td>LAN 扫描开关（主屏；详情面板里 <code>s</code> 是重启）</td></tr>
+<tr><td><code>+</code>/<code>-</code></td><td>刷新间隔 ±250 ms</td></tr>
+</tbody>
+</table>
+</div>
+<p>常用设置（都在 <code>m</code> → settings，持久化到 <code>~/.config/ltop/config.conf</code>）:
+刷新 <code>tick_ms</code>（默认 2000）、墓碑 TTL、录制开关（与 <code>L</code> 键同路径）、日志
+间隔/保留、扫描间隔、默认排序/过滤、<code>theme</code>、<code>lang</code>、
+<code>proc_expand_default</code>（进程组默认展开）、<code>proc_exit_retention_min</code>、
+<code>allow_global_kill</code>（暴露 <code>k</code> 键，默认关）、<code>allow_global_log</code>（暴露 <code>L</code> 录制
+热键，默认关）。</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="主题"><a class="header" href="#主题">主题</a></h1>
+<p>ltop 读 <strong>btop 兼容的主题文件</strong>: 任何 btop 主题直接可用，自己写也行——哪怕
+只是两行，修掉终端上读不清的那几个颜色。</p>
+<p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="../../assets/screenshots/omarchy-theme-follow.gif" alt="Omarchy 主题跟随——桌面切主题，ltop 实时变色"><span class="img-wrapper"><img src="../../assets/screenshots/omarchy-theme-follow.gif" alt="Omarchy 主题跟随——桌面切主题，ltop 实时变色"></span></label></p>
+<h2 id="主题放哪"><a class="header" href="#主题放哪">主题放哪</a></h2>
+<ul>
+<li><strong>内嵌</strong>: 72 套主题——41 套来自 btop 官方主题集，31 套来自 Omarchy
+内置主题——主题菜单（<code>m</code> → theme）或命令行 <code>--theme &lt;name&gt;</code> 选择
+（见<a href="#致谢">致谢</a>）。</li>
+<li><strong>Omarchy</strong>: 若存在 <code>~/.local/state/omarchy/current/theme/btop.theme</code>，
+菜单会多出 <code>omarchy</code> 条目——选中即跟随桌面主题，桌面换主题时热重载。</li>
+<li><strong><code>--follow-theme</code>:</strong> 启动时读到的是<em>当时的</em>快照；加 <code>--follow-theme</code>
+则桌面主题变化时<strong>运行中的</strong> ltop 也跟着变色。默认关（它要轮询主题
+文件，想要上面 GIF 的效果再开）。</li>
+<li><strong>自定义</strong>: <code>.theme</code> 文件放进 <code>~/.config/ltop/themes/</code>，或直接加载:</li>
+</ul>
+<pre><code class="language-bash">ltop --theme ~/my-colors.theme
+</code></pre>
+<p><code>--theme</code> 加载的主题是钉死的——不跟随 omarchy。</p>
+<h2 id="文件格式"><a class="header" href="#文件格式">文件格式</a></h2>
+<p>每行一个键值对，<code>#</code> 开头是注释。颜色接受 <code>#RRGGBB</code>、缩写 <code>#RGB</code>、两位
+灰度缩写（<code>#80</code> = 中灰），<code>main_bg</code> 还接受空值，含义是“终端默认色“
+（透明背景，终端半透明用户需要）:</p>
+<pre><code>theme[main_fg] = "#c0caf5"
+theme[inactive_fg] = "#565f89"
+</code></pre>
+<h2 id="致谢"><a class="header" href="#致谢">致谢</a></h2>
+<p>内嵌主题库建立在以下项目的成果之上，在此致谢：</p>
+<ul>
+<li><strong>btop</strong>（<a href="https://github.com/aristocratos/btop">aristocratos/btop</a>，
+Aristocratos 作品）——ltop 的主题格式<em>就是</em> btop 格式，内嵌 41 套主题
+转换自 btop 官方主题集。感谢 Aristocratos 与该主题集的每一位作者。</li>
+<li><strong>Omarchy</strong>（<a href="https://github.com/dhh/omarchy">dhh/omarchy</a>，DHH 作品）
+——内嵌 31 套主题来自 Omarchy 内置主题集。感谢 DHH 与这些主题的
+创作者。</li>
+</ul>
+<p>为 btop 或 Omarchy 写的主题在这里继续可用——成果属于创作者，内嵌时
+保留出处。</p>
+<h2 id="变量参考"><a class="header" href="#变量参考">变量参考</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>键</th><th>控制什么</th></tr>
+</thead>
+<tbody>
+<tr><td><code>main_bg</code></td><td>弹窗/对话框背景；留空 = 终端默认</td></tr>
+<tr><td><code>main_fg</code></td><td><strong>正文</strong>——表格单元格、详情值、帮助描述</td></tr>
+<tr><td><code>inactive_fg</code></td><td><strong>弱化文本</strong>——标签、提示、次要信息、时间戳</td></tr>
+<tr><td><code>hi_fg</code></td><td>高亮: 盒子边框、键位、组标题、徽章</td></tr>
+<tr><td><code>title</code></td><td>弹窗/盒子标题</td></tr>
+<tr><td><code>graph_text</code></td><td>强调色: 进程名、UDP 徽章、着重</td></tr>
+<tr><td><code>net_box</code></td><td>NET 盒边框</td></tr>
+<tr><td><code>proc_box</code></td><td>LAN 盒边框（键名沿用 btop，保兼容）</td></tr>
+<tr><td><code>mem_box</code></td><td>DISK 盒边框（键名沿用 btop，保兼容）</td></tr>
+<tr><td><code>download_start/mid/end</code></td><td>下载渐变: 图表、rx 速率、ESTAB 徽章</td></tr>
+<tr><td><code>upload_start/mid/end</code></td><td>上传渐变: 图表、tx 速率</td></tr>
+<tr><td><code>used_start/mid/end</code></td><td>磁盘用量色</td></tr>
+<tr><td><code>temp_start/mid/end</code></td><td>告警渐变</td></tr>
+</tbody>
+</table>
+</div>
+<p>渐变必须三档齐全（start/mid/end）；缺任何一档整条渐变被忽略，用内建默认。</p>
+<h2 id="最小示例"><a class="header" href="#最小示例">最小示例</a></h2>
+<p>只覆盖读不清的颜色，其余回落到当前选中的内建主题:</p>
+<pre><code>theme[main_fg] = "#e0e0e0"
+theme[inactive_fg] = "#909090"
+</code></pre>
+<p>存为 <code>~/.config/ltop/themes/readable.theme</code>，主题菜单里选 <code>readable</code> 即可。</p>
+<h2 id="完整示例"><a class="header" href="#完整示例">完整示例</a></h2>
+<p>最省事的完整主题是拷一份内建 btop 主题来改:</p>
+<pre><code class="language-bash">cp /usr/share/btop/themes/dracula.theme ~/.config/ltop/themes/my.theme
+</code></pre>
+<p>完整文件长这样（Dracula 配色，供参考）:</p>
+<pre><code>theme[main_bg] = "#282a36"
+theme[main_fg] = "#f8f8f2"
+theme[title] = "#bd93f9"
+theme[hi_fg] = "#8be9fd"
+theme[inactive_fg] = "#6272a4"
+theme[graph_text] = "#ff79c6"
+theme[net_box] = "#bd93f9"
+theme[proc_box] = "#ff79c6"
+theme[mem_box] = "#8be9fd"
+theme[download_start] = "#8be9fd"
+theme[download_mid] = "#8be9fd"
+theme[download_end] = "#57c7ff"
+theme[upload_start] = "#ff79c6"
+theme[upload_mid] = "#ff79c6"
+theme[upload_end] = "#bd93f9"
+theme[used_start] = "#50fa7b"
+theme[used_mid] = "#f1fa8c"
+theme[used_end] = "#ff5555"
+theme[temp_start] = "#50fa7b"
+theme[temp_mid] = "#f1fa8c"
+theme[temp_end] = "#ff5555"
+</code></pre>
+<h2 id="已知限制"><a class="header" href="#已知限制">已知限制</a></h2>
+<p>LAN 盒的 MAC 列在 macOS 上无论主题如何都隐藏——系统对非 Apple 签名二进制
+做了脱敏。见<a href="#macos">兼容性</a>。</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="lan-发现"><a class="header" href="#lan-发现">LAN 发现</a></h1>
+<p>LAN 盒回答“我网上有谁“——不要 root、不用 nmap、不出 TUI。发现靠两个机制:</p>
+<ol>
+<li><strong>被动</strong> —— 每次刷新都读内核邻居表（ARP/NDP），机器说 过话的设备立刻
+出现，带着内核还记着的新鲜度。</li>
+<li><strong>主动 UDP knock 扫描</strong> —— 后台线程遍历本地子网（由本机接口地址+前缀
+推出），向候选地址发小 UDP 包。包本身多半无人应答，但这个尝试会让内核
+去做 ARP 解析，于是<em>内核</em>会把邻居报出来——ltop 自己不需要 raw socket，
+也不需要 root。扫描节奏是 <code>sweep_interval_s</code>（默认 60 秒），安静的
+网络可以关掉（<code>sweep = false</code>）。主屏按 <code>s</code> 也能随时开关。</li>
+</ol>
+<p>两路结果按（接口, IP）合并。主机名走尽力而为的三级解析——mDNS 反查 →
+NetBIOS node status → 反向 DNS；网关有标记；macOS 的邻居表脱敏绕过方式是
+经路由 socket 逐条探测内核缓存——那边哪些可见哪些不可见见
+<a href="#macos">兼容性 → macOS</a>。真实 MAC 来自 <code>ltop lan-setup</code>：一个
+每用户 launchd 代理，经 Apple 平台签名工具轮转 <code>arp</code>/<code>ifconfig</code> 快照
+（免 root、免 entitlement）——未启用时 MAC 显示 <code>—</code>。</p>
+<h2 id="每个邻居显示什么"><a class="header" href="#每个邻居显示什么">每个邻居显示什么</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>列</th><th>含义</th></tr>
+</thead>
+<tbody>
+<tr><td>IP / hostname</td><td>地址，能解析就带 mDNS 名</td></tr>
+<tr><td>MAC</td><td>硬件地址（macOS 未启用 <code>ltop lan-setup</code> 时显示 —）</td></tr>
+<tr><td>iface</td><td>从本机哪块网卡可达</td></tr>
+<tr><td>Σ conns</td><td>CONNS 里指向这个对端的活跃连接数</td></tr>
+<tr><td>rate</td><td>到这个对端的当前 rx+tx</td></tr>
+<tr><td>Σ bytes</td><td>ltop 启动以来到这个对端的累计字节</td></tr>
+</tbody>
+</table>
+</div>
+<p>流量列是重点: LAN 盒和 CONNS 共用连接账本，每个邻居自带属于它的那一份
+流量。</p>
+<h2 id="交互"><a class="header" href="#交互">交互</a></h2>
+<ul>
+<li><code>e</code> 循环 LAN 排序（ip → hostname → mac → iface）。</li>
+<li><code>↑↓</code> 选中；选中会<em>跟着邻居走</em>——重排、扫描后位置不丢（设备从 ARP 里短暂
+消失也不影响）。</li>
+<li><code>enter</code> <strong>置顶</strong>邻居——钉在最上、红色高亮——同时<strong>让 CONNS 只看这个
+对端</strong>。这是“这台设备到底在干什么“的快车道: 选中、回车、读逐连接分解。
+再按 <code>enter</code> 取消；<code>esc</code>/<code>f</code> 也能清。</li>
+<li><code>l</code> 单焦点 LAN 盒；<code>z</code> 全屏（子网设备多的时候好用）。</li>
+</ul>
+<h2 id="刻意不做的"><a class="header" href="#刻意不做的">刻意不做的</a></h2>
+<ul>
+<li>子网从本机接口推出，不扫描已连接前缀之外的地址。</li>
+<li>完全屏蔽 ARP 的设备（个别开了防火墙的主机）只有在内核因其他流量留下
+缓存时才出现。</li>
+<li>扫描只是“发往空处的 UDP“: 不做 TCP connect、不探端口、不发 raw 包——
+在操作系统眼里就是几次普通的（失败的）投递尝试。</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="ebpf-计费"><a class="header" href="#ebpf-计费">eBPF 计费</a></h1>
+<h2 id="为什么需要它"><a class="header" href="#为什么需要它">为什么需要它</a></h2>
+<p>常规路子有两个绕不过去的坑:</p>
+<ul>
+<li><strong>netlink/<code>/proc</code> 不给逐 socket 的 UDP 字节计数。</strong> TCP 还有字节队列
+可看，UDP 什么都没有。</li>
+<li><strong>逐 socket 抽样会漏短命 TCP 连接。</strong> 一个采样周期内完成全程的连接完全
+不可见——而这恰恰常是你想抓的流量（DNS、小请求、话痨型辅助进程）。</li>
+</ul>
+<p><code>ltop-bpf</code> 把计数挪到字节发生的地方: 在 send/recv 系统调用（v4 <strong>和</strong> v6）
+上挂 kprobe，按 <strong>pid</strong> 和 <strong>socket inode</strong> 在内核 map 里累计载荷字节。
+两本账喂给同一个 UI，于是 PROCS 拿到不会漏短命连接的每进程总量，CONNS
+也能像 TCP 一样把字节记到单条 UDP 连接上。</p>
+<h2 id="架构"><a class="header" href="#架构">架构</a></h2>
+<pre><code>ltop-bpf（root，systemd）                ltop（免特权 TUI）
+  kprobe 挂 send/recv v4+v6               每 tick 读 /run/ltop/udp.json
+  pid 账本 ─┐                             按实例 ID 重基线后做差
+            ├─ /run/ltop/udp.json  ──►    （饱和差分）
+  inode 账本┘   每秒原子重写                合并进自己的账本
+</code></pre>
+<p>特权采集器和免特权 UI 之间只有一份每秒重写的全局可读快照文件。TUI 永远
+不需要特权，助手也不需要知道终端的存在。</p>
+<h2 id="部署"><a class="header" href="#部署">部署</a></h2>
+<pre><code class="language-bash">sudo cp ltop-bpf /usr/local/bin/
+sudo cp ltop-bpf.service /etc/systemd/system/
+sudo systemctl enable --now ltop-bpf
+</code></pre>
+<ul>
+<li><strong>冒烟测试:</strong> <code>sudo ltop-bpf --once</code> 采一次打印即退；
+<code>sudo bash scripts/udp-smoke.sh</code> 造可计费的 UDP 流量并端到端验证快照；
+<code>python3 scripts/snap-diff.py</code> 打印每 pid 的原始差分。</li>
+<li><strong>升级:</strong> 助手要随 TUI 一起重新部署（为什么见
+<a href="#升级后每进程计费归零">FAQ</a>）。</li>
+<li><strong>源码构建</strong>需要带 <code>bpf</code> target 的 clang；预编译 tarball 内含编译好的
+对象。</li>
+</ul>
+<h2 id="数据干净靠什么"><a class="header" href="#数据干净靠什么">数据干净靠什么</a></h2>
+<p>几道护栏保证长时间运行的计数不出脏数据:</p>
+<ol>
+<li><strong>LRU map 自清理。</strong> pid 和 socket map 都是 <code>BPF_MAP_TYPE_LRU_HASH</code>
+（各 16384 项）: 空闲进程和关闭的 socket 自己被驱逐，几千进程的机器
+也耗不尽 map。</li>
+<li><strong>实例 ID + 饱和差分。</strong> 每个助手实例（<code>flock</code> 单实例锁守护）给快照
+打唯一 ID；TUI 发现 ID 变了就重新基线，差分用饱和运算——pid/socket
+复用、守护进程带着旧文件重启，都变不出负数或垃圾值。</li>
+<li><strong>CO-RE，不做每内核构建。</strong> 唯一和结构体耦合的部分（从 <code>sk</code> 走到
+socket inode）用 CO-RE 重定位，加载时对着内核 BTF 解析字段。没有 BTF
+的内核也能跑（Ubuntu 22.04 基线已验证）——字段偏移加载时解。</li>
+</ol>
+<p>探针在退出时自动摘除——采集器崩了也不会留下 kprobe；寄存器读取有 16 MiB
+值域闸门，野 <code>len</code> 污染不了账本。</p>
+<h2 id="数字怎么读"><a class="header" href="#数字怎么读">数字怎么读</a></h2>
+<p>eBPF 账本计的是<strong>载荷字节</strong>（系统调用处）。NET 盒计的是<strong>接口字节</strong>
+（驱动层，每个包都算）。两者范围<em>本来就不同</em>——头、重传、没经过你进程
+系统调用的 LAN 杂音只存在于接口数字里——所以 PROCS 总量比 NET 盒低
+10–40% 是正常形状，不是 bug。精确拆解见
+<a href="#procs-总量比-net-盒低">FAQ</a>。</p>
+<h2 id="没有助手时"><a class="header" href="#没有助手时">没有助手时</a></h2>
+<p><code>ltop</code> 默认免特权、从不要求助手: 没有它，UDP 每进程列干脆不出现（TCP 靠
+socket 抽样照常），<code>--json</code> 里 <code>meta.udp_helper</code> 读 <code>false</code>。macOS 没有
+eBPF 也没有助手——Apple 原生计费方式和差异说明见
+<a href="#macos">兼容性 → macOS</a>。</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="数据面"><a class="header" href="#数据面">数据面</a></h1>
+<p>ltop 的每个显示面背后都是同一份序列化快照——<strong>schema v1</strong>，随二进制一起
+版本化，脚本和 agent 可以放心依赖。同样的结构体喂给这些入口:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>入口</th><th>命令</th><th>形态</th></tr>
+</thead>
+<tbody>
+<tr><td>一次性快照</td><td><code>ltop --json</code></td><td>单个 JSON 对象（不过滤约 8k token）</td></tr>
+<tr><td>字段参考</td><td><code>ltop --schema</code></td><td>随版本更新的机器可读字段表</td></tr>
+<tr><td>监控日志</td><td><code>L</code> / <code>--log</code></td><td>JSONL，每 <code>log_interval_ms</code>（默认 60 秒）一行</td></tr>
+<tr><td>无头采集</td><td><code>ltop watch</code></td><td>JSONL，每 <code>--interval</code>（默认 5 秒）一行</td></tr>
+<tr><td>窗口摘要</td><td><code>ltop report</code></td><td>人读表格；<code>--json</code> 给 ~2 KB JSON</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-bash">ltop --json      # 结构化快照（约 1.2 秒: 连采两轮，速率字段才有值）
+ltop --schema    # 权威字段表——随二进制版本化，永不漂移
+</code></pre>
+<p>快照覆盖五个域: <code>meta</code>（版本、os、arch、<code>udp_helper</code> 标志）、<code>net</code>
+（每接口速率与累计计数）、<code>procs</code>（每进程网络+磁盘计费，带 UDP 分解）、
+<code>conns</code>（逐连接 socket）、<code>disk</code>（容量/吞吐）、<code>lan</code>（邻居）。值得知道的
+语义直接标在输出里——比如 macOS 的 MAC 脱敏（启用 <code>ltop lan-setup</code> 后即为真值）。</p>
+<h2 id="监控日志tui"><a class="header" href="#监控日志tui">监控日志（TUI）</a></h2>
+<p>TUI 里按 <code>L</code>，或启动带 <code>--log</code>，快照记到
+<code>~/.local/state/ltop/ltop-log-&lt;ts&gt;.jsonl</code>:</p>
+<ul>
+<li><code>log_interval_ms</code>（默认 60 000）定节奏; <code>log_tracked_only = true</code> 只记
+被追踪的进程。</li>
+<li><code>log_retention_days</code>（默认 7）在启动和开关时清理过期文件。</li>
+</ul>
+<h2 id="无头-watch"><a class="header" href="#无头-watch">无头 watch</a></h2>
+<pre><code class="language-bash">ltop watch --duration 10m --proc chrome   # 完整语法见 `ltop watch --help`
+</code></pre>
+<ul>
+<li>停止条件: <code>--duration</code>（<code>10s</code>/<code>5m</code>/<code>2h</code>）、<code>--stop</code> 哨兵文件（出现即消费
+并停止）、SIGINT——后者是优雅停: 最后一份快照落盘。</li>
+<li>输出默认 <code>~/.local/state/ltop/ltop-session-&lt;ts&gt;.jsonl</code>，与 TUI 监控日志
+分开、不受它的保留期清理；自己的 <code>--retention</code>（默认 7 天，<code>0</code> = 永久）
+在启动时清理。</li>
+<li>逐行追加，崩溃安全；免 root。</li>
+<li><code>--proc &lt;name&gt;</code> 聚焦模式只记匹配的进程及其连接——<strong>按名追踪</strong>，重启换了
+pid 时间线也不断。</li>
+<li>写盘量随间隔线性（1 秒 ≈ 8 KB/行 ≈ 28 MB/h；默认 5 秒约 5–6 MB/h）。
+清理靠 <code>--retention</code>。</li>
+</ul>
+<h2 id="report"><a class="header" href="#report">report</a></h2>
+<pre><code class="language-bash">ltop report &lt;file.jsonl&gt; [--json]
+</code></pre>
+<p>读 watch 产物<strong>或</strong> TUI 监控日志（同一 schema），给出窗口摘要: 每进程窗口
+总和（跨 pid 重启的窗口差分）、峰值速率、活跃时长、最后存活/退出状态；
+每连接的总和/峰值/生命周期（按 inode 键，消失的连接保留最后已知总量）；
+网卡范围的全局总量与最忙时段。</p>
+<p>过滤: <code>--top N</code>（默认 5，按流量）、<code>--proc</code>（子串，含 <code>*</code> 时通配）、
+<code>--fields net,udp,disk,conns</code>、<code>--json</code> 机器可读。建在其上的 AI 工作流见
+<a href="#ai-代理">AI 代理</a>。</p>
+<h2 id="遗留与调试"><a class="header" href="#遗留与调试">遗留与调试</a></h2>
+<ul>
+<li><code>ltop --dump</code> —— 人读的单轮采样打到 stdout（调试用；要解析请用
+<code>--json</code>，dump 会截断对不齐）。</li>
+<li><code>ltop --replay [--csv OUT] [--top N]</code> —— 从旧版 <code>session-*</code> 日志（v1，
+仅 procs）重建会话增量并导出 CSV。新格式文件归 <code>report</code>，旧文件会被
+拒收并指路到这里。</li>
+</ul>
+<h2 id="配置"><a class="header" href="#配置">配置</a></h2>
+<p><code>~/.config/ltop/config.conf</code> 是纯 <code>key = value</code>，应用内设置面板
+（<code>m</code> → settings）写入，手改安全（重启生效）:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>键</th><th>默认</th><th>含义</th></tr>
+</thead>
+<tbody>
+<tr><td><code>lang</code></td><td><code>en</code></td><td>界面/消息语言；<code>zh</code> 切中文（JSON 键恒英文）</td></tr>
+<tr><td><code>layout</code></td><td>classic</td><td>启动布局（classic/wide/tall）</td></tr>
+<tr><td><code>tick_ms</code></td><td>1000</td><td>刷新间隔</td></tr>
+<tr><td><code>graph_net</code> / <code>graph_disk</code></td><td>hybrid / centered</td><td>默认图表样式</td></tr>
+<tr><td><code>boxes</code></td><td>全开</td><td>可见盒子</td></tr>
+<tr><td><code>log_interval_ms</code></td><td>60000</td><td>监控日志节奏</td></tr>
+<tr><td><code>log_retention_days</code></td><td>7</td><td>监控日志保留天数</td></tr>
+<tr><td><code>log_tracked_only</code></td><td>false</td><td>只记被追踪的进程</td></tr>
+<tr><td><code>sweep</code> / <code>sweep_interval_s</code></td><td>true / 60</td><td>LAN UDP knock 扫描开关与节奏</td></tr>
+<tr><td><code>tombstone_ttl_ms</code></td><td>5000</td><td>关闭连接在 CONNS 留多久</td></tr>
+<tr><td><code>theme</code></td><td>omarchy</td><td>主题名（见<a href="#主题">主题</a>）</td></tr>
+<tr><td><code>theme_live_follow</code></td><td>false</td><td>桌面主题变化时运行中的 ltop 跟着变色（同 <code>--follow-theme</code>）</td></tr>
+<tr><td><code>proc_expand_default</code></td><td>false</td><td>CONNS 进程组默认展开</td></tr>
+<tr><td><code>proc_exit_retention_min</code></td><td>30</td><td>退出进程账本 N 分钟后清除（0 = 永久）</td></tr>
+<tr><td><code>conn_filter</code> / <code>conn_sort</code> / <code>proc_sort</code> / <code>lan_sort</code></td><td>all / proc / net-sum / ip</td><td>默认列表模式</td></tr>
+<tr><td><code>allow_global_kill</code></td><td>false</td><td>允许终止其他用户的进程</td></tr>
+<tr><td><code>net_graph_coupled</code></td><td>false</td><td>NET 图表比例耦合:上下行悬殊时,小方向图按真实比例占图表高度,不再满幅放大</td></tr>
+<tr><td><code>net_graph_scale_ratio</code></td><td>5</td><td>上面的触发阈值,单位倍(2–20);低于阈值保持普通自动缩放</td></tr>
+</tbody>
+</table>
+</div>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="ai-代理"><a class="header" href="#ai-代理">AI 代理</a></h1>
+<p>ltop 把“这台机器的网络/磁盘/LAN 状态“当数据处理，而不是让你去刮屏幕:
+一份 schema 稳定的 JSON 快照喂 TUI、CLI、日志和无头工具。本页是给 agent
+用的工作参考; 同样内容在仓库里打包成了现成的 agent skill:
+<a href="https://github.com/uMaj35ty/ltop/blob/master/docs/skills/ltop-observe/SKILL.md"><code>docs/skills/ltop-observe/SKILL.md</code></a>
+（含诊断配方）。</p>
+<h2 id="一次性问题---json"><a class="header" href="#一次性问题---json">一次性问题: <code>--json</code></a></h2>
+<pre><code class="language-bash">ltop --json | jq '&lt;查询&gt;'     # 快照; 约 1.2 秒（连采两轮才有速率）
+ltop --schema                 # 版本化字段参考，永不漂移
+</code></pre>
+<p>单帧过滤后的快照约 1.7k token——传统命令组合（<code>ss</code>/<code>lsof</code>/<code>df</code>/<code>arp</code> 输出
+再解析）约 2.2 万，不过滤约 8k。一次性问题这就是对的工具。</p>
+<p>CLI 面严格: 未知子命令和手滑（<code>ltop repor</code>）一律 exit 1 并给明确报错——
+没有任何东西会“意外落进交互 TUI“; JSON 键不随 <code>lang</code> 变，恒英文。</p>
+<h2 id="时间窗-watch--report"><a class="header" href="#时间窗-watch--report">时间窗: <code>watch</code> + <code>report</code></a></h2>
+<p>“盯 10 分钟再汇报“这类任务<strong>不要轮询</strong> <code>--json</code>（5 秒节奏 10 分钟约 4 万
+token）。录一次，摘要一次:</p>
+<pre><code class="language-bash">ltop watch --duration 10m --proc chrome    # 无头、崩溃安全、免 root
+ltop report &lt;watch 打印的路径&gt; --json    # report 只收单个文件
+</code></pre>
+<p><code>report --json</code> 返回约 2 KB 的精确数字——窗口总和（末快照累计 − 首快照
+累计，跨 pid 重启分段）、峰值速率、活跃时长——不是抽样猜测。实机实测:
+同样信息<strong>省 ~97% token</strong>。</p>
+<pre><code class="language-json">{"schema":1,"file":"…","host":"…",
+ "window":{"start":…,"end":…,"snapshots":N,"interval_s":S},
+ "totals":{"scope":"nic","nic_rx":…,"nic_tx":…,"peak_ts":…,"peak_rx_bps":…,"peak_tx_bps":…},
+ "procs":[{"name":"chrome","net_recv":…,"net_sent":…,"peak_rx_bps":…,"peak_tx_bps":…,
+           "udp_recv":…,"udp_sent":…,"peak_udp_bps":…,"disk_read":…,"disk_written":…,
+           "peak_disk_bps":…,"active_s":…,"alive":true}],
+ "conns":[{"remote":"1.2.3.4:443","proto":"tcp","recv":…,"sent":…,"peak_rx_bps":…,
+           "peak_tx_bps":…,"duration_s":…,"state":"ESTAB","process":"chrome"}]}
+</code></pre>
+<p><code>--top N</code>（默认 5）、<code>--proc</code>（子串或含 <code>*</code> 的通配）、<code>--fields net,udp,disk,conns</code> 可以再裁。</p>
+<h2 id="和-jq-的分工"><a class="header" href="#和-jq-的分工">和 <code>jq</code> 的分工</a></h2>
+<p>watch 产物和 TUI 监控日志就是普通 JSONL——<code>report</code> 不聚合的任何切片都是
+一条 <code>jq</code> 的事（文件同 schema，<code>report</code> 两者都读）。窗口数学给 <code>report</code>，
+任意查询给 <code>jq</code>，当前瞬间给 <code>--json</code>。</p>
+<h2 id="读快照最容易读错的地方"><a class="header" href="#读快照最容易读错的地方">读快照——最容易读错的地方</a></h2>
+<ul>
+<li><code>meta.udp_helper: true</code> 表示 Linux eBPF 助手在跑、UDP 每进程计费完整;
+<code>false</code>（或 macOS）时 UDP 数字不完整。</li>
+<li><code>conns[].process</code> 为 <code>null</code> 是<strong>其他用户</strong>的 socket（Linux）。别断言
+这些连接“与任何进程无关“——只是归不到你的 uid 头上。</li>
+<li><code>procs[].disk_*</code> 只覆盖当前用户的进程。</li>
+<li><code>net.interfaces[].session_rx/tx</code> = ltop 启动以来（可重置）;
+<code>alive_rx/tx</code> = 接口启动以来。</li>
+<li>进程总量是<strong>载荷</strong>字节，接口总量是<strong>网卡</strong>字节——差 10–40% 是设计使然
+（<a href="#数字怎么读">为什么</a>）。</li>
+</ul>
+<h2 id="配方来自打包的-skill"><a class="header" href="#配方来自打包的-skill">配方（来自打包的 skill）</a></h2>
+<ul>
+<li><strong>网速慢？</strong> <code>net.interfaces[]</code> 按 <code>rx_bps+tx_bps</code> 排序; 查 <code>operstate</code>
+和 <code>speed_mbps</code>; 再看忙接口上 <code>bps_recv+bps_sent</code> 最高的 <code>conns[]</code>——
+<code>conns[].process</code> 就是吃流量的（限你自己的用户）。</li>
+<li><strong>磁盘忙？</strong> <code>disk.devices[]</code> 看吞吐对容量，再按磁盘速率排 <code>procs[]</code>
+找写盘的。</li>
+<li><strong>LAN 清点？</strong> <code>lan.neighbours[]</code>——网关已标记、mDNS 主机名、<code>tracked</code>
+是置顶设备。</li>
+<li><strong>“盯 chrome 10 分钟汇报流量”</strong>——上面那对命令，两条都带
+<code>--proc chrome</code>。</li>
+</ul>
+<h2 id="展望"><a class="header" href="#展望">展望</a></h2>
+<p><code>ltop mcp</code> 子命令（手写 stdio JSON-RPC，包 <code>--json</code> 和 watch+report，后续
+加多机 fleet 聚合）在 0.3 路线图上; 上面的 JSON 接口就是它的底座，schema
+v1 今天已稳定。</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="兼容性"><a class="header" href="#兼容性">兼容性</a></h1>
+<h2 id="要求"><a class="header" href="#要求">要求</a></h2>
+<p>源码构建要 Rust stable; 平台为 <strong>x86_64 / aarch64</strong> 的 Linux 或 macOS。
+预编译 Linux 二进制基线 <strong>glibc 2.35</strong>（Ubuntu 22.04 LTS）。eBPF 计费仅
+Linux，<em>构建期</em>需要带 <code>bpf</code> target 的 clang; <em>运行期</em>没有任何特殊要求——
+不要 BTF、不要 nightly、不要内核头。</p>
+<h2 id="已测环境"><a class="header" href="#已测环境">已测环境</a></h2>
+<p>每个 release 的 tarball 都在 QEMU/KVM 里逐发行版验证: 开箱二进制、eBPF
+探针挂载（含 kprobe）、systemd 单元、无助手时的静默降级。日常开发环境是
+Omarchy（Arch），它同时充当参考桌面。</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>环境</th><th>内核</th><th>eBPF 计费</th><th>备注</th></tr>
+</thead>
+<tbody>
+<tr><td>Arch Linux (rolling)</td><td>7.2.7</td><td>✓ 完整</td><td>同时是开发机（Omarchy 桌面）</td></tr>
+<tr><td>Ubuntu 24.04 LTS</td><td>6.8</td><td>✓ 完整</td><td>glibc 2.39</td></tr>
+<tr><td>Ubuntu 22.04 LTS</td><td>5.15</td><td>✓ 完整</td><td><strong>无 BTF 可跑</strong>; glibc 2.35 基线</td></tr>
+<tr><td>Ubuntu 24.04 LTS (aarch64)</td><td>6.8</td><td>✓ 完整</td><td>QEMU aarch64; 树莓派级硬件预期一致</td></tr>
+<tr><td>Debian 13</td><td>6.12</td><td>✓ 完整</td><td>glibc 2.41</td></tr>
+<tr><td>Fedora 44 (Workstation live)</td><td>6.19</td><td>✓ 完整</td><td>SELinux enforcing: <strong>零拒绝</strong></td></tr>
+<tr><td>macOS 27（Apple Silicon，MacBook Air）</td><td>darwin 27</td><td>n/a（<code>nettop</code> 路径）</td><td>实机验证; 见 <a href="#macos">macOS</a></td></tr>
+</tbody>
+</table>
+</div>
+<p>裁过 kprobes/BTF 的特种内核（如 Ubuntu 的 <code>-kvm</code> 云内核）是唯一已知的坑:
+换 <code>generic</code> 内核。那是内核 flavor 的限制，不是 ltop 的。</p>
+<h2 id="selinux"><a class="header" href="#selinux">SELinux</a></h2>
+<p>Fedora（enforcing）下两个二进制加 systemd 单元零拒绝——助手走标准 bpf
+syscall 路径挂 kprobe，只往 <code>/run/ltop/</code> 写一份全局可读快照。</p>
+<h2 id="macos"><a class="header" href="#macos">macOS</a></h2>
+<p>macOS 没有 eBPF; 同样六个盒子读 Apple 原生源:</p>
+<ul>
+<li><strong>PROCS 和 CONNS</strong> 轮询 <code>nettop</code>（每进程行与每 socket 流，TCP+UDP 一次
+spawn 全拿）; CONNS 归属经 <code>libproc</code> 扫调用者自己的 socket——其他用户的
+连接显示 <code>n/a</code>。</li>
+<li><strong>DISK</strong> 读 IOKit <code>IOMedia</code> 统计加每进程 rusage。</li>
+<li><strong>LAN</strong> 解析 <code>arp -an</code> 和默认路由——并对平台的邻居表脱敏做了绕行（见下）。</li>
+<li>macOS 构建不含 <code>ltop-bpf</code>。</li>
+</ul>
+<p>与 Linux 路径的已知差异:</p>
+<ul>
+<li>socket 计数是<strong>活 socket 上的累计值</strong>，靠抽样: 一个采样周期内完成的
+传输不计入。（eBPF 路径在系统调用处计数，不漏。）</li>
+<li><strong>系统对非 Apple 签名二进制隐藏部分本地网络</strong>——与“本地网络“隐私开关
+无关: 邻居表枚举为空，单条路由查询返回的 MAC 被脱敏成接口合成地址，
+<code>getifaddrs</code> 字节计数冻结（全部与 Apple 签名工具同秒交叉验证过）。
+macOS 27 更进一步: 从应用里 shell 出的 Apple 签名 <code>arp</code> 也返回空，
+<code>getifaddrs</code> 把所有网卡 MAC 报成 <code>02:00:00:00:00:00</code>（读取权改由未公开
+的 <code>com.apple.developer.networking.topology-observation</code> entitlement 按
+「责任进程归因 × 平台签名」双维度门控）。ltop 的绕法: NET 盒改用
+<code>netstat -ib</code> 计数，LAN 盒经路由 socket 逐条探测内核缓存重建邻居列表，
+<code>ltop lan-setup</code> 另装一个每用户 launchd 代理，经 Apple 平台签名工具
+轮转 <code>arp</code>/<code>ifconfig</code> 快照——LAN/NET 盒显示真实 MAC，免 root、免
+entitlement。未启用时 MAC 显示 <code>—</code>。</li>
+<li>裸终端的帧buffer 字体可能缺盲文字形; 走 ssh 或用正经终端模拟器则齐全。</li>
+</ul>
+<h2 id="分发渠道回顾"><a class="header" href="#分发渠道回顾">分发渠道回顾</a></h2>
+<p>细节见<a href="#安装">安装</a>: Homebrew（macOS 与 Linux）、crates.io
+（源码）、GitHub Releases tarball（x86_64/aarch64）、AUR <code>ltop-bin</code> 待
+注册开放。</p>
+<h2 id="已知限制-1"><a class="header" href="#已知限制-1">已知限制</a></h2>
+<ul>
+<li>其他用户的连接只能归到 uid 层（Linux 的 <code>/proc/&lt;pid&gt;/fd</code> 不可读;
+macOS 经 <code>libproc</code> 显示 <code>n/a</code>）。</li>
+<li>WiFi 网卡内核不给链路 <code>speed</code>，字段留空。</li>
+<li>CONNS 的 TCP 总量含整条连接生命周期（内核语义）——见
+<a href="#conns-总量包含-ltop-启动之前的流量">FAQ</a>。</li>
+<li><code>ltop-bpf</code> 重启后 eBPF 计数从零开始; UI 经快照实例 ID 自动重新基线。</li>
+<li>配置文件: 未知键与注释行在保存时保留（0.2.10+），但<strong>已知键</strong>携带本版本
+不认识的值时（如更新版本新增的排序名），会回落默认并在下次保存时被重写。</li>
+<li>macOS 只计活 socket（nettop 语义）: 一个采样周期内完成的传输不计。</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="与其他工具对比"><a class="header" href="#与其他工具对比">与其他工具对比</a></h1>
+<p>ltop 不想取代 btop 或 nethogs。它补的是它们空着的那一块: 这台机器、这个
+局域网上谁在和谁通信——按进程、按连接，且带机器可读的数据面。</p>
+<h2 id="btop--建议两个一起用"><a class="header" href="#btop--建议两个一起用">btop —— 建议两个一起用</a></h2>
+<p>系统总览归 btop: CPU、内存、传感器、全部进程。ltop 借了它的视觉语言
+（盲文图表、盒子网格、连主题格式都兼容），但只盯网络、磁盘 I/O 和 LAN——
+而且盯得更深: 跨重启存活的每进程会话总量、TCP 和 UDP 的逐连接字节、带
+流量的 LAN 邻居、可事后分析的无头采集。</p>
+<p>作者自己每天 btop 和 ltop 并排开——btop 看系统，ltop 看流量——也推荐
+这么用。你现成的 btop 主题在 ltop 里直接可用。</p>
+<h2 id="nethogs--每进程但只有当下"><a class="header" href="#nethogs--每进程但只有当下">nethogs —— 每进程，但只有当下</a></h2>
+<p>nethogs 打一份每进程 bytes-per-second 列表（大部分场景要 root），两次
+刷新之间什么都记不住。ltop 记会话账本: 退出的进程带着总量留在屏幕上，
+TCP/UDP 经 eBPF 精确归属，还有逐连接行、磁盘 I/O 和 LAN 维度。如果你只要
+一份实时列表而且有 root，nethogs 更小; 其余都是 ltop 的地盘。</p>
+<h2 id="iftop--每地址对单接口"><a class="header" href="#iftop--每地址对单接口">iftop —— 每地址对，单接口</a></h2>
+<p>iftop 显示一块接口上地址对之间的带宽。ltop 的 CONNS 盒覆盖同样的视图，
+外加每连接总量与速率、属主进程，以及“LAN 邻居 ↔ 连接“的联动。iftop 剩下
+的优势: 预装的地方更多。</p>
+<h2 id="shell-管道ss--lsof--arp--df"><a class="header" href="#shell-管道ss--lsof--arp--df">shell 管道（ss / lsof / arp / df）</a></h2>
+<p>对脚本和 agent 来说这才是要紧的对比: 五种输出格式要解析、一半答案要
+root、逐 socket 的 UDP 字节哪里都没有、上小时发生了什么完全无记忆。
+<code>ltop --json</code> 一份 schema 稳定的快照答完（过滤后约 1.7k token），
+<code>watch</code> + <code>report</code> 把“刚才发生了什么“变成两条命令加精确数字——见
+<a href="#ai-代理">AI 代理</a>。</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="常见问题"><a class="header" href="#常见问题">常见问题</a></h1>
+<h2 id="rx-和-tx-两张图形状一样"><a class="header" href="#rx-和-tx-两张图形状一样">rx 和 tx 两张图形状一样</a></h2>
+<p>不是 bug——两个效应叠加。每张图按各自窗口内的峰值归一化（btop 同款，
+为了小波动也可读），而下载时上行几乎全是 TCP ACK，其速率与下行包速率
+一一对应。你会看到 tx/rx ≈ 1/30——正是 ACK 的理论占比（约每 2 个数据段
+1 个 ACK，2900 字节数据对 66 字节确认）；图表把这条微小的波形放大到
+满幅，两条曲线自然长得像。两个方向差距悬殊时读头部数字、在
+<code>m</code> → graphs 里换 Block 图表模式，或开启比例耦合让小方向按真实占比占
+图表高度：<code>m</code> → graphs → <code>c</code>（要持久化设 <code>net_graph_coupled = true</code>；
+触发倍数 <code>net_graph_scale_ratio</code>，默认 5 倍）。</p>
+<h2 id="procs-总量比-net-盒低"><a class="header" href="#procs-总量比-net-盒低">PROCS 总量比 NET 盒低</a></h2>
+<p>所有平台都如此，是设计使然。NET 盒计<strong>接口字节</strong>（驱动层: 每个包都算，
+含头、重传和背景杂音）; PROCS 计归到进程头上的<strong>载荷字节</strong>（Linux 在系统
+调用处 eBPF 计，macOS 靠活 socket 计），部分平台还只算你自己的进程。差值
+就是“是接口流量、但不是你进程载荷“的那部分。精确拆解见
+<a href="#数字怎么读">eBPF 计费 → 数字怎么读</a>。</p>
+<h2 id="conns-总量包含-ltop-启动之前的流量"><a class="header" href="#conns-总量包含-ltop-启动之前的流量">CONNS 总量包含 ltop 启动之前的流量</a></h2>
+<p>也是设计使然，仅 TCP: 连接的 Σ 来自内核逐 socket 计数器，覆盖连接的完整
+生命周期——包括 ltop 启动之前。UDP Σ 由 ltop（助手在线时）从会话开始
+累计。这处差异（加上包头）也是 CONNS 和 PROCS 总量互相对不上的原因之一;
+经代理的流量记在代理进程头上。</p>
+<h2 id="升级后每进程计费归零"><a class="header" href="#升级后每进程计费归零">升级后每进程计费归零</a></h2>
+<p>陈旧的 <code>ltop-bpf</code> 还在往旧路径写快照，而新 TUI diff 的是另一个文件——
+症状是每进程数字静默读零。修法: 助手永远随 TUI 一起部署:</p>
+<pre><code class="language-bash">sudo cp ltop-bpf /usr/local/bin/          # 与 TUI 同一 release
+sudo systemctl restart ltop-bpf
+</code></pre>
+<h2 id="udp-列缺失不完整"><a class="header" href="#udp-列缺失不完整">UDP 列缺失/不完整</a></h2>
+<p>Linux 上这意味着 eBPF 助手没在跑——查 <code>ltop --json</code> 的 <code>meta.udp_helper</code>，
+然后<a href="#部署">部署助手</a>（TUI 本身免 root; 没有助手 TCP 列靠 socket
+抽样照常）。macOS 的 UDP 每进程数字来自活 socket 抽样，一个采样周期内
+完成的传输不计——已记录的平台差异，不是 bug。</p>
+<h2 id="connsprocess-有些是-null"><a class="header" href="#connsprocess-有些是-null"><code>conns[].process</code> 有些是 null</a></h2>
+<p>那些 socket 属于<strong>其他用户</strong>（Linux）: 归属扫描只扫你自己 uid 的 socket。
+“null“是“归不到你头上”，不是“没有进程在用“。</p>
+<h2 id="conns-里有个叫-na-的组旧版本显示-uid4294967295"><a class="header" href="#conns-里有个叫-na-的组旧版本显示-uid4294967295">CONNS 里有个叫 “n/a” 的组（旧版本显示 uid:4294967295）</a></h2>
+<p>macOS 上的对应情形: 非特权的 ltop 只能归属<strong>你自己用户</strong>的 socket
+（libproc，与 Linux 读自己的 /proc/<pid>/fd 同语义）。其他用户、系统守护
+进程和内核的连接看得到流量，但归不到进程，于是聚在 <code>n/a</code> 组里——0.2.12
+起如此; 旧版本把哨兵值原样打成 <code>uid:4294967295</code>，是同一个桶。这是权限
+边界，不是数据缺失。想看归属，用 <code>sudo ltop</code> 跑一次即可（root 能枚举
+全部进程，组随之清空）; 是否以 root 跑监控请自行权衡。</pid></p>
+<h2 id="--json-要等约-12-秒"><a class="header" href="#--json-要等约-12-秒"><code>--json</code> 要等约 1.2 秒</a></h2>
+<p>背后连采两轮，每个速率字段才有真实差分可填。脚本上，这点延迟换来的是
+速率而不只是计数; <code>--dump</code> 没这个等待但会截断值——解析请认准 <code>--json</code>。</p>
+<h2 id="watch-把磁盘写满了"><a class="header" href="#watch-把磁盘写满了"><code>watch</code> 把磁盘写满了</a></h2>
+<p>写盘量随 <code>--interval</code> 线性: 1 秒 ≈ 8 KB/行 ≈ 28 MB/h; 默认 5 秒约
+5–6 MB/h。采集文件默认 <code>--retention 7</code> 天（下次 watch 启动时清理;
+<code>0</code> 永久保留）。长期记录是监控日志的活（<code>L</code> / <code>--log</code>）——默认 60 秒
+粒度、7 天保留。</p>
+<h2 id="loli-命令没了"><a class="header" href="#loli-命令没了"><code>loli</code> 命令没了</a></h2>
+<p>0.2.4 退役——<em>localist top</em> 时代的历史遗留，tarball/brew/AUR 都不再附带。
+想要就自己软链一个（帮助文本跟着调用名走）:</p>
+<pre><code class="language-bash">ln -s "$(command -v ltop)" ~/.local/bin/loli
+</code></pre>
+<h2 id="aur-包呢"><a class="header" href="#aur-包呢">AUR 包呢？</a></h2>
+<p><code>ltop-bin</code> 打包已就绪，等 AUR 重新开放账号注册。在那之前用 Homebrew、
+crates.io 或 GitHub Releases。</p>
+<h2 id="盲文字形缺盒子显示成--或空白"><a class="header" href="#盲文字形缺盒子显示成--或空白">盲文字形缺（盒子显示成 <code>?</code> 或空白）</a></h2>
+<p>终端字体缺 Unicode 盲文区。换个字体齐的终端模拟器，或走 ssh——裸
+framebuffer 控制台可能缺字形。macOS 自带 Terminal 的裸渲染尤其如此。</p>
+<h2 id="老内核云镜像"><a class="header" href="#老内核云镜像">老内核/云镜像</a></h2>
+<p>eBPF 助手运行下限 = glibc 2.35 + 有 kprobes 的内核; TUI 本身只要二进制
+能链接就能跑。Ubuntu 的 <code>-kvm</code> 云内核裁了 kprobes——换 <code>generic</code> 内核。
+Ubuntu 22.04 的 5.15 <strong>无 BTF 可跑</strong>（CO-RE 加载时解析）。</p>
+<h2 id="ltop-会不会偷偷联网狂扫我的网络"><a class="header" href="#ltop-会不会偷偷联网狂扫我的网络">ltop 会不会偷偷联网/狂扫我的网络？</a></h2>
+<p>没有遥测，永远没有。唯一的对外动作是 LAN 扫描: 往自己子网发小 UDP 包
+（默认每 60 秒，<code>sweep = false</code> 可关），借内核做 ARP 解析——不探端口、
+不发 raw 包、不出已连接前缀一步。</p>
+<h2 id="怎么把报告变成-json-给-agent脚本"><a class="header" href="#怎么把报告变成-json-给-agent脚本">怎么把报告变成 JSON 给 agent/脚本？</a></h2>
+<pre><code class="language-bash">ltop report &lt;file.jsonl&gt; --json
+</code></pre>
+<p>……然后读 <a href="#ai-代理">AI 代理</a>——包括为什么循环轮询 <code>--json</code> 每 10 分钟要
+多烧约 4 万 token，而 report 只要约 1k。</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="安全"><a class="header" href="#安全">安全</a></h1>
+<p>本页说明 ltop 会触碰你系统与网络的哪些部分、拒绝做哪些事,以及它读取的
+不可信输入如何被处理。运营政策(支持版本、漏洞上报渠道)见仓库的
+<a href="https://github.com/uMaj35ty/ltop/blob/master/SECURITY.md">SECURITY.md</a>。</p>
+<h2 id="权限"><a class="header" href="#权限">权限</a></h2>
+<ul>
+<li><strong>TUI 全程免 root 运行。</strong> 所有数据源都是任意进程可读的:<code>/proc</code>、
+<code>getifaddrs</code>、PF_ROUTE/netlink dump、临时 UDP socket。终止/重启进程
+由内核限制在你自己的 uid 内。</li>
+<li><strong><code>ltop-bpf</code> 是唯一的特权组件</strong>,且完全可选。它以 systemd 服务运行,
+只持有 <code>CAP_BPF</code> + <code>CAP_PERFMON</code>(&lt; 5.11 内核另需 <code>CAP_SYS_RESOURCE</code>),
+只写 <code>/run/ltop</code> 下的一个快照文件,无任何监听端口、不发起网络连接。
+随包的 unit 已做沙箱:<code>NoNewPrivileges</code>、<code>ProtectSystem=strict</code>(仅
+<code>/run/ltop</code> 可写)、<code>ProtectHome</code>、<code>PrivateTmp</code>、内核接口保护,以及
+不含 <code>CAP_SYS_ADMIN</code> 的能力边界集。</li>
+</ul>
+<h2 id="磁盘上的数据"><a class="header" href="#磁盘上的数据">磁盘上的数据</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>数据</th><th>位置</th><th>权限</th></tr>
+</thead>
+<tbody>
+<tr><td>监控日志(<code>L</code> / <code>--log</code>)</td><td><code>~/.local/state/ltop/</code></td><td>0600</td></tr>
+<tr><td>watch 采集</td><td><code>~/.local/state/ltop/</code></td><td>0600</td></tr>
+<tr><td>配置</td><td><code>~/.config/ltop/config.conf</code></td><td>0644(仅界面偏好)</td></tr>
+<tr><td>eBPF 快照</td><td><code>/run/ltop/udp.json</code></td><td>0644,root 属主——<strong>设计上全局可读</strong></td></tr>
+</tbody>
+</table>
+</div>
+<p>会话日志与采集文件记录连接对端、进程名和主机名,因此一律以 <code>0600</code>
+创建,不依赖 umask。eBPF 快照全局可读是因为免 root 的 TUI 要读它;在
+共享主机上这意味着每个本地用户都能看到各进程的字节收发量——多用户
+机器部署助手前请把这一点纳入考量。</p>
+<p>ltop <strong>没有任何遥测</strong>:不检查更新、无统计上报,除下面的 LAN 探测外
+没有任何数据离开你的机器。</p>
+<h2 id="网络行为"><a class="header" href="#网络行为">网络行为</a></h2>
+<p>LAN 盒会主动查询本地网络:</p>
+<ul>
+<li>逐邻居的单播 <strong>mDNS</strong>、<strong>NetBIOS Node Status</strong> 与<strong>反向 DNS</strong> 查询
+(主机名解析);</li>
+<li>可配置的 UDP “knock” 扫描——向子网内每主机发一个到 discard 端口 9
+的空数据报,每轮最多 1022 台,默认 60 秒一轮,设置里可关。</li>
+</ul>
+<p>所有行为都以你的局域网为边界。应答按不可信输入处理:DNS/NBNS 事务 ID
+逐查询随机化并与源地址一同校验;所有解析器是有界检查的安全 Rust;不可
+信字符串在进入任何终端输出前会被净化;eBPF 快照读取有文件大小上限。</p>
+<h2 id="漏洞上报"><a class="header" href="#漏洞上报">漏洞上报</a></h2>
+<p>请使用仓库的 GitHub <strong>Private Vulnerability Reporting</strong>(可利用的问题
+不要开公开 issue)。完整政策见
+<a href="https://github.com/uMaj35ty/ltop/blob/master/SECURITY.md">SECURITY.md</a>。</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="参与贡献"><a class="header" href="#参与贡献">参与贡献</a></h1>
+<p>欢迎 issue 与 PR。本页汇总项目的工程约定,让第一次 PR 就能对齐第十次
+PR 的标准。</p>
+<h2 id="环境准备"><a class="header" href="#环境准备">环境准备</a></h2>
+<ul>
+<li>Rust(stable 近期版);Linux 上还需要<strong>带 BPF target 的 clang</strong>——
+eBPF 对象由 <code>build.rs</code> 在构建时从 <code>bpf/net_bpf.c</code> 编译。macOS 只需要
+Xcode 工具链。</li>
+<li><code>cargo test</code> 必须全过,<code>cargo clippy --all-targets -- -D warnings</code>
+必须零警告——<strong>零警告是硬门槛</strong>,CI 在 Linux x86_64、Linux aarch64、
+macOS 三个目标上强制执行。</li>
+</ul>
+<h2 id="评审与-ci-会坚持的约定"><a class="header" href="#评审与-ci-会坚持的约定">评审与 CI 会坚持的约定</a></h2>
+<ul>
+<li><strong>平台门控。</strong> macOS 专属的 FFI 声明与函数一律加
+<code>#[cfg(target_os = "macos")]</code>——未门控的 extern 声明会把链接错误带进
+Linux 构建,而 Linux 侧 clippy 看不见 macOS 专属代码的 lint,所以平台
+相关改动必须在对应目标上验证(CI 的 <code>test-macos</code>/<code>test-aarch64</code> 就是
+为这个存在的)。</li>
+<li><strong>偏移类常量要有出处。</strong> 结构偏移(kinfo_proc、socket_fdinfo、
+rusage_info_v2 等)以 SDK 头文件为准并经真机验证;注释里写明来源,
+复核时读头文件本身,不要转信二手值。</li>
+<li><strong>不可信输入必须净化。</strong> 来自 LAN(mDNS/NBNS 主机名)、本地进程、
+配置文件与外部 JSONL 的字符串不得裸写终端:TUI 走 ratatui(控制符被
+丢弃),CLI 输出走 <code>sanitize_text</code>。新增输出路径必须同样处理。</li>
+<li><strong>测试用真实 fixture,不互相模拟。</strong> watch 有消费 <code>ltop watch</code> 真实
+输出的端到端测试;replay 同时带现行与旧格式 fixture;UI 测试断言渲染
+缓冲。修 bug 必须钉回归:改回旧代码确认测试会挂(突变验证)是修复的
+一部分。</li>
+<li><strong>界面双语。</strong> 用户可见文案走 <code>src/config.rs</code> 的 <code>tr</code> 词典——英文与
+中文词条成对添加。盒标题与技术 token 按设计保留英文。</li>
+<li><strong>文档随代码。</strong> 用户可见改动同步更新 mdBook(双语),定位性改动更新
+README,<code>CHANGELOG.md</code> 按既有风格书写。</li>
+</ul>
+<h2 id="pr-流程"><a class="header" href="#pr-流程">PR 流程</a></h2>
+<ul>
+<li>从 <code>master</code> 拉分支;一个 PR 只做一件事。</li>
+<li>提交信息惯例:一行高密度摘要,讲清做了什么与为什么(见 <code>git log</code>)。</li>
+<li>CI 必须绿(三个 CI 目标的 test + clippy)。发版由维护者执行:tag →
+签名 tarball → Homebrew tap → crates.io → 文档站。</li>
+</ul>
+<h2 id="安全敏感改动"><a class="header" href="#安全敏感改动">安全敏感改动</a></h2>
+<p>如果改动涉及 LAN 解析器、eBPF 助手、文件权限或<a href="#安全">安全</a>
+页面的任何内容,请在 PR 描述里明确指出。审计基线在仓库历史里(0.2.9);
+请把你所保持的性质显式写出来——例如“LAN 提供的字符串永远不会未经
+过滤地到达终端“。</p>
+<h2 id="致谢-1"><a class="header" href="#致谢-1">致谢</a></h2>
+<p>ltop 的外观带着感激与出处,借用自两个项目与其背后的作者:</p>
+<ul>
+<li><strong>btop</strong>(<a href="https://github.com/aristocratos/btop">aristocratos/btop</a>,
+Aristocratos 作品):主题格式与 btop 兼容,内嵌 41 套主题来自 btop
+官方主题集;</li>
+<li><strong>Omarchy</strong>(<a href="https://github.com/dhh/omarchy">dhh/omarchy</a>,DHH 作品):
+内嵌 31 套主题来自其内置主题集。</li>
+</ul>
+<p>感谢 Aristocratos、DHH 与每一位主题创作者——见
+<a href="#致谢">主题 → 致谢</a>。</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr-ef4e11c1.min.js"></script>
+        <script src="mark-09e88c2c.min.js"></script>
+        <script src="searcher-09f2665d.js"></script>
+
+        <script src="clipboard-1626706a.min.js"></script>
+        <script src="highlight-abc7f01d.js"></script>
+        <script src="book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="theme/lang-e4b53287.js"></script>
+
+        <script>
+        window.addEventListener('load', function() {
+            window.setTimeout(window.print, 100);
+        });
+        </script>
+
+
+    </div>
+    </body>
+</html>
