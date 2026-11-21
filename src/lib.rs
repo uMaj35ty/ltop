@@ -1972,8 +1972,8 @@ mod tests {
         use ratatui::backend::TestBackend;
         use ratatui::Terminal;
         let mut app = App::new(None);
-        for i in 0..app::BOX_COUNT {
-            app.visible[i] = i == app::BOX_DISKS;
+        for (i, v) in app.visible.iter_mut().enumerate() {
+            *v = i == app::BOX_DISKS;
         }
         let mut term = Terminal::new(TestBackend::new(120, 40)).unwrap();
         term.draw(|f| ui::draw(f, &app)).unwrap(); // BOX_AREAS 就位
